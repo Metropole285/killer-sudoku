@@ -72,17 +72,16 @@
      * @returns {SolverData | false} Object containing solver data or false on error.
      */
     killerSudoku._initializeSolverData = function(cages) {
-        console.log("Initializing solver data..."); // DEBUG
+        console.log("Initializing solver data...");
         if (!Array.isArray(cages)) { console.error("Invalid cages input: must be an array."); return false; }
-        if (!SQUARE_MAP) { console.error("_initializeSolverData: SQUARE_MAP not initialized!"); return false; } // Check dependency
+        if (!SQUARE_MAP) { console.error("_initializeSolverData: SQUARE_MAP not initialized!"); return false; }
 
-        var cellToCageMap = {}; // Map: "A1" -> cageIndex
-        var cageDataArray = []; // Array: [ { id, sum, cells, initialDigitMask, ... } ]
-        var assignedCells = {}; // To check for overlapping cells
+        var cellToCageMap = {};
+        var cageDataArray = [];
+        var assignedCells = {};
 
         for (var i = 0; i < cages.length; ++i) {
             var cage = cages[i];
-            // Validate cage structure
             if (!cage || typeof cage.sum !== 'number' || !Array.isArray(cage.cells) || cage.cells.length === 0) {
                 console.error(`Invalid cage format at index ${i}:`, cage); return false;
             }
@@ -98,32 +97,24 @@
                 if (assignedCells[cellId] !== undefined) {
                     console.error(`Cell ${cellId} belongs to multiple cages (index ${i} and ${assignedCells[cellId]})`); return false;
                 }
-                assignedCells[cellId] = i; // Mark cell as assigned to this cage index
-                cellToCageMap[cellId] = i; // Map cell to cage index
+                assignedCells[cellId] = i;
+                cellToCageMap[cellId] = i;
                 cageCells.push(cellId);
             }
 
-            // Calculate initial digit mask based on sum/cell count
             var combinationInfo = killerSudoku.getSumCombinationInfo(cage.sum, cageCells.length);
-            // If combination is impossible from the start, mask will be 0. Solver should handle this.
-            // if (!combinationInfo) {
-            //     console.error(`Impossible combination for cage at index ${i}: sum=${cage.sum}, cells=${cageCells.length}`);
-            //     return false; // Fail early if needed
-            // }
 
             cageDataArray.push({
-                id: i, // Cage index
+                id: i,
                 sum: cage.sum,
-                cells: cageCells, // Store validated cell IDs
-                initialDigitMask: combinationInfo ? combinationInfo.digitMask : 0, // Mask of ALL possible digits for this sum/size
-                // Initial data for solver state:
+                cells: cageCells,
+                initialDigitMask: combinationInfo ? combinationInfo.digitMask : 0,
                 remainingSum: cage.sum,
                 remainingCellsCount: cageCells.length,
-                currentValueMask: 0, // Mask of values already placed in the cage
+                currentValueMask: 0,
             });
         }
 
-         // Check if all 81 squares are covered exactly once
          const assignedCount = Object.keys(assignedCells).length;
          if (assignedCount !== killerSudoku.NR_SQUARES) {
              console.error(`Invalid cage definition: Not all ${killerSudoku.NR_SQUARES} squares covered or some covered more than once. Covered: ${assignedCount}`);
@@ -132,7 +123,7 @@
          }
 
         console.log("Solver data initialized successfully.");
-        return { cellToCageMap: cellToCageMap, cageDataArray: cageDataArray }; // Return the data object
+        return { cellToCageMap: cellToCageMap, cageDataArray: cageDataArray };
     };
 
 
@@ -153,13 +144,11 @@
             if (currentSum < 0 || k === 0 || startDigit > 9) { return; }
             for (let digit = startDigit; digit <= 9; ++digit) {
                  let remainingK = k - 1;
-                 // Improved pruning checks
                  let minRemainingSum = remainingK > 0 ? (remainingK * (digit + 1 + digit + remainingK)) / 2 : 0;
-                 if (currentSum - digit < minRemainingSum) break; // Cannot reach target even with smallest remaining digits
+                 if (currentSum - digit < minRemainingSum) break;
                  let maxRemainingSumPossible = 0;
                  for(let r=0; r<remainingK; ++r) maxRemainingSumPossible += (9-r);
-                 if (currentSum - digit > maxRemainingSumPossible) continue; // Cannot reach target even with largest remaining digits
-
+                 if (currentSum - digit > maxRemainingSumPossible) continue;
                  currentCombo.push(digit);
                  findCombinationsRecursive(currentSum - digit, k - 1, digit + 1, currentCombo);
                  currentCombo.pop(); // Backtrack
@@ -188,21 +177,21 @@
      * @returns {boolean} True if successful, false if contradiction found.
      */
     function assignValue(candidatesMap, solverData, cellId, digitToAssign) {
-        // console.log(`Assign Val ${digitToAssign} to ${cellId}`); // DEBUG
         var otherCandidatesMask = candidatesMap[cellId] & ~DIGIT_MASKS[digitToAssign];
+        // Eliminate all other candidates for this cell
         for (let d = 1; d <= 9; ++d) {
             if ((otherCandidatesMask & DIGIT_MASKS[d]) !== 0) {
-                // Pass the SAME solverData object for recursive calls within assign
+                // Pass the same solverData object for recursive calls within assign
                 if (!eliminateCandidate(candidatesMap, solverData, cellId, d)) {
-                    return false;
+                    return false; // Contradiction found during elimination
                 }
             }
         }
-        // Update cage state AFTER elimination
+        // Update cage state AFTER elimination ensures the cell is reduced
         if (!updateCageStateOnAssign(candidatesMap, solverData, cellId, digitToAssign)) {
-            return false;
+            return false; // Contradiction during cage update
         }
-        return true;
+        return true; // Assignment successful
     }
 
     /**
@@ -215,42 +204,34 @@
      * @returns {boolean} True if successful, false if contradiction found.
      */
     function eliminateCandidate(candidatesMap, solverData, cellId, digitToEliminate) {
-        // console.log(`Eliminate ${digitToEliminate} from ${cellId}`); // DEBUG
         var cellMask = DIGIT_MASKS[digitToEliminate];
-        if ((candidatesMap[cellId] & cellMask) === 0) return true; // Already eliminated
+        // If already eliminated, return successfully
+        if ((candidatesMap[cellId] & cellMask) === 0) return true;
 
-        // Check dependencies
+        // Check dependencies are initialized
         if (!CLASSIC_PEERS_MAP || !CLASSIC_UNITS_MAP || !solverData?.cellToCageMap || !solverData?.cageDataArray) {
              console.error("Eliminate called before full initialization or with invalid solverData!");
              return false;
         }
 
+        // Remove the candidate
         candidatesMap[cellId] &= ~cellMask;
         var remainingCandidates = candidatesMap[cellId];
         var numRemaining = countCandidates(remainingCandidates);
 
         // Contradiction 1: No candidates left
-        if (numRemaining === 0) {
-             // console.log(`Contradiction 1: ${cellId} has 0 cands after elim ${digitToEliminate}`); // DEBUG
-            return false;
-        }
+        if (numRemaining === 0) return false;
 
         // Propagation Rule 1: Single candidate left -> Eliminate from peers
         if (numRemaining === 1) {
             var finalDigit = getSingleCandidateDigit(remainingCandidates);
-            // console.log(`Single cand rule: ${cellId} = ${finalDigit}`); // DEBUG
-            // Classic Peers
+            // Propagate to classic peers
             for (const peerId of CLASSIC_PEERS_MAP[cellId]) {
-                 // Pass the SAME solverData
-                if (!eliminateCandidate(candidatesMap, solverData, peerId, finalDigit)) {
-                    return false;
-                }
+                 // Pass the same solverData down the chain
+                if (!eliminateCandidate(candidatesMap, solverData, peerId, finalDigit)) return false;
             }
-            // Cage update (which handles cage peers implicitly)
-             // Pass the SAME solverData
-            if (!updateCageStateOnAssign(candidatesMap, solverData, cellId, finalDigit)) {
-                 return false;
-            }
+            // Propagate to cage peers (handled by updating cage state)
+            if (!updateCageStateOnAssign(candidatesMap, solverData, cellId, finalDigit)) return false;
         }
 
         // Propagation Rule 2: Only one place left for the digit in a unit
@@ -260,39 +241,30 @@
             for (const unitCellId of unit) {
                 if ((candidatesMap[unitCellId] & cellMask) !== 0) placesForDigit.push(unitCellId);
             }
-            if (placesForDigit.length === 0) { // Contradiction 2: Digit must be somewhere
-                // console.log(`Contradiction 2a: No place for ${digitToEliminate} in classic unit of ${cellId}`); // DEBUG
-                 return false;
-            }
+            if (placesForDigit.length === 0) return false; // Contradiction 2: Digit must be somewhere
             if (placesForDigit.length === 1) {
-                // console.log(`Single place classic: ${digitToEliminate} must be in ${placesForDigit[0]}`); // DEBUG
-                 // Pass the SAME solverData
-                if (!assignValue(candidatesMap, solverData, placesForDigit[0], digitToEliminate)) {
-                    return false;
-                }
+                // If only one place, assign it there (pass same solverData)
+                if (!assignValue(candidatesMap, solverData, placesForDigit[0], digitToEliminate)) return false;
             }
         }
         // Cage Unit
-         const cageIndex = solverData.cellToCageMap[cellId];
-         if (cageIndex !== undefined) {
-             const cage = solverData.cageDataArray[cageIndex];
-             let placesForDigitInCage = [];
-             for (const cageCellId of cage.cells) {
-                 // Only consider *unsolved* cells in the cage for this rule
-                 if (countCandidates(candidatesMap[cageCellId]) > 1 && (candidatesMap[cageCellId] & cellMask) !== 0) {
-                     placesForDigitInCage.push(cageCellId);
-                 }
-             }
-             // If only one *unsolved* cell in the cage can hold this digit, assign it
-             if (placesForDigitInCage.length === 1) {
-                  // console.log(`Single place cage: ${digitToEliminate} must be in ${placesForDigitInCage[0]}`); // DEBUG
-                   // Pass the SAME solverData
-                  if (!assignValue(candidatesMap, solverData, placesForDigitInCage[0], digitToEliminate)) {
-                      return false;
-                  }
-             }
-             // No explicit check for length 0 here, cage sum propagation is more robust
-         }
+        const cageIndex = solverData.cellToCageMap[cellId];
+        if (cageIndex !== undefined) {
+            const cage = solverData.cageDataArray[cageIndex];
+            let placesForDigitInCage = [];
+            for (const cageCellId of cage.cells) {
+                // Only consider *unsolved* cells for this rule
+                if (countCandidates(candidatesMap[cageCellId]) > 1 && (candidatesMap[cageCellId] & cellMask) !== 0) {
+                    placesForDigitInCage.push(cageCellId);
+                }
+            }
+            // If only one *unsolved* cell in the cage can hold this digit, assign it
+            if (placesForDigitInCage.length === 1) {
+                 // Pass the same solverData
+                 if (!assignValue(candidatesMap, solverData, placesForDigitInCage[0], digitToEliminate)) return false;
+            }
+            // No explicit check for length 0, cage sum propagation handles it
+        }
 
         return true; // Elimination successful
     }
@@ -315,11 +287,15 @@
 
         // Avoid double processing if propagation already handled this
         if ((cage.currentValueMask & digitMask) !== 0) {
-            return true;
+            return true; // Already processed
         }
-         // console.log(`Updating Cage ${cageIndex} for ${assignedDigit} @ ${assignedCellId}: before sum=${cage.remainingSum}, cells=${cage.remainingCellsCount}`); // DEBUG
+         // Check for unique digit violation (should not happen if logic is correct, but safety)
+        if ( (cage.currentValueMask & digitMask) !== 0) {
+             console.error(`Contradiction: Digit ${assignedDigit} assigned to ${assignedCellId} but already present in cage ${cageIndex}`);
+             return false;
+        }
 
-        // Update state BEFORE checks
+        // Update cage state
         cage.remainingSum -= assignedDigit;
         cage.remainingCellsCount -= 1;
         cage.currentValueMask |= digitMask;
@@ -331,16 +307,16 @@
         }
         // Check final state if cage is now full
         if (cage.remainingCellsCount === 0 && cage.remainingSum !== 0) {
-             // console.log(`Contradiction Cage Filled: Cage ${cageIndex} filled, but rem sum is ${cage.remainingSum}`); // DEBUG
-            return false;
+            // console.log(`Contradiction Cage Filled: Cage ${cageIndex} filled, but rem sum is ${cage.remainingSum}`); // DEBUG
+            return false; // Cage filled, sum incorrect
         }
 
         // Propagate constraints if cage is not yet full
         if (cage.remainingCellsCount > 0) {
             const comboInfo = killerSudoku.getSumCombinationInfo(cage.remainingSum, cage.remainingCellsCount);
-            if (!comboInfo) {
+            if (!comboInfo) { // Remaining sum impossible for remaining cells
                  // console.log(`Contradiction Cage Sum: Impossible sum ${cage.remainingSum} for ${cage.remainingCellsCount} cells in cage ${cageIndex}`); // DEBUG
-                return false; // Remaining sum impossible for remaining cells
+                return false;
             }
 
             let allowedDigitsMask = comboInfo.digitMask;
@@ -349,7 +325,7 @@
 
             // If the required digits are empty, but sum > 0, contradiction
             if (requiredAvailableMask === 0 && cage.remainingSum > 0) {
-                 // console.log(`Contradiction Cage Digits: Need digits for sum ${cage.remainingSum} in cage ${cageIndex}, but all required are used.`); // DEBUG
+                 // console.log(`Contradiction Cage Digits: Need digits for sum ${cage.remainingSum} in cage ${cageIndex} (mask ${allowedDigitsMask.toString(2)}) already used (mask ${cage.currentValueMask.toString(2)})`); // DEBUG
                 return false;
             }
 
@@ -359,23 +335,22 @@
                 if (cellId !== assignedCellId && countCandidates(candidatesMap[cellId]) > 1) {
                     const maskToApply = requiredAvailableMask;
                     const originalCandidates = candidatesMap[cellId];
-                    // Apply the intersection: only keep candidates that are BOTH originally possible AND possible for the remaining sum/digits
+                    // Apply intersection: keep only candidates possible for remaining sum/digits
                     const newCandidates = originalCandidates & maskToApply;
 
                     if (newCandidates !== originalCandidates) {
-                        // If candidates were removed, eliminate them formally to trigger further propagation
+                        // If candidates were removed, eliminate them formally
                         const eliminatedMask = originalCandidates & ~newCandidates;
-                        // console.log(`Cage ${cageIndex} propagating to ${cellId}: elim mask ${eliminatedMask.toString(2)}`); // DEBUG
                         for (let d = 1; d <= 9; d++) {
                             if ((eliminatedMask & DIGIT_MASKS[d]) !== 0) {
-                                // Pass the SAME solverData
+                                 // Pass the SAME solverData
                                 if (!eliminateCandidate(candidatesMap, solverData, cellId, d)) {
                                     return false;
                                 }
                             }
                         }
                     }
-                     // Check if applying the mask directly caused a contradiction
+                     // Check for contradiction immediately after applying mask
                      if (candidatesMap[cellId] === 0) {
                          // console.log(`Contradiction: ${cellId} 0 cands after cage ${cageIndex} propagation`); // DEBUG
                          return false;
@@ -383,59 +358,66 @@
                 }
             }
         }
-        // console.log(`Cage ${cageIndex} updated OK: final sum=${cage.remainingSum}, cells=${cage.remainingCellsCount}`); // DEBUG
-        return true; // Update successful
+        return true; // Update and propagation successful
     }
 
 
     // --- Solver Search Function ---
+    /**
+     * Recursive backtracking search function.
+     * @param {object} candidatesMap - Current map { cellId: bitset }.
+     * @param {SolverData} solverData - Current solver state.
+     * @returns {object | false} The solved candidatesMap or false if no solution found from this state.
+     */
     function _search(candidatesMap, solverData) {
-        // console.log("Enter search"); // DEBUG
+        // 1. Base Case: Is it solved? Check if all cells have exactly one candidate.
         var isSolved = true;
         for (const cellId of killerSudoku.SQUARES) {
-            if (countCandidates(candidatesMap[cellId]) !== 1) { isSolved = false; break; }
+            if (countCandidates(candidatesMap[cellId]) !== 1) {
+                isSolved = false;
+                break;
+            }
         }
-        if (isSolved) { /*console.log("Search Base case: Solved!");*/ return candidatesMap; }
+        if (isSolved) return candidatesMap; // Solved!
 
-        // MRV Heuristic: Find unsolved cell with fewest candidates
-        var minCandidates = 10, minCandidatesCell = null;
+        // 2. Find cell with minimum remaining values (MRV heuristic)
+        var minCandidates = 10;
+        var minCandidatesCell = null;
+        // Iterate through squares to find the best one to branch on
         for (const cellId of killerSudoku.SQUARES) {
             var numCandidates = countCandidates(candidatesMap[cellId]);
             if (numCandidates > 1 && numCandidates < minCandidates) {
-                minCandidates = numCandidates; minCandidatesCell = cellId;
-                if (minCandidates === 2) break; // Optimization
+                minCandidates = numCandidates;
+                minCandidatesCell = cellId;
+                if (minCandidates === 2) break; // Optimization: cannot get better
             }
         }
 
-        // If no cell found (e.g., contradiction state already reached but not caught)
-        if (!minCandidatesCell) {
-             // console.log("Search: No branch cell found, but not solved?"); // DEBUG
-            return false;
-        }
+        // If no cell found with > 1 candidate, but not solved (e.g., contradiction state)
+        if (!minCandidatesCell) return false;
 
-        // console.log(`Search branch on ${minCandidatesCell} (${minCandidates} cands)`); // DEBUG
+        // 3. Try assigning each candidate digit for the chosen cell
         var candidatesToTry = getCandidatesArray(candidatesMap[minCandidatesCell]);
         for (const digit of candidatesToTry) {
-            // console.log(`Trying ${digit} for ${minCandidatesCell}`); // DEBUG
             // --- CRITICAL: Create deep copies for backtracking ---
             var candidatesMapCopy = deepCopy(candidatesMap);
-            var solverDataCopy = deepCopy(solverData); // Copy cage state too!
+            // solverData contains cage state which changes, so MUST be copied
+            var solverDataCopy = deepCopy(solverData);
 
-            // Try assigning the digit in the copy and propagating
+            // Try assigning the digit in the copy and propagating constraints
             if (assignValue(candidatesMapCopy, solverDataCopy, minCandidatesCell, digit)) {
-                // If assignment didn't immediately fail, recurse
+                // If assignment and propagation didn't immediately fail, recurse
                 var result = _search(candidatesMapCopy, solverDataCopy);
                 if (result) {
-                    // Solution found down this path!
+                    // Solution found down this path! Return it up the stack.
                     return result;
                 }
-                 // else: This path failed, continue loop (backtrack)
+                 // else: This path failed, loop continues (backtrack)
             }
-             // else: Assignment failed immediately, continue loop (backtrack)
+             // else: Assignment itself led to immediate contradiction, loop continues (backtrack)
         }
 
-        // Backtrack: None of the candidates worked for this cell
-        // console.log(`Backtrack from ${minCandidatesCell}`); // DEBUG
+        // 4. Backtrack: None of the candidates worked for this cell
         return false;
     }
 
@@ -445,7 +427,7 @@
         console.log("Starting Killer Sudoku solver...");
         // 1. Initialize and validate solver data from cages
         const solverData = killerSudoku._initializeSolverData(cages);
-        if (!solverData) { console.error("Failed to initialize solver data."); return false; }
+        if (!solverData) { console.error("Failed to initialize solver data. Cannot solve."); return false; }
 
         // 2. Create initial candidates map (all digits possible)
         var initialCandidatesMap = {};
@@ -454,7 +436,6 @@
         // 3. Apply initial cage constraints based on sum/size combinations
         console.log("Applying initial cage constraints...");
         // Use a copy of solverData for this initial propagation phase
-        // because eliminateCandidate/assignValue modify it
         var initialSolverDataCopy = deepCopy(solverData);
         var propagationOk = true; // Flag to track success
         for(let i = 0; i < solverData.cageDataArray.length; ++i) {
@@ -467,6 +448,7 @@
             // Apply the initial mask to all cells in the cage
             for(const cellId of cage.cells) {
                 const originalCandidates = initialCandidatesMap[cellId];
+                // Intersect current candidates with those possible for the cage sum/size
                 const newCandidates = originalCandidates & cage.initialDigitMask;
                 if (newCandidates !== originalCandidates) {
                      const eliminatedMask = originalCandidates & ~newCandidates;
@@ -482,14 +464,16 @@
                 }
                 if (!propagationOk) break; // Stop outer loop if contradiction
 
-                 // Check for contradiction after applying mask
+                 // Check for contradiction immediately after applying mask
                  if (initialCandidatesMap[cellId] === 0) {
                     console.error(`Contradiction: ${cellId} has 0 cands after initial cage ${i} mask.`);
                     propagationOk = false; break;
                  }
                  // If a cell is solved by initial constraints, update the copied solver state
+                 // This helps propagate further constraints early
                  if(countCandidates(initialCandidatesMap[cellId]) === 1) {
                     const singleDigit = getSingleCandidateDigit(initialCandidatesMap[cellId]);
+                    // Pass the *copied* solver data, as state is changing
                     if(!updateCageStateOnAssign(initialCandidatesMap, initialSolverDataCopy, cellId, singleDigit)){
                         console.error(`Contradiction updating initial cage ${i} state after prop solved ${cellId}=${singleDigit}`);
                         propagationOk = false; break;
@@ -507,7 +491,7 @@
 
         // 4. Start the recursive search with the refined initial state
         console.log("Starting recursive search...");
-        var solutionMap = _search(initialCandidatesMap, initialSolverDataCopy);
+        var solutionMap = _search(initialCandidatesMap, initialSolverDataCopy); // Start search with propagated initial state
 
         // 5. Format and return result
         if (solutionMap) {
@@ -531,11 +515,205 @@
 
 
     // --- GENERATOR IMPLEMENTATION (Stage 2) ---
-    function _generateClassicSolutionGrid(){var c={};for(const s of killerSudoku.SQUARES){if(typeof ALL_CANDIDATES==='undefined'){console.error("ALL_CANDS undef!");return false;}c[s]=ALL_CANDIDATES;}function searchClassic(a){var b=true;for(const c of killerSudoku.SQUARES){if(countCandidates(a[c])!==1){b=false;break;}}if(b)return a;var d=10,e=null;var f=_shuffleArray([...killerSudoku.SQUARES]);for(const g of f){var h=countCandidates(a[g]);if(h>1&&h<d){d=h;e=g;if(d===2)break;}}if(!e)return false;var i=_shuffleArray(getCandidatesArray(a[e]));for(const j of i){var k=deepCopy(a);if(_assignClassic(k,e,j)){var l=searchClassic(k);if(l)return l;}}return false;}function _assignClassic(a,b,c){var d=a[b]&~DIGIT_MASKS[c];for(let e=1;e<=9;e++){if((d&DIGIT_MASKS[e])!==0){if(!_eliminateClassic(a,b,e))return false;}}return true;}function _eliminateClassic(a,b,c){var d=DIGIT_MASKS[c];if((a[b]&d)===0)return true;a[b]&=~d;var e=a[b];var f=countCandidates(e);if(f===0)return false;if(f===1){var g=getSingleCandidateDigit(e);for(const h of CLASSIC_PEERS_MAP[b]){if(!_eliminateClassic(a,h,g))return false;}}for(const i of CLASSIC_UNITS_MAP[b]){var j=[];for(const k of i){if((a[k]&d)!==0)j.push(k);}if(j.length===0)return false;if(j.length===1){if(!_assignClassic(a,j[0],c))return false;}}return true;}var initAssign=_shuffleArray([...killerSudoku.SQUARES]);for(let i=0;i<10;i++){let sq=initAssign[i];let pDs=getCandidatesArray(c[sq]);if(pDs.length>0){let d=pDs[Math.floor(Math.random()*pDs.length)];if(!_assignClassic(c,sq,d)){console.warn("Init assign fail, restart.");for(const sq of killerSudoku.SQUARES)c[sq]=ALL_CANDIDATES;break;};}}var solMap=searchClassic(c);if(!solMap)return false;var resMap={};for(const sq of killerSudoku.SQUARES){resMap[sq]=getSingleCandidateDigit(solMap[sq]);if(resMap[sq]===0){console.error("Classic grid incomplete!");return false;}}return resMap;}
-    function _partitionGridIntoCages(solvedGridMap,maxCageSize=5,minCageSize=2){var cgs=[],unas=new Set(killerSudoku.SQUARES),maxAtt=killerSudoku.NR_SQUARES*5,att=0;while(unas.size>0&&att<maxAtt){att++;let remArr=Array.from(unas);if(remArr.length<=maxCageSize&&remArr.length>=minCageSize){const remDig=new Set();let poss=true;remArr.forEach(cl=>{const dig=solvedGridMap[cl];if(remDig.has(dig))poss=false;remDig.add(dig);});if(poss){console.log(`Partition: Final cage size ${remArr.length}.`);cgs.push({cells:remArr});unas.clear();break;}}if(unas.size===0)break;var startC=_getRandomElementFromSet(unas);if(!startC)break;var cage=[startC];var digits=new Set([solvedGridMap[startC]]);unas.delete(startC);var remCnt=unas.size;var potMax=Math.min(maxCageSize,remCnt+1);if(remCnt+1-minCageSize<minCageSize&&remCnt+1>minCageSize)potMax=Math.min(maxCageSize,(remCnt+1)-minCageSize+1);potMax=Math.max(minCageSize,potMax);var tSize=Math.floor(Math.random()*(potMax-minCageSize+1))+minCageSize;tSize=Math.min(tSize,remCnt+1);var added=true;while(cage.length<tSize&&added){added=false;var potN=[];let cageSet=new Set(cage);for(const cell of cage){for(const n of(SQUARE_NEIGHBORS[cell]||[])){if(unas.has(n)&&!digits.has(solvedGridMap[n])){if(!potN.includes(n))potN.push(n);}}}if(potN.length>0){potN=_shuffleArray(potN);var nextC=potN[0];cage.push(nextC);digits.add(solvedGridMap[nextC]);unas.delete(nextC);added=true;}}if(cage.length>=minCageSize)cgs.push({cells:cage});else{cage.forEach(c=>unas.add(c));if(att>maxAtt/2)maxAtt++;}}if(unas.size>0){console.error(`Partition fail: ${unas.size} left.`);return false;}console.log(`Partition OK: ${cgs.length} cages.`);return cgs;}
-    function _calculateCageSums(cages,solvedMap){cages.forEach(cg=>{cg.sum=0;cg.cells.forEach(cId=>{cg.sum+=solvedMap[cId];});});}
-    var GENERATION_DIFFICULTY_PARAMS={"easy":{maxCage:6,minCage:2},"medium":{maxCage:5,minCage:2},"hard":{maxCage:5,minCage:2},"very-hard":{maxCage:4,minCage:2},"insane":{maxCage:4,minCage:2},"inhuman":{maxCage:4,minCage:2},"default":{maxCage:5,minCage:2}};
-    killerSudoku.generate=function(difficulty="medium",maxAttempts=20){console.log(`Generate Killer(diff:${difficulty},att:${maxAttempts})`);var params=GENERATION_DIFFICULTY_PARAMS[difficulty];if(!params){console.warn(`Diff '${difficulty}' unknown, using default.`);params=GENERATION_DIFFICULTY_PARAMS.default;}if(!params){console.error("Default difficulty params missing!");params={maxCage:5,minCage:2};}console.log(`Using params: maxCage=${params.maxCage}, minCage=${params.minCage}`);for(let att=1;att<=maxAttempts;++att){console.log(`Gen attempt ${att}/${maxAttempts}...`);console.log("Gen classic...");var solvedMap=_generateClassicSolutionGrid();if(!solvedMap){console.warn("Fail gen classic, retry...");continue;}console.log(`Partition grid(max:${params.maxCage},min:${params.minCage})...`);var cagesCells=_partitionGridIntoCages(solvedMap,params.maxCage,params.minCage);if(!cagesCells){console.warn("Fail partition, retry gen...");continue;}console.log("Calc sums...");_calculateCageSums(cagesCells,solvedMap);var puzzle={cages:cagesCells};console.log("Verify solvability...");var solveRes=killerSudoku.solve(deepCopy(puzzle.cages));if(solveRes&&typeof solveRes==='string'&&solveRes.length===killerSudoku.NR_SQUARES){console.log(`Gen OK after ${att} attempts!`);return puzzle;}else{console.warn(`Verify fail(Solver:${solveRes}).Retry gen...`);}}console.error(`Failed gen Killer after ${maxAttempts} attempts.`);return false;};
+    /**
+     * Generates a full, valid classic Sudoku solution grid.
+     * Uses backtracking.
+     * @returns {object | false} A map {cellId: digit} or false if failed.
+     */
+    function _generateClassicSolutionGrid() {
+        var candidates = {};
+        for (const sq of killerSudoku.SQUARES) {
+            if (typeof ALL_CANDIDATES === 'undefined') { console.error("ALL_CANDIDATES undef!"); return false; }
+            candidates[sq] = ALL_CANDIDATES;
+        }
+        // --- Вложенные функции для генерации ---
+        function searchClassic(cands){var s=true;for(const sq of killerSudoku.SQUARES){if(countCandidates(cands[sq])!==1){s=false;break;}}if(s)return cands;var mC=10,mSq=null;var shufSqs=_shuffleArray([...killerSudoku.SQUARES]);for(const sq of shufSqs){var nC=countCandidates(cands[sq]);if(nC>1&&nC<mC){mC=nC;mSq=sq;if(mC===2)break;}}if(!mSq)return false;var tryDs=_shuffleArray(getCandidatesArray(cands[mSq]));for(const d of tryDs){var cCopy=deepCopy(cands);if(_assignClassic(cCopy,mSq,d)){var r=searchClassic(cCopy);if(r)return r;}}return false;}
+        function _assignClassic(cands,sq,digit){var oDs=cands[sq]&~DIGIT_MASKS[digit];for(let d=1;d<=9;d++){if((oDs&DIGIT_MASKS[d])!==0){if(!_eliminateClassic(cands,sq,d))return false;}}return true;}
+        function _eliminateClassic(cands,sq,digit){var mask=DIGIT_MASKS[digit];if((cands[sq]&mask)===0)return true;cands[sq]&=~mask;var rem=cands[sq];var cnt=countCandidates(rem);if(cnt===0)return false;if(cnt===1){var sD=getSingleCandidateDigit(rem);for(const p of CLASSIC_PEERS_MAP[sq]){if(!_eliminateClassic(cands,p,sD))return false;}}for(const u of CLASSIC_UNITS_MAP[sq]){var places=[];for(const uSq of u){if((cands[uSq]&mask)!==0)places.push(uSq);}if(places.length===0)return false;if(places.length===1){if(!_assignClassic(cands,places[0],digit))return false;}}return true;}
+        // --- Начало поиска ---
+        var initAssign=_shuffleArray([...killerSudoku.SQUARES]);for(let i=0;i<10;i++){let sq=initAssign[i];let pDs=getCandidatesArray(candidates[sq]);if(pDs.length>0){let d=pDs[Math.floor(Math.random()*pDs.length)];if(!_assignClassic(candidates,sq,d)){console.warn("Init assign fail, restart.");for(const sq of killerSudoku.SQUARES)candidates[sq]=ALL_CANDIDATES;break;};}}
+        var solutionMap=searchClassic(candidates);
+        if(!solutionMap)return false;
+        var resultMap={};for(const sq of killerSudoku.SQUARES){resultMap[sq]=getSingleCandidateDigit(solutionMap[sq]);if(resultMap[sq]===0){console.error("Classic grid incomplete!");return false;}}return resultMap;
+    }
+
+    /**
+     * Partitions the grid into cages using a simplified random walk.
+     * @param {object} solvedGridMap - Map {cellId: digit} of the solved grid.
+     * @param {number} maxCageSize - Maximum allowed size for a cage.
+     * @param {number} minCageSize - Minimum allowed size for a cage.
+     * @returns {object[] | false} Array of cages [{cells: string[]}] or false if partitioning failed.
+     */
+    function _partitionGridIntoCages(solvedGridMap, maxCageSize = 5, minCageSize = 2) {
+        var cages = [];
+        var unassignedCells = new Set(killerSudoku.SQUARES);
+        var maxAttempts = killerSudoku.NR_SQUARES * 5; // Increased attempts slightly
+        var attempts = 0;
+        // console.log(`Partitioning grid. Initial unassigned: ${unassignedCells.size}`);
+
+        while (unassignedCells.size > 0 && attempts < maxAttempts) {
+            attempts++;
+            // console.log(`Partition attempt ${attempts}, remaining cells: ${unassignedCells.size}`); // VERBOSE
+
+            // --- Handle small remainders first ---
+            let remainingCellsArray = Array.from(unassignedCells);
+            // Only try to form a final cage if the count is within valid cage size limits
+            if (remainingCellsArray.length >= minCageSize && remainingCellsArray.length <= maxCageSize) {
+                const remainingDigits = new Set();
+                let possible = true;
+                remainingCellsArray.forEach(cell => {
+                     const digit = solvedGridMap[cell];
+                     if (remainingDigits.has(digit)) { possible = false; }
+                     remainingDigits.add(digit);
+                });
+
+                if (possible) {
+                    // console.log(`Partitioning: Creating final cage with remaining ${remainingCellsArray.length} cells.`); // VERBOSE
+                    cages.push({ cells: remainingCellsArray });
+                    unassignedCells.clear(); // All assigned
+                    break; // Success
+                }
+                 // If final group is not possible (digit collision), let the loop continue to try different paths
+            } else if (remainingCellsArray.length > 0 && remainingCellsArray.length < minCageSize) {
+                  // This state means the previous cage creations left too few cells
+                  console.error(`Partitioning failed: Cannot form cage. Remaining cells (${remainingCellsArray.length}) < minCageSize (${minCageSize}). Cells: ${remainingCellsArray.join(', ')}`);
+                  return false; // Cannot form a valid cage with the remainder
+            }
+             // --- End remainder handling ---
+
+             if (unassignedCells.size === 0) break; // Check again after potential remainder handling
+
+            var startCell = _getRandomElementFromSet(unassignedCells);
+            if (!startCell) { console.warn("Partitioning: Could not get start cell."); break; } // Safety
+
+            var currentCage = [startCell];
+            var cageDigits = new Set([solvedGridMap[startCell]]);
+            unassignedCells.delete(startCell);
+            // console.log(`Starting new cage with ${startCell}`); // VERBOSE
+
+            var remainingCount = unassignedCells.size;
+            var potentialMaxSize = Math.min(maxCageSize, remainingCount + 1);
+            // Adjust potential max size to try and avoid leaving a remainder < minCageSize
+            if (remainingCount > 0 && // Check if there are actually cells left to form another cage
+                remainingCount + 1 > minCageSize && // Ensure we don't make current cage too big if few cells left
+                remainingCount + 1 - minCageSize < minCageSize)
+            {
+                 potentialMaxSize = Math.min(maxCageSize, (remainingCount + 1) - minCageSize + 1 );
+                 // console.log(`Adjusted potential max size to ${potentialMaxSize} to avoid small remainder`); // VERBOSE
+            }
+            potentialMaxSize = Math.max(minCageSize, potentialMaxSize); // Ensure not smaller than min
+
+            var targetSize = Math.floor(Math.random() * (potentialMaxSize - minCageSize + 1)) + minCageSize;
+            targetSize = Math.min(targetSize, remainingCount + 1); // Cannot be larger than available
+            // console.log(`Target size for current cage: ${targetSize}`); // VERBOSE
+
+            var addedInIteration = true;
+            while (currentCage.length < targetSize && addedInIteration) {
+                addedInIteration = false;
+                var potentialNeighbors = [];
+                // Get valid neighbors of *all* cells currently in the cage
+                for (const cell of currentCage) {
+                    for (const neighbor of (SQUARE_NEIGHBORS[cell] || [])) {
+                        if (unassignedCells.has(neighbor) && !cageDigits.has(solvedGridMap[neighbor])) {
+                             if (!potentialNeighbors.includes(neighbor)) potentialNeighbors.push(neighbor);
+                        }
+                    }
+                }
+
+                if (potentialNeighbors.length > 0) {
+                    potentialNeighbors = _shuffleArray(potentialNeighbors);
+                    var nextCell = potentialNeighbors[0];
+                    currentCage.push(nextCell);
+                    cageDigits.add(solvedGridMap[nextCell]);
+                    unassignedCells.delete(nextCell);
+                    addedInIteration = true;
+                }
+            } // End while growing cage
+
+            // Check if the created cage meets min size
+             if (currentCage.length >= minCageSize) {
+                cages.push({ cells: currentCage });
+                // console.log(`Created cage size ${currentCage.length}, cells: ${currentCage.join(',')}`); // DEBUG
+             } else {
+                 // Failed to create a valid cage, put cells back and try again from a different start
+                 // console.warn(`Partitioning: Failed cage from ${startCell}, size ${currentCage.length}. Putting back.`); // DEBUG
+                 currentCage.forEach(cell => unassignedCells.add(cell));
+             }
+        } // End while unassignedCells > 0
+
+        if (unassignedCells.size > 0) {
+             console.error(`Partitioning failed: ${unassignedCells.size} cells remain unassigned after ${attempts} attempts.`);
+             return false; // Failed
+        }
+
+        console.log(`Partitioning successful: ${cages.length} cages created.`);
+        return cages;
+    }
+
+
+    /**
+     * Calculates and adds the 'sum' property to each cage object.
+     * @param {object[]} cages - Array of cages [{cells: string[]}]
+     * @param {object} solvedGridMap - Map {cellId: digit} of the solved grid.
+     */
+     function _calculateCageSums(cages, solvedGridMap) {
+         cages.forEach(cage => {
+             cage.sum = 0;
+             cage.cells.forEach(cellId => {
+                 cage.sum += solvedGridMap[cellId];
+             });
+         });
+     }
+
+    // --- Public Generator Function ---
+    var GENERATION_DIFFICULTY_PARAMS = {
+         "easy":      { maxCage: 6, minCage: 2 },
+         "medium":    { maxCage: 5, minCage: 2 },
+         "hard":      { maxCage: 5, minCage: 2 },
+         "very-hard": { maxCage: 4, minCage: 2 },
+         "insane":    { maxCage: 4, minCage: 2 },
+         "inhuman":   { maxCage: 4, minCage: 2 },
+         "default":   { maxCage: 5, minCage: 2 }
+     };
+
+    killerSudoku.generate = function(difficulty = "medium", maxAttempts = 20) {
+         console.log(`Generate Killer(diff:${difficulty}, att:${maxAttempts})`);
+         var params = GENERATION_DIFFICULTY_PARAMS[difficulty];
+         // Fallback to default if difficulty not found or default is missing
+         if (!params) { console.warn(`Diff '${difficulty}' unknown, using default.`); params = GENERATION_DIFFICULTY_PARAMS.default; }
+         if (!params) { console.error("FATAL: Default difficulty params missing!"); params = { maxCage: 5, minCage: 2 }; } // Hardcoded fallback
+         console.log(`Using params: maxCage=${params.maxCage}, minCage=${params.minCage}`);
+
+         for (let attempt = 1; attempt <= maxAttempts; ++attempt) {
+             console.log(`Gen attempt ${attempt}/${maxAttempts}...`);
+             // 1. Generate classic solution
+             console.log("Gen classic...");
+             var solvedMap = _generateClassicSolutionGrid();
+             if (!solvedMap) { console.warn("Fail gen classic, retry..."); continue; }
+
+             // 2. Partition into cages
+             console.log(`Partition grid(max:${params.maxCage}, min:${params.minCage})...`);
+             var cagesCells = _partitionGridIntoCages(solvedMap, params.maxCage, params.minCage);
+             if (!cagesCells) { console.warn("Fail partition, retry gen..."); continue; }
+
+             // 3. Calculate sums
+             console.log("Calc sums...");
+             _calculateCageSums(cagesCells, solvedMap);
+             var puzzle = { cages: cagesCells };
+
+             // 4. Verification (check solvability)
+             console.log("Verify solvability...");
+             var solveRes = killerSudoku.solve(deepCopy(puzzle.cages)); // Use deep copy for solver
+             if (solveRes && typeof solveRes === 'string' && solveRes.length === killerSudoku.NR_SQUARES) {
+                 console.log(`Gen OK after ${attempt} attempts!`);
+                 return puzzle; // Success!
+             } else {
+                 console.warn(`Verify fail(Solver:${solveRes}).Retry gen...`);
+             }
+         }
+         console.error(`Failed gen Killer after ${maxAttempts} attempts.`);
+         return false; // All attempts failed
+     };
 
 
     // --- Utility Functions ---
@@ -557,7 +735,7 @@
         var classic_maps = _get_classic_maps(killerSudoku.SQUARES, CLASSIC_UNITS);
         CLASSIC_UNITS_MAP = classic_maps.units_map;
         CLASSIC_PEERS_MAP = classic_maps.peers_map;
-        SQUARE_NEIGHBORS = _computeNeighbors(killerSudoku.SQUARES, SQUARE_MAP);
+        SQUARE_NEIGHBORS = _computeNeighbors(killerSudoku.SQUARES, SQUARE_MAP); // Compute direct neighbors
         console.log("killerSudoku library initialized.");
     }
 
