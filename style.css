@@ -1,0 +1,284 @@
+/* ===== Базовые стили и CSS Переменные ===== */
+:root {
+    /* --- Светлая тема (по умолчанию) --- */
+    --bg-primary: #f0f0f0;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #e9e9e9; /* Фон таймера */
+    --bg-numpad-button: #ffffff;
+    --bg-numpad-button-hover: #eee;
+    --bg-numpad-button-active: #ddd;
+    --bg-large-button: #007bff;
+    --bg-large-button-hover: #0056b3;
+    --bg-large-button-disabled: #a0cfff;
+    --bg-difficulty-button: #e7f3ff;
+    --bg-difficulty-button-hover: #cfe4fa;
+    --bg-options-container: rgba(255, 255, 255, 0.8);
+    --bg-theme-switch-track: #ccc;
+    --bg-theme-switch-knob: white;
+
+    --text-primary: #333;
+    --text-secondary: #555;
+    --text-accent: #026bff; /* Введенные пользователем цифры */
+    --text-given: #333;    /* Предустановленные цифры */
+    --text-note: #555;
+    --text-inverted: #ffffff;
+    --text-danger: red;
+    --text-success: green;
+    --text-warning-fg: #212529; /* Текст на желтых кнопках */
+    --text-disabled: #777;
+
+    --border-primary: #ccc;
+    --border-secondary: black; /* Граница доски, толстые линии */
+    --border-difficulty-button: #b8d6f3;
+    --border-difficulty-button-hover: #a1c3e6;
+    --cage-border-color: rgba(100, 100, 100, 0.7); /* Цвет пунктирной границы клетки */
+    --cage-sum-color: rgba(0, 0, 0, 0.8);          /* Цвет цифры суммы */
+
+    --highlight-weak: #e8f4ff; /* Подсветка строки/колонки */
+    --highlight-strong: #a7d8ff; /* Выбранная ячейка */
+    --highlight-error-bg: #ffdddd; /* Фон ошибочной ячейки */
+    --highlight-error-text: var(--text-danger);
+    --highlight-hint-flash: #fffacd; /* Вспышка подсказки */
+
+    --button-primary-bg: #007bff;
+    --button-primary-hover: #0056b3;
+    --button-primary-active: #004085;
+    --button-success-bg: #28a745;
+    --button-success-hover: #218838;
+    --button-success-active: #1e7e34;
+    --button-warning-bg: #ffc107;
+    --button-warning-hover: #e0a800;
+    --button-warning-active: #c69500;
+    --button-disabled-bg: #6c757d;
+    --button-disabled-opacity: 0.65;
+    --button-note-active-bg: var(--button-success-bg);
+    --button-note-active-border: var(--button-success-active);
+    --button-note-active-shadow: rgba(0, 0, 0, 0.3);
+    --button-exit-bg: #dc3545; /* Цвет кнопки Меню/Выход */
+    --button-exit-hover: #c82333;
+    --button-back-bg: #6c757d; /* Цвет кнопки Назад */
+    --button-back-hover: #5a6268;
+
+    --shadow-theme-toggle: rgba(0, 0, 0, 0.2);
+
+    --transition-duration: 0.3s;
+}
+
+body.dark-theme {
+    /* --- Темная тема --- */
+    --bg-primary: #1e1e1e;
+    --bg-secondary: #2c2c2c;
+    --bg-tertiary: #3f3f3f;
+    --bg-numpad-button: #3f3f3f;
+    --bg-numpad-button-hover: #505050;
+    --bg-numpad-button-active: #616161;
+    --bg-large-button: #2386fd;
+    --bg-large-button-hover: #58a6ff;
+    --bg-large-button-disabled: #1a5a9e;
+    --bg-difficulty-button: #334f6e;
+    --bg-difficulty-button-hover: #446a94;
+    --bg-options-container: rgba(44, 44, 44, 0.85);
+    --bg-theme-switch-track: #555;
+    --bg-theme-switch-knob: #ccc;
+
+    --text-primary: #e0e0e0;
+    --text-secondary: #b0b0b0;
+    --text-accent: #58a6ff; /* Светло-голубой */
+    --text-given: #b0b0b0; /* Менее яркие */
+    --text-note: #999;
+    --text-inverted: #121212; /* Для светлых кнопок */
+    --text-danger: #ff9999; /* Светло-красный */
+    --text-success: #99ff99; /* Светло-зеленый */
+    --text-warning-fg: #212529;
+    --text-disabled: #888;
+
+    --border-primary: #555;
+    --border-secondary: #bbb; /* Светлая граница доски */
+    --border-difficulty-button: #58a6ff;
+    --border-difficulty-button-hover: #7bbaff;
+    --cage-border-color: rgba(180, 180, 180, 0.6); /* Цвет пунктирной границы клетки (темная тема) */
+    --cage-sum-color: rgba(220, 220, 220, 0.8);    /* Цвет цифры суммы (темная тема) */
+
+
+    --highlight-weak: #334f6e; /* Темно-синий */
+    --highlight-strong: #0058a3; /* Еще темнее синий */
+    --highlight-error-bg: #6e3333; /* Темно-красный фон */
+    --highlight-error-text: var(--text-danger);
+    --highlight-hint-flash: #6a6836; /* Темно-желтый */
+
+    --button-primary-bg: #2386fd;
+    --button-primary-hover: #58a6ff;
+    --button-primary-active: #1e72d3;
+    --button-success-bg: #34ae5a;
+    --button-success-hover: #4ddb7a;
+    --button-success-active: #2b914c;
+    --button-warning-bg: #ffc107;
+    --button-warning-hover: #e0a800;
+    --button-warning-active: #c69500;
+    --button-disabled-bg: #5a5a5a;
+    --button-disabled-opacity: 0.7;
+    --button-note-active-bg: var(--button-success-bg);
+    --button-note-active-border: var(--button-success-active);
+    --button-note-active-shadow: rgba(0, 0, 0, 0.5);
+    --button-exit-bg: #ef5350;
+    --button-exit-hover: #e53935;
+    --button-back-bg: #787878;
+    --button-back-hover: #8a8a8a;
+
+    --shadow-theme-toggle: rgba(200, 200, 200, 0.15);
+}
+
+html { height: 100%; font-size: 16px; }
+
+body {
+    font-family: sans-serif;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    margin: 0; padding: 10px;
+    background-color: var(--bg-primary); color: var(--text-primary);
+    touch-action: manipulation; min-height: 100vh; box-sizing: border-box;
+    transition: background-color var(--transition-duration) ease, color var(--transition-duration) ease;
+    overflow-x: hidden;
+}
+
+/* ===== Стили Экранов ===== */
+.screen { width: 100%; max-width: 600px; display: none; flex-direction: column; align-items: center; padding: 15px; box-sizing: border-box; }
+.screen.visible { display: flex; }
+body:has(#game-container.visible) { justify-content: flex-start; }
+
+/* ===== Начальный Экран & Экран Настроек ===== */
+#initial-screen h1 { margin-top: 0; margin-bottom: 30px; font-size: 2.5em; color: var(--text-primary); }
+.initial-buttons { display: flex; flex-direction: column; gap: 15px; width: 100%; max-width: 300px; }
+.large-button { padding: 15px 20px; font-size: 1.2em; font-weight: bold; cursor: pointer; border: none; border-radius: 8px; background-color: var(--bg-large-button); color: var(--text-inverted); transition: background-color var(--transition-duration), opacity var(--transition-duration); }
+.large-button:hover:not(:disabled) { background-color: var(--bg-large-button-hover); }
+.large-button:disabled { background-color: var(--bg-large-button-disabled); color: var(--text-disabled); cursor: not-allowed; opacity: 0.7; }
+#new-game-options h2 { margin-top: 0; margin-bottom: 20px; color: var(--text-primary); }
+.options-container { display: flex; flex-direction: column; gap: 30px; padding: 20px; background-color: var(--bg-options-container); border-radius: 8px; margin-bottom: 20px; width: 100%; max-width: 400px; align-items: center; }
+.difficulty-selection, .theme-selection { width: 100%; display: flex; flex-direction: column; align-items: center; }
+.difficulty-selection h3, .theme-selection h3 { margin-top: 0; margin-bottom: 15px; color: var(--text-secondary); }
+.difficulty-selection button.difficulty-button { padding: 10px 15px; font-size: 1em; cursor: pointer; border: 1px solid var(--border-difficulty-button); border-radius: 5px; background-color: var(--bg-difficulty-button); color: var(--text-primary); transition: background-color var(--transition-duration), border-color var(--transition-duration); width: 80%; margin-bottom: 8px; }
+.difficulty-selection button.difficulty-button:hover { background-color: var(--bg-difficulty-button-hover); border-color: var(--border-difficulty-button-hover); }
+#back-to-initial-button { padding: 10px 20px; font-size: 1em; cursor: pointer; border: none; border-radius: 5px; background-color: var(--button-back-bg); color: var(--text-inverted); transition: background-color var(--transition-duration); margin-top: 10px; }
+#back-to-initial-button:hover { background-color: var(--button-back-hover); }
+.theme-switch { position: relative; display: inline-block; width: 70px; height: 34px; }
+.theme-switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--bg-theme-switch-track); transition: var(--transition-duration); border-radius: 34px; display: flex; align-items: center; }
+.slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: var(--bg-theme-switch-knob); transition: var(--transition-duration); border-radius: 50%; z-index: 2; }
+input:checked + .slider { background-color: var(--button-primary-bg); }
+input:checked + .slider:before { transform: translateX(36px); }
+.slider .icon { position: absolute; z-index: 1; font-size: 16px; transition: opacity var(--transition-duration); user-select: none; }
+.slider .sun { left: 8px; opacity: 1; }
+.slider .moon { right: 8px; opacity: 0; }
+input:checked + .slider .sun { opacity: 0; }
+input:checked + .slider .moon { opacity: 1; }
+
+/* ===== Игровой Экран ===== */
+#game-container h1 { margin-top: 5px; margin-bottom: 8px; color: var(--text-primary); font-size: 1.6em; flex-shrink: 0; }
+#timer-container { margin-bottom: 8px; width: clamp(270px, 90vw, 500px); max-width: 100%; text-align: right; flex-shrink: 0; }
+#timer { font-size: 1em; font-weight: bold; color: var(--text-secondary); padding: 5px 10px; background-color: var(--bg-tertiary); border-radius: 4px; display: inline-block; }
+#sudoku-board { display: grid; grid-template-columns: repeat(9, minmax(28px, 1fr)); grid-template-rows: repeat(9, minmax(28px, 1fr)); width: clamp(260px, 85vmin, 480px); height: clamp(260px, 85vmin, 480px); max-width: 95vw; max-height: 65vh; border: 3px solid var(--border-secondary); margin-bottom: 10px; background-color: var(--bg-secondary); overflow: hidden; transition: filter var(--transition-duration) ease-in-out, background-color var(--transition-duration) ease, border-color var(--transition-duration) ease; flex-shrink: 0; position: relative; /* Needed for absolute positioning of cage elements */ }
+
+/* --- Стили ячеек и их состояний --- */
+.cell { display: flex; justify-content: center; align-items: center; border: 1px solid var(--border-primary); cursor: pointer; box-sizing: border-box; user-select: none; -webkit-user-select: none; position: relative; /* Needed for pseudo-elements and sum */ overflow: hidden; transition: background-color 0.1s ease-in-out, border-color var(--transition-duration) ease; }
+.cell:nth-child(n+10) { border-top-color: var(--border-primary); } /* Ensure thin lines are correct color */
+.cell:not(:nth-child(9n+1)) { border-left-color: var(--border-primary); }
+.thick-border-right { border-right-width: 2px !important; border-right-color: var(--border-secondary) !important; }
+.thick-border-bottom { border-bottom-width: 2px !important; border-bottom-color: var(--border-secondary) !important; }
+.cell-value-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; font-size: clamp(1em, 4vmin, 1.5em); line-height: 1; font-weight: bold; color: var(--text-accent); z-index: 5; /* Value above cage elements */ pointer-events: none; }
+.cell-notes-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 0px; padding: 1px; box-sizing: border-box; display: none; z-index: 4; pointer-events: none;}
+.note-digit { display: flex; justify-content: center; align-items: center; font-size: clamp(0.6em, 2vmin, 0.8em); line-height: 1; color: var(--text-note); text-align: center; }
+.cell.given { background-color: var(--bg-secondary); cursor: default; }
+.cell.given .cell-value-container { color: var(--text-given); }
+.cell.highlighted { background-color: var(--highlight-weak); }
+.cell.incorrect .cell-value-container { color: var(--highlight-error-text) !important; }
+.cell.incorrect { background-color: var(--highlight-error-bg); }
+.cell.selected { background-color: var(--highlight-strong); }
+
+/* === KILLER SUDOKU CAGE STYLES === */
+
+/* Базовый стиль для ячейки, входящей в клетку (если нужен) */
+.cell.cage-cell {
+    /* background-color: rgba(200, 200, 0, 0.05); */ /* Optional: slight bg tint for debugging */
+}
+
+/* Псевдоэлемент для рисования внутренних границ клетки */
+.cage-cell::before {
+    content: '';
+    position: absolute;
+    /* Слегка смещаем внутрь, чтобы граница была внутри */
+    top: 1px;
+    left: 1px;
+    right: 1px;
+    bottom: 1px;
+    /* Важно: не перекрывать клики по ячейке */
+    pointer-events: none;
+    /* Границы будут добавлены специфичными классами */
+    border: none;
+    z-index: 1; /* Под цифрами/заметками */
+}
+
+/* Стили для конкретных внутренних границ */
+.cage-inner-border-top::before {
+    border-top: 1px dashed var(--cage-border-color);
+}
+.cage-inner-border-bottom::before {
+    border-bottom: 1px dashed var(--cage-border-color);
+}
+.cage-inner-border-left::before {
+    border-left: 1px dashed var(--cage-border-color);
+}
+.cage-inner-border-right::before {
+    border-right: 1px dashed var(--cage-border-color);
+}
+
+/* Стиль для якоря суммы (ячейки, где будет отображаться сумма) */
+.cell.cage-sum-anchor {
+    /* Убедимся, что позиционирование суммы будет относительно этой ячейки */
+    position: relative;
+}
+
+/* Стиль для элемента с суммой клетки */
+.cage-sum {
+    position: absolute;
+    top: 1px;    /* Маленький отступ сверху */
+    left: 2px;   /* Маленький отступ слева */
+    font-size: clamp(0.5em, 1.8vmin, 0.7em); /* Маленький размер шрифта */
+    font-weight: bold;
+    color: var(--cage-sum-color);
+    line-height: 1; /* Убираем лишнюю высоту строки */
+    z-index: 2; /* Выше псевдоэлемента границы, но ниже цифр */
+    pointer-events: none; /* Не мешать кликам */
+    user-select: none; /* Запретить выделение */
+    -webkit-user-select: none;
+}
+
+/* --- Элементы управления в игре --- */
+#controls { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; justify-content: center; flex-shrink: 0; }
+#controls button { padding: 8px 12px; font-size: 0.9em; cursor: pointer; border: none; border-radius: 5px; background-color: var(--button-primary-bg); color: var(--text-inverted); transition: background-color 0.2s, opacity 0.2s; white-space: nowrap; }
+#controls button:hover { background-color: var(--button-primary-hover); }
+#controls button:active { background-color: var(--button-primary-active); }
+#hint-button { background-color: var(--button-success-bg); }
+#hint-button:hover { background-color: var(--button-success-hover); }
+#hint-button:active { background-color: var(--button-success-active); }
+#hint-button:disabled, #undo-button:disabled { background-color: var(--button-disabled-bg); opacity: var(--button-disabled-opacity); cursor: not-allowed; }
+#undo-button { background-color: var(--button-warning-bg); color: var(--text-warning-fg); }
+#undo-button:hover { background-color: var(--button-warning-hover); }
+#undo-button:active { background-color: var(--button-warning-active); }
+#exit-game-button { background-color: var(--button-exit-bg); }
+#exit-game-button:hover { background-color: var(--button-exit-hover); }
+
+/* --- Статус --- */
+#status-message { margin-top: 4px; margin-bottom: 8px; font-size: 0.9em; min-height: 1.2em; font-weight: bold; text-align: center; flex-shrink: 0; transition: color var(--transition-duration) ease; }
+.correct { color: var(--text-success); }
+.incorrect-msg { color: var(--text-danger); }
+
+/* --- Цифровая панель --- */
+#numpad { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, auto); gap: 4px; margin-top: 0; width: clamp(220px, 80vw, 280px); max-width: 95vw; flex-shrink: 0; }
+#numpad button { padding: 8px 0; font-size: 1.1em; font-weight: bold; cursor: pointer; border: 1px solid var(--border-primary); border-radius: 5px; background-color: var(--bg-numpad-button); color: var(--text-primary); transition: background-color 0.2s, box-shadow 0.2s, color 0.2s, border-color 0.2s; -webkit-tap-highlight-color: transparent; }
+#numpad button:hover { background-color: var(--bg-numpad-button-hover); }
+#numpad button:active { background-color: var(--bg-numpad-button-active); }
+#note-toggle-button { grid-column: 1 / 2; grid-row: 4 / 5; font-size: 1.3em; }
+#erase-button { grid-column: 2 / 4; grid-row: 4 / 5; background-color: var(--button-warning-bg); color: var(--text-warning-fg); }
+#erase-button:hover { background-color: var(--button-warning-hover); }
+#note-toggle-button.active { background-color: var(--button-note-active-bg); color: var(--text-inverted); border-color: var(--button-note-active-border); box-shadow: inset 0 2px 4px var(--button-note-active-shadow); }
+#note-toggle-button.active:hover { background-color: var(--button-note-active-bg); color: var(--text-inverted); border-color: var(--button-note-active-border); box-shadow: inset 0 2px 4px var(--button-note-active-shadow); }
