@@ -2,10 +2,11 @@
     killerSudoku.js
     ---------------
     JavaScript library for Killer Sudoku puzzle generation and solving.
-    Includes DETAILED solver logging for debugging.
+    Includes updated partitioning logic and solver fixes.
 */
 
 (function(root) {
+    // Create the main library object on the root (window)
     var killerSudoku = root.killerSudoku = {};
 
     // --- Constants ---
@@ -14,37 +15,71 @@
     var COLS = killerSudoku.DIGITS;
     killerSudoku.NR_SQUARES = 81;
     killerSudoku.BLANK_CHAR = '.';
-    killerSudoku.BLANK_BOARD = ".................................................................................";
+    killerSudoku.BLANK_BOARD = "................................................................................."; // 81 dots
 
-    // --- Precomputed Data ---
-    killerSudoku.SQUARES = null;
-    var SQUARE_MAP = null;
-    var CLASSIC_UNITS = null;
-    var CLASSIC_UNITS_MAP = null;
-    var CLASSIC_PEERS_MAP = null;
-    var SQUARE_NEIGHBORS = {};
+    // --- Precomputed Data (Initialized at the end) ---
+    killerSudoku.SQUARES = null; // Array of cell IDs: ["A1", "A2", ..., "I9"]
+    var SQUARE_MAP = null;       // Map for quick lookup: {"A1": 0, "A2": 1, ...}
+    var CLASSIC_UNITS = null;    // Array of classic units (rows, cols, boxes) - each unit is an array of cell IDs
+    var CLASSIC_UNITS_MAP = null;// Map: cellId -> array of classic units it belongs to
+    var CLASSIC_PEERS_MAP = null;// Map: cellId -> array of classic peer cell IDs
+    var SQUARE_NEIGHBORS = {};   // Map: cellId -> array of orthogonal neighbor cell IDs
+
 
     // --- Bitset Constants and Helpers ---
-    var ALL_CANDIDATES = 511; killerSudoku.ALL_CANDIDATES_MASK = ALL_CANDIDATES;
-    var DIGIT_MASKS = [0, 1, 2, 4, 8, 16, 32, 64, 128, 256]; killerSudoku.DIGIT_MASKS = DIGIT_MASKS;
-    function getDigitMask(d){return DIGIT_MASKS[d]||0} function hasCandidate(b,d){return(b&DIGIT_MASKS[d])!==0} function addCandidate(b,d){return b|DIGIT_MASKS[d]} function removeCandidate(b,d){return b&~DIGIT_MASKS[d]} function countCandidates(b){var c=0;while(b>0){b&=b-1;c++}return c} function getCandidatesArray(b){var a=[];for(let d=1;d<=9;++d)if(hasCandidate(b,d))a.push(d);return a} function intersectCandidates(b1,b2){return b1&b2} function getSingleCandidateDigit(b){if(b>0&&(b&(b-1))===0){for(let d=1;d<=9;++d){if(b===DIGIT_MASKS[d])return d}}return 0}
-    // Helper to format bitset for logging
-    function formatBitset(b) { return getCandidatesArray(b).join(''); }
+    var ALL_CANDIDATES = (1 << 9) - 1; // 0b111111111 (511)
+    killerSudoku.ALL_CANDIDATES_MASK = ALL_CANDIDATES;
+    // Masks for digits 1-9 (index 0 unused)
+    var DIGIT_MASKS = [0, 1, 2, 4, 8, 16, 32, 64, 128, 256];
+    killerSudoku.DIGIT_MASKS = DIGIT_MASKS; // Expose if needed externally
+
+    function getDigitMask(digit) { return DIGIT_MASKS[digit] || 0; }
+    function hasCandidate(bitset, digit) { return (bitset & DIGIT_MASKS[digit]) !== 0; }
+    function addCandidate(bitset, digit) { return bitset | DIGIT_MASKS[digit]; }
+    function removeCandidate(bitset, digit) { return bitset & ~DIGIT_MASKS[digit]; }
+    function countCandidates(bitset) { var c = 0; while (bitset > 0) { bitset &= (bitset - 1); c++; } return c; }
+    function getCandidatesArray(bitset) { var a = []; for (let d = 1; d <= 9; ++d) if (hasCandidate(bitset, d)) a.push(d); return a; }
+    function intersectCandidates(b1, b2) { return b1 & b2; }
+    function getSingleCandidateDigit(bitset) { if (bitset > 0 && (bitset & (bitset - 1)) === 0) { for (let d = 1; d <= 9; ++d) { if (bitset === DIGIT_MASKS[d]) return d; } } return 0; }
+    function formatBitset(b) { return getCandidatesArray(b).join(''); } // Helper for logging
 
     // --- Deep Copy Utility ---
-    function deepCopy(a){if(a===null||typeof a!=="object")return a;if(a instanceof Date)return new Date(a.getTime());if(a instanceof Set)return new Set(a);if(Array.isArray(a)){const b=[];for(let c=0;c<a.length;c++)b[c]=deepCopy(a[c]);return b}const b={};for(const c in a)if(a.hasOwnProperty(c))b[c]=deepCopy(a[c]);return b}
+    function deepCopy(obj) {
+      if (obj === null || typeof obj !== 'object') { return obj; }
+      if (obj instanceof Date) { return new Date(obj.getTime()); }
+      if (obj instanceof Set) { return new Set(obj); } // Shallow copy of Set elements ok
+      if (Array.isArray(obj)) {
+        const arrCopy = [];
+        for (let i = 0; i < obj.length; i++) { arrCopy[i] = deepCopy(obj[i]); }
+        return arrCopy;
+      }
+      const objCopy = {};
+      for (const key in obj) {
+        if (obj.hasOwnProperty(key)) { objCopy[key] = deepCopy(obj[key]); }
+      }
+      return objCopy;
+    }
 
     // --- Cage Representation and Initialization ---
      /** @typedef {object} CageInput @property {number} sum @property {string[]} cells */
      /** @typedef {object} CageDataInternal @property {number} id @property {number} sum @property {string[]} cells @property {number} initialDigitMask @property {number} remainingSum @property {number} remainingCellsCount @property {number} currentValueMask */
      /** @typedef {object} SolverData @property {object.<string, number>} cellToCageMap @property {CageDataInternal[]} cageDataArray */
 
+    /**
+     * Initializes data structures needed by the solver based on cage definitions.
+     * Validates cages and precomputes initial masks.
+     * @param {CageInput[]} cages Array of cage objects.
+     * @returns {SolverData | false} Object containing solver data or false on error.
+     */
     killerSudoku._initializeSolverData = function(cages) {
-        // console.log("Initializing solver data..."); // Less verbose now
+        // console.log("Initializing solver data..."); // DEBUG
         if (!Array.isArray(cages)) { console.error("Invalid cages input: must be an array."); return false; }
         if (!SQUARE_MAP) { console.error("_initializeSolverData: SQUARE_MAP not initialized!"); return false;}
 
-        var cellToCageMap = {}; var cageDataArray = []; var assignedCells = {};
+        var cellToCageMap = {};
+        var cageDataArray = [];
+        var assignedCells = {};
+
         for (var i = 0; i < cages.length; ++i) {
             var cage = cages[i];
             if (!cage || typeof cage.sum !== 'number' || !Array.isArray(cage.cells) || cage.cells.length === 0) { console.error(`Invalid cage format at index ${i}:`, cage); return false; }
@@ -79,10 +114,43 @@
         return { cellToCageMap: cellToCageMap, cageDataArray: cageDataArray };
     };
 
-
     // --- Sum Combination Cache and Calculation ---
     var SUM_COMBINATION_CACHE = {};
-    killerSudoku.getSumCombinationInfo = function(targetSum, numCells) { if(numCells<=0||numCells>9||targetSum<=0)return null;var minSum=(numCells*(numCells+1))/2;var maxSum=(numCells*(19-numCells))/2;if(targetSum<minSum||targetSum>maxSum)return null;if(SUM_COMBINATION_CACHE[targetSum]?.[numCells]!==undefined)return SUM_COMBINATION_CACHE[targetSum][numCells];var combos=[];function findRec(currSum,k,startD,currCombo){if(currSum===0&&k===0){combos.push([...currCombo]);return;}if(currSum<0||k===0||startD>9)return;for(let d=startD;d<=9;++d){let remK=k-1;let minRemSum=remK>0?(remK*(d+1+d+remK))/2:0;if(currSum-d<minRemSum)break;let maxRemSum=0;for(let r=0;r<remK;++r)maxRemSum+=(9-r);if(currSum-d>maxRemSum)continue;currCombo.push(d);findRec(currSum-d,remK,d+1,currCombo);currCombo.pop();}}findRec(targetSum,numCells,1,[]);var result=null;if(combos.length>0){var mask=0;combos.forEach(c=>{c.forEach(d=>{mask|=DIGIT_MASKS[d];});});result={combinations:combos,digitMask:mask};}if(!SUM_COMBINATION_CACHE[targetSum])SUM_COMBINATION_CACHE[targetSum]={};SUM_COMBINATION_CACHE[targetSum][numCells]=result;return result; };
+    killerSudoku.getSumCombinationInfo = function(targetSum, numCells) {
+        if (numCells <= 0 || numCells > 9 || targetSum <= 0) return null;
+        var minPossibleSum = (numCells * (numCells + 1)) / 2;
+        var maxPossibleSum = (numCells * (19 - numCells)) / 2;
+        if (targetSum < minPossibleSum || targetSum > maxPossibleSum) return null;
+        if (SUM_COMBINATION_CACHE[targetSum] && SUM_COMBINATION_CACHE[targetSum][numCells] !== undefined) {
+            return SUM_COMBINATION_CACHE[targetSum][numCells];
+        }
+        var combinations = [];
+        function findCombinationsRecursive(currentSum, k, startDigit, currentCombo) {
+            if (currentSum === 0 && k === 0) { combinations.push([...currentCombo]); return; }
+            if (currentSum < 0 || k === 0 || startDigit > 9) { return; }
+            for (let digit = startDigit; digit <= 9; ++digit) {
+                 let remainingK = k - 1;
+                 let minRemainingSum = remainingK > 0 ? (remainingK * (digit + 1 + digit + remainingK)) / 2 : 0;
+                 if (currentSum - digit < minRemainingSum) break;
+                 let maxRemainingSumPossible = 0;
+                 for(let r=0; r<remainingK; ++r) maxRemainingSumPossible += (9-r);
+                 if (currentSum - digit > maxRemainingSumPossible) continue;
+                 currentCombo.push(digit);
+                 findCombinationsRecursive(currentSum - digit, k - 1, digit + 1, currentCombo);
+                 currentCombo.pop();
+            }
+        }
+        findCombinationsRecursive(targetSum, numCells, 1, []);
+        var result = null;
+        if (combinations.length > 0) {
+            var combinedMask = 0;
+            combinations.forEach(combo => { combo.forEach(digit => { combinedMask |= DIGIT_MASKS[digit]; }); });
+            result = { combinations: combinations, digitMask: combinedMask };
+        }
+        if (!SUM_COMBINATION_CACHE[targetSum]) { SUM_COMBINATION_CACHE[targetSum] = {}; }
+        SUM_COMBINATION_CACHE[targetSum][numCells] = result;
+        return result;
+     };
 
     // --- Constraint Propagation ---
     /**
@@ -96,25 +164,22 @@
      * @returns {boolean} True if successful, false if contradiction found.
      */
     function assignValue(candidatesMap, solverData, cellId, digitToAssign, indent="") {
-        console.log(`${indent}Assign START: ${cellId} = ${digitToAssign}`); // LOG
+        // console.log(`${indent}Assign START: ${cellId} = ${digitToAssign}`); // DEBUG
         var otherCandidatesMask = candidatesMap[cellId] & ~DIGIT_MASKS[digitToAssign];
-        // Eliminate all other candidates for this cell
         for (let d = 1; d <= 9; ++d) {
             if ((otherCandidatesMask & DIGIT_MASKS[d]) !== 0) {
-                // Pass the same solverData object for recursive calls within assign
                 if (!eliminateCandidate(candidatesMap, solverData, cellId, d, indent + "  ")) {
-                    console.log(`${indent}Assign FAIL: Contradiction eliminating ${d} from ${cellId}`); // LOG
-                    return false; // Contradiction found during elimination
+                    // console.log(`${indent}Assign FAIL: Contradiction eliminating ${d} from ${cellId}`); // DEBUG
+                    return false;
                 }
             }
         }
-        // Update cage state AFTER elimination ensures the cell is reduced
         if (!updateCageStateOnAssign(candidatesMap, solverData, cellId, digitToAssign, indent + "  ")) {
-             console.log(`${indent}Assign FAIL: Contradiction during cage update for ${cellId}=${digitToAssign}`); // LOG
-            return false; // Contradiction during cage update
+             // console.log(`${indent}Assign FAIL: Contradiction during cage update for ${cellId}=${digitToAssign}`); // DEBUG
+            return false;
         }
-        console.log(`${indent}Assign OK: ${cellId} = ${digitToAssign}`); // LOG
-        return true; // Assignment successful
+        // console.log(`${indent}Assign OK: ${cellId} = ${digitToAssign}`); // DEBUG
+        return true;
     }
 
     /**
@@ -128,267 +193,179 @@
      * @returns {boolean} True if successful, false if contradiction found.
      */
     function eliminateCandidate(candidatesMap, solverData, cellId, digitToEliminate, indent="") {
-        var initialCandidates = candidatesMap[cellId]; // For logging
+        var initialCandidates = candidatesMap[cellId];
         var cellMask = DIGIT_MASKS[digitToEliminate];
-        // If already eliminated, return successfully
-        if ((initialCandidates & cellMask) === 0) {
-            // console.log(`${indent}Eliminate: ${digitToEliminate} already removed from ${cellId}`); // LOG - Too verbose usually
-            return true;
-        }
+        if ((initialCandidates & cellMask) === 0) return true;
 
-        // Check dependencies are initialized
         if (!CLASSIC_PEERS_MAP || !CLASSIC_UNITS_MAP || !solverData?.cellToCageMap || !solverData?.cageDataArray) {
-             console.error("Eliminate called before full initialization or with invalid solverData!");
-             return false;
+             console.error("Eliminate called before full initialization or with invalid solverData!"); return false;
         }
 
-        // Remove the candidate
         candidatesMap[cellId] &= ~cellMask;
         var remainingCandidates = candidatesMap[cellId];
         var numRemaining = countCandidates(remainingCandidates);
-        console.log(`${indent}Eliminate: ${cellId} -${digitToEliminate}. Before: ${formatBitset(initialCandidates)}, After: ${formatBitset(remainingCandidates)} (${numRemaining} left)`); // LOG
+        // console.log(`${indent}Eliminate: ${cellId} -${digitToEliminate}. Before: ${formatBitset(initialCandidates)}, After: ${formatBitset(remainingCandidates)} (${numRemaining} left)`); // LOG
 
-        // Contradiction 1: No candidates left
         if (numRemaining === 0) {
-            console.log(`${indent}Eliminate FAIL (Rule 0): ${cellId} has 0 candidates left!`); // LOG
+            // console.log(`${indent}Eliminate FAIL (Rule 0): ${cellId} has 0 candidates left!`); // LOG
             return false;
         }
 
-        // Propagation Rule 1: Single candidate left -> Eliminate from peers
         if (numRemaining === 1) {
             var finalDigit = getSingleCandidateDigit(remainingCandidates);
-            console.log(`${indent}Eliminate PROP 1: ${cellId} reduced to ${finalDigit}. Eliminating from peers...`); // LOG
-            // Classic Peers
+            // console.log(`${indent}Eliminate PROP 1: ${cellId} reduced to ${finalDigit}. Eliminating from peers...`); // LOG
             for (const peerId of CLASSIC_PEERS_MAP[cellId]) {
-                 // Pass the same solverData down the chain
                 if (!eliminateCandidate(candidatesMap, solverData, peerId, finalDigit, indent + "  ")) {
-                    console.log(`${indent}Eliminate FAIL (Prop 1 - Classic): Contradiction eliminating ${finalDigit} from peer ${peerId}`); // LOG
+                    // console.log(`${indent}Eliminate FAIL (Prop 1 - Classic): Contradiction eliminating ${finalDigit} from peer ${peerId}`); // LOG
                     return false;
                 }
             }
-            // Cage update (which handles cage peers implicitly)
             if (!updateCageStateOnAssign(candidatesMap, solverData, cellId, finalDigit, indent + "  ")) {
-                 console.log(`${indent}Eliminate FAIL (Prop 1 - Cage): Contradiction updating cage state for ${cellId}=${finalDigit}`); // LOG
+                 // console.log(`${indent}Eliminate FAIL (Prop 1 - Cage): Contradiction updating cage state for ${cellId}=${finalDigit}`); // LOG
                  return false;
             }
         }
 
-        // Propagation Rule 2: Only one place left for the digit in a unit
-        // Classic Units
         for (const unit of CLASSIC_UNITS_MAP[cellId]) {
             var placesForDigit = [];
             for (const unitCellId of unit) {
                 if ((candidatesMap[unitCellId] & cellMask) !== 0) placesForDigit.push(unitCellId);
             }
-            if (placesForDigit.length === 0) { // Contradiction 2: Digit must be somewhere
-                console.log(`${indent}Eliminate FAIL (Rule 2a - Classic): No place left for ${digitToEliminate} in unit containing ${cellId}`); // LOG
+            if (placesForDigit.length === 0) {
+                // console.log(`${indent}Eliminate FAIL (Rule 2a - Classic): No place left for ${digitToEliminate} in unit containing ${cellId}`); // LOG
                  return false;
             }
             if (placesForDigit.length === 1) {
                 const targetCell = placesForDigit[0];
-                // Only assign if it's not already assigned to this digit
                 if (candidatesMap[targetCell] !== cellMask) {
-                     console.log(`${indent}Eliminate PROP 2a: ${digitToEliminate} must be in ${targetCell} (only place in classic unit)`); // LOG
-                     // Pass the same solverData
+                     // console.log(`${indent}Eliminate PROP 2a: ${digitToEliminate} must be in ${targetCell} (only place in classic unit)`); // LOG
                     if (!assignValue(candidatesMap, solverData, targetCell, digitToEliminate, indent + "  ")) {
-                        console.log(`${indent}Eliminate FAIL (Prop 2a - Classic): Contradiction assigning ${digitToEliminate} to ${targetCell}`); // LOG
+                        // console.log(`${indent}Eliminate FAIL (Prop 2a - Classic): Contradiction assigning ${digitToEliminate} to ${targetCell}`); // LOG
                         return false;
                     }
                 }
             }
         }
-        // Cage Unit
          const cageIndex = solverData.cellToCageMap[cellId];
          if (cageIndex !== undefined) {
              const cage = solverData.cageDataArray[cageIndex];
              let placesForDigitInCage = [];
              for (const cageCellId of cage.cells) {
-                 // Only consider *unsolved* cells for this rule
                  if (countCandidates(candidatesMap[cageCellId]) > 1 && (candidatesMap[cageCellId] & cellMask) !== 0) {
                      placesForDigitInCage.push(cageCellId);
                  }
              }
-             // If only one *unsolved* cell in the cage can hold this digit, assign it
              if (placesForDigitInCage.length === 1) {
                   const targetCell = placesForDigitInCage[0];
                   if (candidatesMap[targetCell] !== cellMask) {
-                       console.log(`${indent}Eliminate PROP 2b: ${digitToEliminate} must be in ${targetCell} (only place in cage ${cageIndex})`); // LOG
-                       // Pass the same solverData
+                       // console.log(`${indent}Eliminate PROP 2b: ${digitToEliminate} must be in ${targetCell} (only place in cage ${cageIndex})`); // LOG
                       if (!assignValue(candidatesMap, solverData, targetCell, digitToEliminate, indent + "  ")) {
-                           console.log(`${indent}Eliminate FAIL (Prop 2b - Cage): Contradiction assigning ${digitToEliminate} to ${targetCell}`); // LOG
+                           // console.log(`${indent}Eliminate FAIL (Prop 2b - Cage): Contradiction assigning ${digitToEliminate} to ${targetCell}`); // LOG
                           return false;
                       }
                   }
              }
-             // No explicit check for length 0 here, cage sum propagation handles it
          }
-
-        // console.log(`${indent}Eliminate OK: ${digitToEliminate} from ${cellId}`); // LOG - Too verbose
         return true; // Elimination successful
     }
 
     /**
      * Updates cage state and propagates constraints based on the new state.
-     * Modifies the *passed* candidatesMap and solverData objects.
-     * @param {object} candidatesMap - Map { cellId: bitset }
-     * @param {SolverData} solverData - Current solver state.
-     * @param {string} assignedCellId - The cell that got a value.
-     * @param {number} assignedDigit - The digit assigned.
-     * @param {string} [indent=""] - Indentation for logging.
-     * @returns {boolean} True if successful, false if contradiction.
      */
     function updateCageStateOnAssign(candidatesMap, solverData, assignedCellId, assignedDigit, indent="") {
         const cageIndex = solverData.cellToCageMap[assignedCellId];
-        if (cageIndex === undefined) return true; // Not in a cage
+        if (cageIndex === undefined) return true;
 
         const cage = solverData.cageDataArray[cageIndex];
         const digitMask = DIGIT_MASKS[assignedDigit];
 
-        // Avoid double processing (important due to recursive calls)
-        if ((cage.currentValueMask & digitMask) !== 0) {
-            // console.log(`${indent}Cage Update: Skip re-update cage ${cageIndex} for ${assignedDigit}`); // LOG - Verbose
-            return true;
-        }
-        // Check for uniqueness violation (should be caught earlier, but safety)
-        if ( (cage.currentValueMask & digitMask) !== 0) {
-             console.error(`${indent}Cage Update FAIL: Contradiction - Digit ${assignedDigit} already in cage ${cageIndex} mask ${cage.currentValueMask.toString(2)}`); // LOG
-             return false;
-        }
+        if ((cage.currentValueMask & digitMask) !== 0) return true; // Avoid double processing
 
-        console.log(`${indent}Cage Update START: Cage ${cageIndex} cell ${assignedCellId}=${assignedDigit}. Before: sum=${cage.remainingSum}, cells=${cage.remainingCellsCount}`); // LOG
+        // console.log(`${indent}Cage Update START: Cage ${cageIndex} cell ${assignedCellId}=${assignedDigit}. Before: sum=${cage.remainingSum}, cells=${cage.remainingCellsCount}`); // LOG
 
-        // Update state
         cage.remainingSum -= assignedDigit;
         cage.remainingCellsCount -= 1;
         cage.currentValueMask |= digitMask;
 
-        // Check validity
         if (cage.remainingCellsCount < 0 || cage.remainingSum < 0) {
              console.error(`${indent}Cage Update FAIL: Cage ${cageIndex} invalid state - sum=${cage.remainingSum}, cells=${cage.remainingCellsCount}`); // LOG
              return false;
         }
-        // Check if cage finished but sum is wrong
         if (cage.remainingCellsCount === 0 && cage.remainingSum !== 0) {
-             console.log(`${indent}Cage Update FAIL: Cage ${cageIndex} filled, but remaining sum is ${cage.remainingSum} (should be 0)`); // LOG
+            // console.log(`${indent}Cage Update FAIL: Cage ${cageIndex} filled, but remaining sum is ${cage.remainingSum}`); // LOG
             return false;
         }
 
-        // Propagate constraints if cage is not yet full
         if (cage.remainingCellsCount > 0) {
             const comboInfo = killerSudoku.getSumCombinationInfo(cage.remainingSum, cage.remainingCellsCount);
             if (!comboInfo) {
-                 console.log(`${indent}Cage Update FAIL: Impossible sum ${cage.remainingSum} for ${cage.remainingCellsCount} cells in cage ${cageIndex}`); // LOG
+                 // console.log(`${indent}Cage Update FAIL: Impossible sum ${cage.remainingSum} for ${cage.remainingCellsCount} cells in cage ${cageIndex}`); // LOG
                 return false;
             }
-
             let allowedDigitsMask = comboInfo.digitMask;
             let requiredAvailableMask = allowedDigitsMask & ~cage.currentValueMask;
 
             if (requiredAvailableMask === 0 && cage.remainingSum > 0) {
-                 console.log(`${indent}Cage Update FAIL: Need digits for sum ${cage.remainingSum}, but all required (mask ${allowedDigitsMask.toString(2)}) already used (mask ${cage.currentValueMask.toString(2)}) in cage ${cageIndex}`); // LOG
+                 // console.log(`${indent}Cage Update FAIL: Need digits for sum ${cage.remainingSum} in cage ${cageIndex}, but all required used.`); // LOG
                 return false;
             }
-             console.log(`${indent}Cage Update Propagate: Cage ${cageIndex}, reqMask=${formatBitset(requiredAvailableMask)}`); // LOG
+            // console.log(`${indent}Cage Update Propagate: Cage ${cageIndex}, reqMask=${formatBitset(requiredAvailableMask)}`); // LOG
 
-            // Propagate the refined mask to remaining *unsolved* cells in the cage
             for (const cellId of cage.cells) {
                 if (cellId !== assignedCellId && countCandidates(candidatesMap[cellId]) > 1) {
                     const maskToApply = requiredAvailableMask;
                     const originalCandidates = candidatesMap[cellId];
                     const newCandidates = originalCandidates & maskToApply;
-
                     if (newCandidates !== originalCandidates) {
                         const eliminatedMask = originalCandidates & ~newCandidates;
-                         console.log(`${indent}  Prop to ${cellId}: Applying mask ${formatBitset(maskToApply)}, elim ${formatBitset(eliminatedMask)}`); // LOG
+                        // console.log(`${indent}  Prop to ${cellId}: elim mask ${formatBitset(eliminatedMask)}`); // LOG
                         for (let d = 1; d <= 9; d++) {
                             if ((eliminatedMask & DIGIT_MASKS[d]) !== 0) {
-                                // Pass the SAME solverData
                                 if (!eliminateCandidate(candidatesMap, solverData, cellId, d, indent + "    ")) {
-                                    console.log(`${indent}  Prop FAIL: Contradiction eliminating ${d} from ${cellId}`); // LOG
+                                    // console.log(`${indent}  Prop FAIL: Contradiction elim ${d} from ${cellId}`); // LOG
                                     return false;
                                 }
                             }
                         }
                     }
-                     // Check immediately after applying mask within loop
                      if (candidatesMap[cellId] === 0) {
-                         console.log(`${indent}Cage Update FAIL: ${cellId} has 0 cands after cage ${cageIndex} propagation`); // LOG
+                        // console.log(`${indent}Cage Update FAIL: ${cellId} has 0 cands after cage ${cageIndex} propagation`); // LOG
                          return false;
                      }
                 }
             }
         }
-        console.log(`${indent}Cage Update OK: Cage ${cageIndex}. After: sum=${cage.remainingSum}, cells=${cage.remainingCellsCount}`); // LOG
-        return true; // Update and propagation successful
+        // console.log(`${indent}Cage Update OK: Cage ${cageIndex}. After: sum=${cage.remainingSum}, cells=${cage.remainingCellsCount}`); // LOG
+        return true;
     }
 
 
     // --- Solver Search Function ---
     /**
      * Recursive backtracking search function.
-     * @param {object} candidatesMap - Current map { cellId: bitset }.
-     * @param {SolverData} solverData - Current solver state.
-     * @param {string} [indent=""] - Indentation for logging.
-     * @returns {object | false} The solved candidatesMap or false if no solution found from this state.
      */
     function _search(candidatesMap, solverData, indent="") {
         // console.log(`${indent}Search START`); // LOG - Verbose
-
-        // 1. Base Case: Is it solved?
         var isSolved = true;
-        for (const cellId of killerSudoku.SQUARES) {
-            if (countCandidates(candidatesMap[cellId]) !== 1) {
-                isSolved = false;
-                break;
-            }
-        }
-        if (isSolved) {
-            console.log(`${indent}Search BASE CASE: Solved!`); // LOG
-            return candidatesMap;
-        }
+        for (const cellId of killerSudoku.SQUARES) { if (countCandidates(candidatesMap[cellId]) !== 1) { isSolved = false; break; } }
+        if (isSolved) { /*console.log(`${indent}Search BASE CASE: Solved!`);*/ return candidatesMap; }
 
-        // 2. Find cell with minimum remaining values (MRV heuristic)
-        var minCandidates = 10;
-        var minCandidatesCell = null;
-        for (const cellId of killerSudoku.SQUARES) {
-            var numCandidates = countCandidates(candidatesMap[cellId]);
-            if (numCandidates > 1 && numCandidates < minCandidates) {
-                minCandidates = numCandidates;
-                minCandidatesCell = cellId;
-                if (minCandidates === 2) break; // Optimization
-            }
-        }
+        var minCandidates = 10, minCandidatesCell = null;
+        for (const cellId of killerSudoku.SQUARES) { var numC = countCandidates(candidatesMap[cellId]); if (numC > 1 && numC < minCandidates) { minCandidates = numC; minCandidatesCell = cellId; if (minCandidates === 2) break; } }
+        if (!minCandidatesCell) { /*console.log(`${indent}Search FAIL: No branch cell found?`);*/ return false; }
 
-        if (!minCandidatesCell) {
-             console.log(`${indent}Search FAIL: No branch cell found, but not solved? (Contradiction likely)`); // LOG
-            return false; // Should indicate contradiction if not solved
-        }
-
-        console.log(`${indent}Search BRANCH: Cell ${minCandidatesCell} (${minCandidates} cands: ${formatBitset(candidatesMap[minCandidatesCell])})`); // LOG
-
-        // 3. Try assigning each candidate digit
+        // console.log(`${indent}Search BRANCH: Cell ${minCandidatesCell} (${minCandidates} cands: ${formatBitset(candidatesMap[minCandidatesCell])})`); // LOG
         var candidatesToTry = getCandidatesArray(candidatesMap[minCandidatesCell]);
         for (const digit of candidatesToTry) {
-            console.log(`${indent}  Try ${digit} for ${minCandidatesCell}`); // LOG
+            // console.log(`${indent}  Try ${digit} for ${minCandidatesCell}`); // LOG
             var candidatesMapCopy = deepCopy(candidatesMap);
-            var solverDataCopy = deepCopy(solverData);
-
+            var solverDataCopy = deepCopy(solverData); // Copy cage state too!
             if (assignValue(candidatesMapCopy, solverDataCopy, minCandidatesCell, digit, indent + "    ")) {
-                // console.log(`${indent}  Assign OK, Recursing...`); // LOG
                 var result = _search(candidatesMapCopy, solverDataCopy, indent + "  ");
-                if (result) {
-                    console.log(`${indent}Search SUCCESS: Path found via ${minCandidatesCell}=${digit}`); // LOG
-                    return result; // Solution found!
-                } else {
-                    // console.log(`${indent}  Recursive call failed for ${digit}`); // LOG
-                }
-            } else {
-                 // console.log(`${indent}  Assign ${digit} immediately failed.`); // LOG
+                if (result) { /*console.log(`${indent}Search SUCCESS: Path found via ${minCandidatesCell}=${digit}`);*/ return result; }
             }
         }
-
-        // 4. Backtrack: None of the candidates worked
-        console.log(`${indent}Search BACKTRACK from ${minCandidatesCell}`); // LOG
+        // console.log(`${indent}Search BACKTRACK from ${minCandidatesCell}`); // LOG
         return false;
     }
 
@@ -406,18 +383,18 @@
         var propagationOk = true;
         for(let i = 0; i < solverData.cageDataArray.length; ++i) {
             const cage = solverData.cageDataArray[i];
-            if (cage.initialDigitMask === 0 && cage.sum > 0 && cage.cells.length > 0) {
-                console.error(`Cage ${i} impossible based on sum/size.`); propagationOk = false; break;
-            }
-            for(const cellId of cage.cells) {
+            if (cage.initialDigitMask === 0 && cage.sum > 0 && cage.cells.length > 0) { console.error(`Cage ${i} impossible based on sum/size.`); propagationOk = false; break; }
+            for(const cellId of cage.cells) { // ИСПОЛЬЗУЕМ cellId
                 const originalCandidates = initialCandidatesMap[cellId];
+                // Применяем ТОЛЬКО маску из getSumCombinationInfo
                 const newCandidates = originalCandidates & cage.initialDigitMask;
-                // --- ИЗМЕНЕНИЕ: Просто применяем маску, без вызова eliminate ---
                 initialCandidatesMap[cellId] = newCandidates;
-                if (initialCandidatesMap[cellId] === 0) {
+
+                 if (initialCandidatesMap[cellId] === 0) {
                     console.error(`Contradiction: ${cellId} has 0 cands after applying initial cage ${i} mask.`);
                     propagationOk = false; break;
                  }
+                 // НЕ ВЫЗЫВАЕМ eliminateCandidate или updateCageState здесь
             }
             if (!propagationOk) break;
         }
@@ -427,8 +404,7 @@
 
         console.log("Starting recursive search...");
         // Начинаем поиск с начальными кандидатами и ОРИГИНАЛЬНЫМИ данными клеток
-        // Копирование будет происходить внутри _search
-        var solutionMap = _search(initialCandidatesMap, deepCopy(solverData)); // Передаем копию solverData на всякий случай
+        var solutionMap = _search(initialCandidatesMap, deepCopy(solverData)); // Передаем копию solverData
 
         if (solutionMap) {
              console.log("Solver finished successfully.");
@@ -455,7 +431,6 @@
     function _calculateCageSums(cages, solvedGridMap) { cages.forEach(cg=>{cg.sum=0;cg.cells.forEach(cId=>{const d=solvedGridMap[cId];if(typeof d==='number'&&d>=1&&d<=9)cg.sum+=d;else{console.warn(`CalcSums: Inv digit ${cId}:`,d);cg.sum=NaN;}});if(isNaN(cg.sum))console.error("Cage sum NaN:",cg);});}
     var GENERATION_DIFFICULTY_PARAMS={"easy":{maxCage:6,minCage:2},"medium":{maxCage:5,minCage:2},"hard":{maxCage:5,minCage:2},"very-hard":{maxCage:4,minCage:2},"insane":{maxCage:4,minCage:2},"inhuman":{maxCage:4,minCage:2},"default":{maxCage:5,minCage:2}};
     killerSudoku.generate = function(difficulty = "medium", maxAttempts = 50) { console.log(`Generate Killer(diff:${difficulty}, att:${maxAttempts})`);var params=GENERATION_DIFFICULTY_PARAMS[difficulty];if(!params){console.warn(`Diff '${difficulty}' unknown, using default.`);params=GENERATION_DIFFICULTY_PARAMS.default;}if(!params){console.error("FATAL: Default difficulty params missing!");params={maxCage:5,minCage:2};}console.log(`Using params: maxCage=${params.maxCage}, minCage=${params.minCage}`);for(let att=1;att<=maxAttempts;++att){console.log(`Gen attempt ${att}/${maxAttempts}...`);/*console.log("Gen classic...");*/var solvedMap=_generateClassicSolutionGrid();if(!solvedMap){console.warn("Fail gen classic, retry...");continue;}/*console.log(`Partition grid(max:${params.maxCage}, min:${params.minCage})...`);*/var cagesCells=_partitionGridIntoCages(solvedMap,params.maxCage,params.minCage);if(!cagesCells){console.warn("Fail partition, retry gen...");continue;}/*console.log("Calc sums...");*/_calculateCageSums(cagesCells,solvedMap);if(cagesCells.some(cage=>isNaN(cage.sum))){console.error("Cage sum NaN. Retrying gen.");continue;}var puzzle={cages:cagesCells};console.log("Verify solvability...");var solveRes=killerSudoku.solve(deepCopy(puzzle.cages));if(solveRes&&typeof solveRes==='string'&&solveRes.length===killerSudoku.NR_SQUARES){console.log(`Gen OK after ${att} attempts!`);let genSolutionStr="";for(const sq of killerSudoku.SQUARES)genSolutionStr+=solvedMap[sq];if(solveRes!==genSolutionStr)console.warn("Solver result MISMATCHES generator base grid!");return puzzle;}else{console.warn(`Verify fail(Solver:${solveRes}).Retry gen...`);}}console.error(`Failed gen Killer after ${maxAttempts} attempts.`);return false;};
-
 
     // --- Utility Functions ---
     function cross(A, B) { var r=[];for(var i=0;i<A.length;i++)for(var j=0;j<B.length;j++)r.push(A[i]+B[j]);return r; }
