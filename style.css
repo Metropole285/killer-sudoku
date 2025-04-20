@@ -152,14 +152,65 @@ body:has(#game-container.visible) { justify-content: flex-start; }
 .large-button { padding: 15px 20px; font-size: 1.2em; font-weight: bold; cursor: pointer; border: none; border-radius: 8px; background-color: var(--bg-large-button); color: var(--text-inverted); transition: background-color var(--transition-duration), opacity var(--transition-duration); }
 .large-button:hover:not(:disabled) { background-color: var(--bg-large-button-hover); }
 .large-button:disabled { background-color: var(--bg-large-button-disabled); color: var(--text-disabled); cursor: not-allowed; opacity: 0.7; }
+
 #new-game-options h2 { margin-top: 0; margin-bottom: 20px; color: var(--text-primary); }
-.options-container { display: flex; flex-direction: column; gap: 30px; padding: 20px; background-color: var(--bg-options-container); border-radius: 8px; margin-bottom: 20px; width: 100%; max-width: 400px; align-items: center; }
-.difficulty-selection, .theme-selection { width: 100%; display: flex; flex-direction: column; align-items: center; }
-.difficulty-selection h3, .theme-selection h3 { margin-top: 0; margin-bottom: 15px; color: var(--text-secondary); }
+.options-container { display: flex; flex-direction: column; gap: 20px; /* Уменьшил gap */ padding: 20px; background-color: var(--bg-options-container); border-radius: 8px; margin-bottom: 20px; width: 100%; max-width: 400px; align-items: center; }
+
+/* --- Выбор Режима (НОВЫЕ СТИЛИ) --- */
+#game-mode-selection {
+    display: flex;
+    flex-direction: column; /* Кнопки друг под другом */
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    /* margin-bottom: 20px; Убрал, т.к. gap в .options-container */
+}
+#game-mode-selection h3,
+.difficulty-selection h3,
+.theme-selection h3 { /* Общий стиль для заголовков секций */
+     margin-top: 0;
+     margin-bottom: 10px;
+     color: var(--text-secondary);
+     font-size: 1em;
+     font-weight: bold;
+}
+#game-mode-selection .mode-button {
+    padding: 10px 15px; font-size: 1em; cursor: pointer;
+    border: 1px solid var(--border-primary); border-radius: 5px;
+    background-color: var(--bg-numpad-button); color: var(--text-primary);
+    transition: background-color var(--transition-duration), border-color var(--transition-duration), box-shadow var(--transition-duration);
+    width: 80%;
+}
+#game-mode-selection .mode-button:hover {
+    background-color: var(--bg-numpad-button-hover);
+    border-color: var(--text-accent);
+}
+#game-mode-selection .mode-button.selected {
+    background-color: var(--button-primary-bg); color: var(--text-inverted);
+    border-color: var(--button-primary-bg);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.2); font-weight: bold;
+}
+#game-mode-selection .mode-button.selected:hover {
+    background-color: var(--button-primary-hover);
+    border-color: var(--button-primary-hover);
+}
+
+/* --- Выбор Сложности --- */
+.difficulty-selection { width: 100%; display: flex; flex-direction: column; align-items: center; }
 .difficulty-selection button.difficulty-button { padding: 10px 15px; font-size: 1em; cursor: pointer; border: 1px solid var(--border-difficulty-button); border-radius: 5px; background-color: var(--bg-difficulty-button); color: var(--text-primary); transition: background-color var(--transition-duration), border-color var(--transition-duration); width: 80%; margin-bottom: 8px; }
 .difficulty-selection button.difficulty-button:hover { background-color: var(--bg-difficulty-button-hover); border-color: var(--border-difficulty-button-hover); }
-#back-to-initial-button { padding: 10px 20px; font-size: 1em; cursor: pointer; border: none; border-radius: 5px; background-color: var(--button-back-bg); color: var(--text-inverted); transition: background-color var(--transition-duration); margin-top: 10px; }
-#back-to-initial-button:hover { background-color: var(--button-back-hover); }
+.difficulty-selection button.difficulty-button.selected { /* Стиль выбранной сложности */
+    background-color: var(--button-primary-bg); color: var(--text-inverted);
+    border-color: var(--button-primary-bg);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.2); font-weight: bold;
+}
+.difficulty-selection button.difficulty-button.selected:hover {
+     background-color: var(--button-primary-hover);
+     border-color: var(--button-primary-hover);
+}
+
+/* --- Выбор Темы --- */
+.theme-selection { width: 100%; display: flex; flex-direction: column; align-items: center; }
 .theme-switch { position: relative; display: inline-block; width: 70px; height: 34px; }
 .theme-switch input { opacity: 0; width: 0; height: 0; }
 .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--bg-theme-switch-track); transition: var(--transition-duration); border-radius: 34px; display: flex; align-items: center; }
@@ -172,6 +223,11 @@ input:checked + .slider:before { transform: translateX(36px); }
 input:checked + .slider .sun { opacity: 0; }
 input:checked + .slider .moon { opacity: 1; }
 
+/* --- Кнопка Назад --- */
+#back-to-initial-button { padding: 10px 20px; font-size: 1em; cursor: pointer; border: none; border-radius: 5px; background-color: var(--button-back-bg); color: var(--text-inverted); transition: background-color var(--transition-duration); margin-top: 10px; }
+#back-to-initial-button:hover { background-color: var(--button-back-hover); }
+
+
 /* ===== Игровой Экран ===== */
 #game-container h1 { margin-top: 5px; margin-bottom: 8px; color: var(--text-primary); font-size: 1.6em; flex-shrink: 0; }
 #timer-container { margin-bottom: 8px; width: clamp(270px, 90vw, 500px); max-width: 100%; text-align: right; flex-shrink: 0; }
@@ -179,9 +235,9 @@ input:checked + .slider .moon { opacity: 1; }
 #sudoku-board { display: grid; grid-template-columns: repeat(9, minmax(28px, 1fr)); grid-template-rows: repeat(9, minmax(28px, 1fr)); width: clamp(260px, 85vmin, 480px); height: clamp(260px, 85vmin, 480px); max-width: 95vw; max-height: 65vh; border: 3px solid var(--border-secondary); margin-bottom: 10px; background-color: var(--bg-secondary); overflow: hidden; transition: filter var(--transition-duration) ease-in-out, background-color var(--transition-duration) ease, border-color var(--transition-duration) ease; flex-shrink: 0; position: relative; /* Needed for absolute positioning of cage elements */ }
 
 /* --- Стили ячеек и их состояний --- */
-.cell { display: flex; justify-content: center; align-items: center; border: 1px solid var(--border-primary); cursor: pointer; box-sizing: border-box; user-select: none; -webkit-user-select: none; position: relative; /* Needed for pseudo-elements and sum */ overflow: hidden; transition: background-color 0.1s ease-in-out, border-color var(--transition-duration) ease; }
-.cell:nth-child(n+10) { border-top-color: var(--border-primary); } /* Ensure thin lines are correct color */
-.cell:not(:nth-child(9n+1)) { border-left-color: var(--border-primary); }
+.cell { display: flex; justify-content: center; align-items: center; border: 1px solid var(--border-primary); cursor: pointer; box-sizing: border-box; user-select: none; -webkit-user-select: none; position: relative; /* Needed for pseudo-elements and sum */ transition: background-color 0.1s ease-in-out, border-color var(--transition-duration) ease; }
+.cell:nth-child(n+10) { border-top-color: var(--border-primary); border-top-width: 1px;} /* Ensure thin lines are correct color & width */
+.cell:not(:nth-child(9n+1)) { border-left-color: var(--border-primary); border-left-width: 1px; }
 .thick-border-right { border-right-width: 2px !important; border-right-color: var(--border-secondary) !important; }
 .thick-border-bottom { border-bottom-width: 2px !important; border-bottom-color: var(--border-secondary) !important; }
 .cell-value-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; font-size: clamp(1em, 4vmin, 1.5em); line-height: 1; font-weight: bold; color: var(--text-accent); z-index: 5; /* Value above cage elements */ pointer-events: none; }
@@ -195,61 +251,26 @@ input:checked + .slider .moon { opacity: 1; }
 .cell.selected { background-color: var(--highlight-strong); }
 
 /* === KILLER SUDOKU CAGE STYLES === */
+.cell.cage-cell { /* Base class for cells in killer mode */ }
 
-/* Базовый стиль для ячейки, входящей в клетку (если нужен) */
-.cell.cage-cell {
-    /* background-color: rgba(200, 200, 0, 0.05); */ /* Optional: slight bg tint for debugging */
-}
-
-/* Псевдоэлемент для рисования внутренних границ клетки */
 .cage-cell::before {
-    content: '';
-    position: absolute;
-    /* Слегка смещаем внутрь, чтобы граница была внутри */
-    top: 1px;
-    left: 1px;
-    right: 1px;
-    bottom: 1px;
-    /* Важно: не перекрывать клики по ячейке */
-    pointer-events: none;
-    /* Границы будут добавлены специфичными классами */
-    border: none;
-    z-index: 1; /* Под цифрами/заметками */
+    content: ''; position: absolute;
+    top: 1px; left: 1px; right: 1px; bottom: 1px; /* Inner offset */
+    pointer-events: none; border: none;
+    z-index: 1; /* Below sum and content */
 }
+.cage-inner-border-top::before { border-top: 1px dashed var(--cage-border-color); }
+.cage-inner-border-bottom::before { border-bottom: 1px dashed var(--cage-border-color); }
+.cage-inner-border-left::before { border-left: 1px dashed var(--cage-border-color); }
+.cage-inner-border-right::before { border-right: 1px dashed var(--cage-border-color); }
 
-/* Стили для конкретных внутренних границ */
-.cage-inner-border-top::before {
-    border-top: 1px dashed var(--cage-border-color);
-}
-.cage-inner-border-bottom::before {
-    border-bottom: 1px dashed var(--cage-border-color);
-}
-.cage-inner-border-left::before {
-    border-left: 1px dashed var(--cage-border-color);
-}
-.cage-inner-border-right::before {
-    border-right: 1px dashed var(--cage-border-color);
-}
+.cell.cage-sum-anchor { position: relative; } /* Anchor for the sum */
 
-/* Стиль для якоря суммы (ячейки, где будет отображаться сумма) */
-.cell.cage-sum-anchor {
-    /* Убедимся, что позиционирование суммы будет относительно этой ячейки */
-    position: relative;
-}
-
-/* Стиль для элемента с суммой клетки */
 .cage-sum {
-    position: absolute;
-    top: 1px;    /* Маленький отступ сверху */
-    left: 2px;   /* Маленький отступ слева */
-    font-size: clamp(0.5em, 1.8vmin, 0.7em); /* Маленький размер шрифта */
-    font-weight: bold;
-    color: var(--cage-sum-color);
-    line-height: 1; /* Убираем лишнюю высоту строки */
-    z-index: 2; /* Выше псевдоэлемента границы, но ниже цифр */
-    pointer-events: none; /* Не мешать кликам */
-    user-select: none; /* Запретить выделение */
-    -webkit-user-select: none;
+    position: absolute; top: 1px; left: 2px;
+    font-size: clamp(0.5em, 1.8vmin, 0.7em); font-weight: bold;
+    color: var(--cage-sum-color); line-height: 1;
+    z-index: 2; pointer-events: none; user-select: none; -webkit-user-select: none;
 }
 
 /* --- Элементы управления в игре --- */
