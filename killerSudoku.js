@@ -2,7 +2,7 @@
     killerSudoku.js
     ---------------
     JavaScript library for Killer Sudoku puzzle generation and solving.
-    Includes updated partitioning logic (Attempt 4 - Force 1-cell cages for remainder).
+    Includes updated partitioning logic and fixed initial propagation.
 */
 
 (function(root) {
@@ -37,7 +37,45 @@
      /** @typedef {object} CageDataInternal @property {number} id @property {number} sum @property {string[]} cells @property {number} initialDigitMask @property {number} remainingSum @property {number} remainingCellsCount @property {number} currentValueMask */
      /** @typedef {object} SolverData @property {object.<string, number>} cellToCageMap @property {CageDataInternal[]} cageDataArray */
 
-    killerSudoku._initializeSolverData = function(cages) { if(!Array.isArray(cages)){console.error("Inv cages");return false;}var cellMap={},cageArr=[],assigned={};for(var i=0;i<cages.length;++i){var cg=cages[i];if(!cg||typeof cg.sum!=='number'||!Array.isArray(cg.cells)||cg.cells.length===0){console.error(`Inv cage fmt ${i}`);return false;}if(cg.sum<=0&&cg.cells.length>0){console.error(`Inv cage sum ${i}`);return false;}if(cg.cells.length>9){console.error(`Inv cage size ${i}`);return false;}var cells=[];for(var j=0;j<cg.cells.length;++j){var cId=cg.cells[j];if(!SQUARE_MAP){console.error("SQUARE_MAP null!");return false;}if(typeof cId!=='string'||SQUARE_MAP[cId]===undefined){console.error(`Inv cell ID ${cId} cage ${i}`);return false;}if(assigned[cId]!==undefined){console.error(`Cell ${cId} multi cages ${i},${assigned[cId]}`);return false;}assigned[cId]=i;cellMap[cId]=i;cells.push(cId);}if(cells.length>0){var minPossibleSum=(cells.length*(cells.length+1))/2;var maxPossibleSum=(cells.length*(19-cells.length))/2;if(cg.sum<minPossibleSum||cg.sum>maxPossibleSum){console.error(`Inv sum ${cg.sum} size ${cells.length} cage ${i}. Min:${minPossibleSum}, Max:${maxPossibleSum}`);return false;}}var cInfo=killerSudoku.getSumCombinationInfo(cg.sum,cells.length);if(cells.length>0&&!cInfo){console.error(`Impossible sum ${cg.sum} size ${cells.length} cage ${i}.`);return false;}cageArr.push({id:i,sum:cg.sum,cells:cells,initialDigitMask:cInfo?cInfo.digitMask:0,remainingSum:cg.sum,remainingCellsCount:cells.length,currentValueMask:0,});}const assignedCnt=Object.keys(assigned).length;if(assignedCnt!==killerSudoku.NR_SQUARES){console.error(`Inv cage def: covered ${assignedCnt}/${killerSudoku.NR_SQUARES}`);if(killerSudoku.SQUARES){const missing=killerSudoku.SQUARES.filter(sq=>assigned[sq]===undefined);if(missing.length>0)console.error("Missing:",missing);}return false;}/*console.log("Solver data init OK.");*/return{cellToCageMap:cellMap,cageDataArray:cageArr}; };
+    killerSudoku._initializeSolverData = function(cages) {
+        if (!Array.isArray(cages)) { console.error("Invalid cages input: must be an array."); return false; }
+        if (!SQUARE_MAP) { console.error("_initializeSolverData: SQUARE_MAP not initialized!"); return false;}
+
+        var cellToCageMap = {}; var cageDataArray = []; var assignedCells = {};
+        for (var i = 0; i < cages.length; ++i) {
+            var cage = cages[i];
+            if (!cage || typeof cage.sum !== 'number' || !Array.isArray(cage.cells) || cage.cells.length === 0) { console.error(`Invalid cage format at index ${i}:`, cage); return false; }
+            if (cage.sum <= 0 && cage.cells.length > 0) { console.error(`Invalid cage sum (<= 0) at index ${i}:`, cage.sum); return false; }
+            if (cage.cells.length > 9) { console.error(`Invalid cage size (> 9) at index ${i}:`, cage.cells.length); return false; }
+
+            var cageCells = [];
+            for (var j = 0; j < cage.cells.length; ++j) {
+                var cellId = cage.cells[j];
+                if (typeof cellId !== 'string' || SQUARE_MAP[cellId] === undefined) { console.error(`Invalid cell ID '${cellId}' in cage at index ${i}`); return false; }
+                if (assignedCells[cellId] !== undefined) { console.error(`Cell ${cellId} belongs to multiple cages (index ${i} and ${assignedCells[cellId]})`); return false; }
+                assignedCells[cellId] = i; cellToCageMap[cellId] = i; cageCells.push(cellId);
+            }
+            if (cage.cells.length > 0) {
+                 var minPossibleSum = (cage.cells.length * (cage.cells.length + 1)) / 2;
+                 var maxPossibleSum = (cage.cells.length * (19 - cage.cells.length)) / 2;
+                 if (cage.sum < minPossibleSum || cage.sum > maxPossibleSum) { console.error(`Invalid sum ${cage.sum} size ${cage.cells.length} cage ${i}. Min:${minPossibleSum}, Max:${maxPossibleSum}`); return false; }
+             }
+            var combinationInfo = killerSudoku.getSumCombinationInfo(cage.sum, cageCells.length);
+            if (cage.cells.length > 0 && !combinationInfo) { console.error(`Impossible sum ${cage.sum} size ${cage.cells.length} cage ${i}.`); return false; }
+
+            cageDataArray.push({
+                id: i, sum: cage.sum, cells: cageCells,
+                initialDigitMask: combinationInfo ? combinationInfo.digitMask : 0,
+                remainingSum: cage.sum, remainingCellsCount: cageCells.length,
+                currentValueMask: 0,
+            });
+        }
+         const assignedCount = Object.keys(assignedCells).length;
+         if (assignedCount !== killerSudoku.NR_SQUARES) { console.error(`Inv cage def: covered ${assignedCnt}/${killerSudoku.NR_SQUARES}`); if(killerSudoku.SQUARES){const missing=killerSudoku.SQUARES.filter(sq=>assigned[sq]===undefined);if(missing.length>0)console.error("Missing:",missing);} return false; }
+        // console.log("Solver data init OK.");
+        return { cellToCageMap: cellToCageMap, cageDataArray: cageDataArray };
+    };
+
 
     // --- Sum Combination Cache and Calculation ---
     var SUM_COMBINATION_CACHE = {};
@@ -46,7 +84,7 @@
     // --- Constraint Propagation ---
     function assignValue(candidatesMap, solverData, cellId, digitToAssign) { var oMask=candidatesMap[cellId]&~DIGIT_MASKS[digitToAssign];for(let d=1;d<=9;++d){if((oMask&DIGIT_MASKS[d])!==0){if(!eliminateCandidate(candidatesMap,solverData,cellId,d))return false;}}if(!updateCageStateOnAssign(candidatesMap,solverData,cellId,digitToAssign))return false;return true;}
     function eliminateCandidate(candidatesMap, solverData, cellId, digitToEliminate) { var mask=DIGIT_MASKS[digitToEliminate];if((candidatesMap[cellId]&mask)===0)return true;if(!CLASSIC_PEERS_MAP||!CLASSIC_UNITS_MAP||!solverData?.cellToCageMap||!solverData?.cageDataArray)return false;candidatesMap[cellId]&=~mask;var rem=candidatesMap[cellId];var numRem=countCandidates(rem);if(numRem===0)return false;if(numRem===1){var finalDigit=getSingleCandidateDigit(rem);for(const p of CLASSIC_PEERS_MAP[cellId]){if(!eliminateCandidate(candidatesMap,solverData,p,finalDigit))return false;}if(!updateCageStateOnAssign(candidatesMap,solverData,cellId,finalDigit))return false;}for(const u of CLASSIC_UNITS_MAP[cellId]){var places=[];for(const c of u){if((candidatesMap[c]&mask)!==0)places.push(c);}if(places.length===0)return false;if(places.length===1){if(!assignValue(candidatesMap,solverData,places[0],digitToEliminate))return false;}}const cIdx=solverData.cellToCageMap[cellId];if(cIdx!==undefined){const cage=solverData.cageDataArray[cIdx];let placesCage=[];for(const cc of cage.cells){if(countCandidates(candidatesMap[cc])>1&&(candidatesMap[cc]&mask)!==0)placesCage.push(cc);}if(placesCage.length===1){if(!assignValue(candidatesMap,solverData,placesCage[0],digitToEliminate))return false;}}return true;}
-    function updateCageStateOnAssign(candidatesMap, solverData, assignedCellId, assignedDigit) { const cIdx=solverData.cellToCageMap[assignedCellId];if(cIdx===undefined)return true;const cage=solverData.cageDataArray[cIdx];const dMask=DIGIT_MASKS[assignedDigit];if((cage.currentValueMask&dMask)!==0)return true;cage.remainingSum-=assignedDigit;cage.remainingCellsCount-=1;cage.currentValueMask|=dMask;if(cage.remainingCellsCount<0||cage.remainingSum<0)return false;if(cage.remainingCellsCount>0){const cInfo=killerSudoku.getSumCombinationInfo(cage.remainingSum,cage.remainingCellsCount);if(!cInfo)return false;let allowedMask=cInfo.digitMask;let reqMask=allowedMask&~cage.currentValueMask;if(reqMask===0&&cage.remainingSum>0)return false;for(const cId of cage.cells){if(countCandidates(candidatesMap[cId])>1 && cId !== assignedCellId){ const maskApply=reqMask;const origCands=candidatesMap[cId];const newCands=origCands&maskApply;if(newCands!==origCands){const elimMask=origCands&~newCands;for(let d=1;d<=9;d++){if((elimMask&DIGIT_MASKS[d])!==0){if(!eliminateCandidate(candidatesMap,solverData,cId,d))return false;}}}if(candidatesMap[cId]===0)return false;}}}else if(cage.remainingSum!==0)return false;return true;}
+    function updateCageStateOnAssign(candidatesMap, solverData, assignedCellId, assignedDigit) { const cIdx=solverData.cellToCageMap[assignedCellId];if(cIdx===undefined)return true;const cage=solverData.cageDataArray[cIdx];const dMask=DIGIT_MASKS[assignedDigit];if((cage.currentValueMask&dMask)!==0)return true;cage.remainingSum-=assignedDigit;cage.remainingCellsCount-=1;cage.currentValueMask|=dMask;if(cage.remainingCellsCount<0||cage.remainingSum<0)return false;if(cage.remainingCellsCount>0){const cInfo=killerSudoku.getSumCombinationInfo(cage.remainingSum,cage.remainingCellsCount);if(!cInfo)return false;let allowedMask=cInfo.digitMask;let reqMask=allowedMask&~cage.currentValueMask;if(reqMask===0&&cage.remainingSum>0)return false;for(const cId of cage.cells){if(countCandidates(candidatesMap[cId])>1&&cId!==assignedCellId){const maskApply=reqMask;const origCands=candidatesMap[cId];const newCands=origCands&maskApply;if(newCands!==origCands){const elimMask=origCands&~newCands;for(let d=1;d<=9;d++){if((elimMask&DIGIT_MASKS[d])!==0){if(!eliminateCandidate(candidatesMap,solverData,cId,d))return false;}}}if(candidatesMap[cId]===0)return false;}}}else if(cage.remainingSum!==0)return false;return true;}
 
     // --- Solver Search Function ---
     function _search(candidatesMap, solverData) { var s=true;for(const sq of killerSudoku.SQUARES){if(countCandidates(candidatesMap[sq])!==1){s=false;break;}}if(s)return candidatesMap;var mC=10,mSq=null;for(const sq of killerSudoku.SQUARES){var nC=countCandidates(candidatesMap[sq]);if(nC>1&&nC<mC){mC=nC;mSq=sq;if(mC===2)break;}}if(!mSq)return false;var tryCands=getCandidatesArray(candidatesMap[mSq]);for(const d of tryCands){var mapCopy=deepCopy(candidatesMap);var solverCopy=deepCopy(solverData);if(assignValue(mapCopy,solverCopy,mSq,d)){var res=_search(mapCopy,solverCopy);if(res)return res;}}return false;}
@@ -61,14 +99,15 @@
         for (const cellId of killerSudoku.SQUARES) initialCandidatesMap[cellId] = ALL_CANDIDATES;
 
         console.log("Applying initial cage constraints...");
-        var initialSolverDataCopy = deepCopy(solverData);
+        // --- ИЗМЕНЕНО: Работаем с КОПИЕЙ solverData на этом этапе ---
+        var workingSolverData = deepCopy(solverData);
         var propagationOk = true;
 
         for(let i = 0; i < solverData.cageDataArray.length; ++i) {
-            const cage = solverData.cageDataArray[i];
+            const cage = solverData.cageDataArray[i]; // Читаем из оригинала для initialDigitMask
             if (cage.initialDigitMask === 0 && cage.sum > 0) { console.error(`Cage ${i} impossible.`); propagationOk = false; break; }
 
-            for(const cellId of cage.cells) { // Используем cellId здесь
+            for(const cellId of cage.cells) { // Используем cellId
                 const originalCandidates = initialCandidatesMap[cellId];
                 const newCandidates = originalCandidates & cage.initialDigitMask;
 
@@ -76,8 +115,8 @@
                      const eliminatedMask = originalCandidates & ~newCandidates;
                      for (let d = 1; d <= 9; d++) {
                          if ((eliminatedMask & DIGIT_MASKS[d]) !== 0) {
-                             // --- ИСПРАВЛЕНО: Используем cellId вместо неопределенной cId ---
-                             if (!eliminateCandidate(initialCandidatesMap, initialSolverDataCopy, cellId, d)) {
+                             // Передаем КОПИЮ solverData в eliminateCandidate на этапе инициализации
+                             if (!eliminateCandidate(initialCandidatesMap, workingSolverData, cellId, d)) {
                                   console.error(`Contradiction applying initial cage ${i} mask to ${cellId} (eliminating ${d})`);
                                  propagationOk = false; break;
                              }
@@ -87,19 +126,16 @@
                 if (!propagationOk) break;
 
                  if (initialCandidatesMap[cellId] === 0) {
-                     // --- ИСПРАВЛЕНО: Используем cellId ---
                     console.error(`Contradiction: ${cellId} has 0 cands after initial cage ${i} mask.`);
                     propagationOk = false; break;
                  }
-                 if(countCandidates(initialCandidatesMap[cellId]) === 1) {
-                    const singleDigit = getSingleCandidateDigit(initialCandidatesMap[cellId]);
-                    // --- ИСПРАВЛЕНО: Используем cellId ---
-                    if(!updateCageStateOnAssign(initialCandidatesMap, initialSolverDataCopy, cellId, singleDigit)){
-                        // --- ИСПРАВЛЕНО: Используем cellId ---
-                        console.error(`Contradiction updating initial cage ${i} state after prop solved ${cellId}=${singleDigit}`);
-                        propagationOk = false; break;
-                    }
-                 }
+                 // --- ИЗМЕНЕНО: Убран вызов updateCageStateOnAssign на этапе инициализации ---
+                 // Если ячейка решилась, просто продолжаем. Состояние клетки обновится
+                 // естественным образом при вызове eliminateCandidate для этой цифры у соседей.
+                 // if(countCandidates(initialCandidatesMap[cellId]) === 1) {
+                 //    const singleDigit = getSingleCandidateDigit(initialCandidatesMap[cellId]);
+                 //    // НЕ ВЫЗЫВАЕМ updateCageStateOnAssign ЗДЕСЬ
+                 // }
             }
             if (!propagationOk) break;
         } // End cage loop
@@ -108,43 +144,29 @@
         console.log("Initial constraint propagation complete.");
 
         console.log("Starting recursive search...");
-        var solutionMap = _search(initialCandidatesMap, initialSolverDataCopy);
+        // --- ИЗМЕНЕНО: Передаем измененную КОПИЮ solverData в search ---
+        var solutionMap = _search(initialCandidatesMap, workingSolverData);
 
-        if (solutionMap) {
-            console.log("Solver finished successfully.");
-            let solutionString = "";
-            for (const cellId of killerSudoku.SQUARES) {
-                let digit = getSingleCandidateDigit(solutionMap[cellId]);
-                solutionString += (digit > 0 ? digit : killerSudoku.BLANK_CHAR);
-            }
-            if (solutionString.length !== killerSudoku.NR_SQUARES || solutionString.includes(killerSudoku.BLANK_CHAR)) {
-                 console.error("Solver returned incomplete/invalid map:", solutionMap);
-                 return false;
-            }
-            return solutionString;
-        } else {
-            console.log("Solver could not find a solution.");
-            return false;
-        }
+        if (solutionMap) { /* ... (форматирование результата как раньше) ... */ console.log("Solve OK.");let solStr="";for(const sq of killerSudoku.SQUARES){let d=getSingleCandidateDigit(solMap[sq]);solStr+=(d>0?d:killerSudoku.BLANK_CHAR);}if(solStr.length!==killerSudoku.NR_SQUARES||solStr.includes(killerSudoku.BLANK_CHAR)){console.error("Solver incomplete map:",solMap);return false;}return solStr;}
+        else { console.log("Solve fail."); return false; }
     };
-
 
     // --- GENERATOR IMPLEMENTATION ---
     function _generateClassicSolutionGrid(){var c={};for(const s of killerSudoku.SQUARES){if(typeof ALL_CANDIDATES==='undefined'){console.error("ALL_CANDS undef!");return false;}c[s]=ALL_CANDIDATES;}function searchClassic(a){var b=true;for(const c of killerSudoku.SQUARES){if(countCandidates(a[c])!==1){b=false;break;}}if(b)return a;var d=10,e=null;var f=_shuffleArray([...killerSudoku.SQUARES]);for(const g of f){var h=countCandidates(a[g]);if(h>1&&h<d){d=h;e=g;if(d===2)break;}}if(!e)return false;var i=_shuffleArray(getCandidatesArray(a[e]));for(const j of i){var k=deepCopy(a);if(_assignClassic(k,e,j)){var l=searchClassic(k);if(l)return l;}}return false;}function _assignClassic(a,b,c){var d=a[b]&~DIGIT_MASKS[c];for(let e=1;e<=9;e++){if((d&DIGIT_MASKS[e])!==0){if(!_eliminateClassic(a,b,e))return false;}}return true;}function _eliminateClassic(a,b,c){var d=DIGIT_MASKS[c];if((a[b]&d)===0)return true;a[b]&=~d;var e=a[b];var f=countCandidates(e);if(f===0)return false;if(f===1){var g=getSingleCandidateDigit(e);for(const h of CLASSIC_PEERS_MAP[b]){if(!_eliminateClassic(a,h,g))return false;}}for(const i of CLASSIC_UNITS_MAP[b]){var j=[];for(const k of i){if((a[k]&d)!==0)j.push(k);}if(j.length===0)return false;if(j.length===1){if(!_assignClassic(a,j[0],c))return false;}}return true;}var initAssign=_shuffleArray([...killerSudoku.SQUARES]);for(let i=0;i<10;i++){let sq=initAssign[i];let pDs=getCandidatesArray(c[sq]);if(pDs.length>0){let d=pDs[Math.floor(Math.random()*pDs.length)];if(!_assignClassic(c,sq,d)){console.warn("Init assign fail, restart.");for(const sq of killerSudoku.SQUARES)c[sq]=ALL_CANDIDATES;break;};}}var solMap=searchClassic(c);if(!solMap)return false;var resMap={};for(const sq of killerSudoku.SQUARES){resMap[sq]=getSingleCandidateDigit(solMap[sq]);if(resMap[sq]===0){console.error("Classic grid incomplete!");return false;}}return resMap;}
     function _partitionGridIntoCages(solvedGridMap, maxCageSize = 5, minCageSize = 2) {
         var cages = []; var unassignedCells = new Set(killerSudoku.SQUARES); var cellToCageObjectMap = {};
         var maxPartitionAttempts = killerSudoku.NR_SQUARES * 10; var partitionAttempts = 0;
-        console.log(`Partitioning grid. Initial unassigned: ${unassignedCells.size}`);
+        // console.log(`Partitioning grid. Initial unassigned: ${unassignedCells.size}`);
         while (unassignedCells.size > 0 && partitionAttempts < maxPartitionAttempts) {
             partitionAttempts++; let remainingCellsArray = Array.from(unassignedCells); let handledRemainderThisIteration = false;
             if (remainingCellsArray.length <= maxCageSize && remainingCellsArray.length > 0) {
                 let attachedCompletely = true; let cellsToAttach = [...remainingCellsArray]; let successfulAttachments = 0;
                 for (let i = cellsToAttach.length - 1; i >= 0; i--) { const remCell = cellsToAttach[i]; const remDigit = solvedGridMap[remCell]; let cellAttached = false; let potentialTargets = []; (SQUARE_NEIGHBORS[remCell] || []).forEach(neighbor => { const cageObj = cellToCageObjectMap[neighbor]; if (cageObj?.id !== undefined) { const targetCageDigits = new Set(cageObj.cells.map(c => solvedGridMap[c])); if (!targetCageDigits.has(remDigit) && cageObj.cells.length < 9) { if (!potentialTargets.some(t => t.id === cageObj.id)) potentialTargets.push(cageObj); } } }); if (potentialTargets.length > 0) { const targetCage = _shuffleArray(potentialTargets)[0]; targetCage.cells.push(remCell); cellToCageObjectMap[remCell] = targetCage; unassignedCells.delete(remCell); successfulAttachments++; cellAttached = true; } if (!cellAttached) attachedCompletely = false; }
-                if (!attachedCompletely) { remainingCellsArray = Array.from(unassignedCells); if (remainingCellsArray.length > 0) { console.warn(`Partitioning: Could not attach ${remainingCellsArray.length} cells. Forcing 1-cell cages.`); remainingCellsArray.forEach(remCell => { const newCage = { cells: [remCell] }; cages.push(newCage); cellToCageObjectMap[remCell] = newCage; unassignedCells.delete(remCell); }); } }
+                if (!attachedCompletely) { remainingCellsArray = Array.from(unassignedCells); if (remainingCellsArray.length > 0) { console.warn(`Partitioning: Could not attach ${remainingCellsArray.length}. Forcing 1-cell cages.`); remainingCellsArray.forEach(remCell => { const newCage = { cells: [remCell] }; cages.push(newCage); cellToCageObjectMap[remCell] = newCage; unassignedCells.delete(remCell); }); } }
                 handledRemainderThisIteration = true;
             }
             if (unassignedCells.size === 0) break;
-            if (!handledRemainderThisIteration) { var startCell = _getRandomElementFromSet(unassignedCells); if (!startCell) { console.warn("Partitioning: Could not get start cell."); continue; } var currentCageCells = [startCell]; var currentCageDigits = new Set([solvedGridMap[startCell]]); unassignedCells.delete(startCell); const newCageObject = { cells: currentCageCells }; cellToCageObjectMap[startCell] = newCageObject; var remainingCount = unassignedCells.size; var potentialMaxSize = Math.min(maxCageSize, remainingCount + 1); if (remainingCount > 0 && remainingCount + 1 > minCageSize && remainingCount + 1 - minCageSize < minCageSize) { potentialMaxSize = Math.min(maxCageSize, (remainingCount + 1) - minCageSize + 1 ); } potentialMaxSize = Math.max(minCageSize, potentialMaxSize); var targetSize = Math.floor(Math.random() * (potentialMaxSize - minCageSize + 1)) + minCageSize; targetSize = Math.min(targetSize, remainingCount + 1); var addedInIteration = true;
+            if (!handledRemainderThisIteration) { var startCell = _getRandomElementFromSet(unassignedCells); if (!startCell) continue; var currentCageCells = [startCell]; var currentCageDigits = new Set([solvedGridMap[startCell]]); unassignedCells.delete(startCell); const newCageObject = { cells: currentCageCells }; cellToCageObjectMap[startCell] = newCageObject; var remainingCount = unassignedCells.size; var potentialMaxSize = Math.min(maxCageSize, remainingCount + 1); if (remainingCount > 0 && remainingCount + 1 > minCageSize && remainingCount + 1 - minCageSize < minCageSize) { potentialMaxSize = Math.min(maxCageSize, (remainingCount + 1) - minCageSize + 1 ); } potentialMaxSize = Math.max(minCageSize, potentialMaxSize); var targetSize = Math.floor(Math.random() * (potentialMaxSize - minCageSize + 1)) + minCageSize; targetSize = Math.min(targetSize, remainingCount + 1); var addedInIteration = true;
                  while (currentCageCells.length < targetSize && addedInIteration) { addedInIteration = false; let neighborCandidates = []; for (const cell of currentCageCells) { for (const neighbor of (SQUARE_NEIGHBORS[cell] || [])) { if (unassignedCells.has(neighbor) && !currentCageDigits.has(solvedGridMap[neighbor]) && !neighborCandidates.some(nc => nc.cellId === neighbor)) { let freeCount = 0; (SQUARE_NEIGHBORS[neighbor] || []).forEach(nNeighbor => { if (unassignedCells.has(nNeighbor)) freeCount++; }); neighborCandidates.push({ cellId: neighbor, freeNeighbors: freeCount }); } } } if (neighborCandidates.length > 0) { neighborCandidates.sort((a, b) => a.freeNeighbors - b.freeNeighbors); var nextCell = neighborCandidates[0].cellId; currentCageCells.push(nextCell); currentCageDigits.add(solvedGridMap[nextCell]); unassignedCells.delete(nextCell); cellToCageObjectMap[nextCell] = newCageObject; addedInIteration = true; } }
                   if (currentCageCells.length >= minCageSize) { cages.push(newCageObject); } else { currentCageCells.forEach(cell => { unassignedCells.add(cell); delete cellToCageObjectMap[cell]; }); } }
         }
@@ -153,8 +175,7 @@
     }
     function _calculateCageSums(cages, solvedGridMap) { cages.forEach(cg=>{cg.sum=0;cg.cells.forEach(cId=>{const d=solvedGridMap[cId];if(typeof d==='number'&&d>=1&&d<=9)cg.sum+=d;else{console.warn(`CalcSums: Inv digit ${cId}:`,d);cg.sum=NaN;}});if(isNaN(cg.sum))console.error("Cage sum NaN:",cg);});}
     var GENERATION_DIFFICULTY_PARAMS={"easy":{maxCage:6,minCage:2},"medium":{maxCage:5,minCage:2},"hard":{maxCage:5,minCage:2},"very-hard":{maxCage:4,minCage:2},"insane":{maxCage:4,minCage:2},"inhuman":{maxCage:4,minCage:2},"default":{maxCage:5,minCage:2}};
-    killerSudoku.generate = function(difficulty = "medium", maxAttempts = 50) { console.log(`Generate Killer(diff:${difficulty}, att:${maxAttempts})`);var params=GENERATION_DIFFICULTY_PARAMS[difficulty];if(!params){console.warn(`Diff '${difficulty}' unknown, using default.`);params=GENERATION_DIFFICULTY_PARAMS.default;}if(!params){console.error("FATAL: Default difficulty params missing!");params={maxCage:5,minCage:2};}console.log(`Using params: maxCage=${params.maxCage}, minCage=${params.minCage}`);for(let att=1;att<=maxAttempts;++att){console.log(`Gen attempt ${att}/${maxAttempts}...`);console.log("Gen classic...");var solvedMap=_generateClassicSolutionGrid();if(!solvedMap){console.warn("Fail gen classic, retry...");continue;}console.log(`Partition grid(max:${params.maxCage}, min:${params.minCage})...`);var cagesCells=_partitionGridIntoCages(solvedMap,params.maxCage,params.minCage);if(!cagesCells){console.warn("Fail partition, retry gen...");continue;}console.log("Calc sums...");_calculateCageSums(cagesCells,solvedMap);if(cagesCells.some(cage=>isNaN(cage.sum))){console.error("Cage sum NaN. Retrying gen.");continue;}var puzzle={cages:cagesCells};console.log("Verify solvability...");var solveRes=killerSudoku.solve(deepCopy(puzzle.cages));if(solveRes&&typeof solveRes==='string'&&solveRes.length===killerSudoku.NR_SQUARES){console.log(`Gen OK after ${att} attempts!`);let genSolutionStr="";for(const sq of killerSudoku.SQUARES)genSolutionStr+=solvedMap[sq];if(solveRes!==genSolutionStr)console.warn("Solver result MISMATCHES generator base grid!");return puzzle;}else{console.warn(`Verify fail(Solver:${solveRes}).Retry gen...`);}}console.error(`Failed gen Killer after ${maxAttempts} attempts.`);return false;};
-
+    killerSudoku.generate = function(difficulty = "medium", maxAttempts = 50) { console.log(`Generate Killer(diff:${difficulty}, att:${maxAttempts})`);var params=GENERATION_DIFFICULTY_PARAMS[difficulty];if(!params){console.warn(`Diff '${difficulty}' unknown, using default.`);params=GENERATION_DIFFICULTY_PARAMS.default;}if(!params){console.error("FATAL: Default difficulty params missing!");params={maxCage:5,minCage:2};}console.log(`Using params: maxCage=${params.maxCage}, minCage=${params.minCage}`);for(let att=1;att<=maxAttempts;++att){console.log(`Gen attempt ${att}/${maxAttempts}...`);/*console.log("Gen classic...");*/var solvedMap=_generateClassicSolutionGrid();if(!solvedMap){console.warn("Fail gen classic, retry...");continue;}/*console.log(`Partition grid(max:${params.maxCage}, min:${params.minCage})...`);*/var cagesCells=_partitionGridIntoCages(solvedMap,params.maxCage,params.minCage);if(!cagesCells){console.warn("Fail partition, retry gen...");continue;}/*console.log("Calc sums...");*/_calculateCageSums(cagesCells,solvedMap);if(cagesCells.some(cage=>isNaN(cage.sum))){console.error("Cage sum NaN. Retrying gen.");continue;}var puzzle={cages:cagesCells};/*console.log("Verify solvability...");*/var solveRes=killerSudoku.solve(deepCopy(puzzle.cages));if(solveRes&&typeof solveRes==='string'&&solveRes.length===killerSudoku.NR_SQUARES){console.log(`Gen OK after ${att} attempts!`);let genSolutionStr="";for(const sq of killerSudoku.SQUARES)genSolutionStr+=solvedMap[sq];if(solveRes!==genSolutionStr)console.warn("Solver result MISMATCHES generator base grid!");return puzzle;}else{console.warn(`Verify fail(Solver:${solveRes}).Retry gen...`);}}console.error(`Failed gen Killer after ${maxAttempts} attempts.`);return false;};
 
     // --- Utility Functions ---
     function cross(A, B) { var r=[];for(var i=0;i<A.length;i++)for(var j=0;j<B.length;j++)r.push(A[i]+B[j]);return r; }
@@ -163,7 +184,6 @@
     function _shuffleArray(array) { for(let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } return array; }
     function _getRandomElementFromSet(set) { let items = Array.from(set); return items[Math.floor(Math.random() * items.length)]; }
     function _computeNeighbors(squares, squareMap) { const n={};const g=[];for(let r=0;r<9;r++)g.push(Array(9));squares.forEach((sq,idx)=>{const r=Math.floor(idx/9),c=idx%9;g[r][c]=sq;});for(let r=0;r<9;r++){for(let c=0;c<9;c++){const sq=g[r][c];n[sq]=[];if(r>0)n[sq].push(g[r-1][c]);if(r<8)n[sq].push(g[r+1][c]);if(c>0)n[sq].push(g[r][c-1]);if(c<8)n[sq].push(g[r][c+1]);}}return n; }
-
 
     // --- Library Initialization ---
     function initialize() {
