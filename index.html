@@ -7,16 +7,16 @@
     <!-- Подключение CSS стилей -->
     <link rel="stylesheet" href="style.css">
     <!-- Подключение библиотек -->
-    <!-- Важно: Подключите ОБЕ библиотеки, если killerSudoku.js не полностью автономен -->
-    <script src="sudoku.js"></script> <!-- Классический Судоку -->
-    <script src="killerSudoku.js"></script> <!-- Killer Судоку -->
-    <!-- Подключение Telegram Web App SDK (если используется) -->
+    <!-- ВАЖНО: ПОРЯДОК ИМЕЕТ ЗНАЧЕНИЕ -->
+    <script src="sudoku.js"></script>       <!-- Сначала классическая (если нужна) -->
+    <script src="killerSudoku.js"></script> <!-- ПОТОМ Killer Sudoku -->
+    <!-- Telegram SDK (можно и раньше, но обычно не критично) -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
 
     <!-- == Начальный Экран == -->
-    <div id="initial-screen" class="screen"> <!-- Убран visible по умолчанию -->
+    <div id="initial-screen" class="screen">
         <h1>Судоку</h1>
         <div class="initial-buttons">
             <button id="start-new-game-button" class="large-button">Новая игра</button>
@@ -28,19 +28,15 @@
     <div id="new-game-options" class="screen">
         <h2>Начать новую игру</h2>
         <div class="options-container">
-
-            <!-- === БЛОК: Выбор Режима === -->
+            <!-- Выбор Режима -->
             <div id="game-mode-selection">
                  <h3>Выберите режим:</h3>
-                 <!-- Добавлен класс selected по умолчанию к классическому -->
                  <button class="mode-button selected" data-mode="classic">Классический</button>
                  <button class="mode-button" data-mode="killer">Killer Sudoku</button>
             </div>
-            <!-- ========================= -->
-
+            <!-- Выбор Сложности -->
             <div class="difficulty-selection">
                 <h3>Выберите сложность:</h3>
-                 <!-- Добавлен класс selected по умолчанию к medium -->
                 <button class="difficulty-button" data-difficulty="easy">Лёгкий</button>
                 <button class="difficulty-button selected" data-difficulty="medium">Средний</button>
                 <button class="difficulty-button" data-difficulty="hard">Сложный</button>
@@ -48,6 +44,7 @@
                 <button class="difficulty-button" data-difficulty="insane">Безумный</button>
                 <button class="difficulty-button" data-difficulty="inhuman">Нечеловеческий</button>
             </div>
+            <!-- Выбор Темы -->
             <div class="theme-selection">
                 <h3>Тема:</h3>
                 <label class="theme-switch" for="theme-toggle-checkbox" title="Переключить тему">
@@ -58,10 +55,8 @@
                     </span>
                 </label>
             </div>
-            <!-- Опционально: Кнопка Старт (если не хотите запускать игру сразу по клику на режим/сложность) -->
-            <!-- <button id="start-selected-game" class="large-button" style="margin-top: 15px;">Начать Игру</button> -->
         </div>
-         <button id="back-to-initial-button">Назад</button> <!-- Кнопка Назад -->
+         <button id="back-to-initial-button">Назад</button>
     </div>
 
     <!-- == Игровой Экран == -->
