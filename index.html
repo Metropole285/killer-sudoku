@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Судоку</title>
+    <!-- Подключение CSS стилей -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Подключение библиотек -->
+    <!-- Важно: Подключите ОБЕ библиотеки, если killerSudoku.js не полностью автономен -->
+    <script src="sudoku.js"></script> <!-- Классический Судоку -->
+    <script src="killerSudoku.js"></script> <!-- Killer Судоку -->
+    <!-- Подключение Telegram Web App SDK (если используется) -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+
+    <!-- == Начальный Экран == -->
+    <div id="initial-screen" class="screen"> <!-- Убран visible по умолчанию -->
+        <h1>Судоку</h1>
+        <div class="initial-buttons">
+            <button id="start-new-game-button" class="large-button">Новая игра</button>
+            <button id="continue-game-button" class="large-button" disabled>Продолжить</button>
+        </div>
+    </div>
+
+    <!-- == Экран Настроек Новой Игры == -->
+    <div id="new-game-options" class="screen">
+        <h2>Начать новую игру</h2>
+        <div class="options-container">
+
+            <!-- === БЛОК: Выбор Режима === -->
+            <div id="game-mode-selection">
+                 <h3>Выберите режим:</h3>
+                 <!-- Добавлен класс selected по умолчанию к классическому -->
+                 <button class="mode-button selected" data-mode="classic">Классический</button>
+                 <button class="mode-button" data-mode="killer">Killer Sudoku</button>
+            </div>
+            <!-- ========================= -->
+
+            <div class="difficulty-selection">
+                <h3>Выберите сложность:</h3>
+                 <!-- Добавлен класс selected по умолчанию к medium -->
+                <button class="difficulty-button" data-difficulty="easy">Лёгкий</button>
+                <button class="difficulty-button selected" data-difficulty="medium">Средний</button>
+                <button class="difficulty-button" data-difficulty="hard">Сложный</button>
+                <button class="difficulty-button" data-difficulty="very-hard">Очень сложный</button>
+                <button class="difficulty-button" data-difficulty="insane">Безумный</button>
+                <button class="difficulty-button" data-difficulty="inhuman">Нечеловеческий</button>
+            </div>
+            <div class="theme-selection">
+                <h3>Тема:</h3>
+                <label class="theme-switch" for="theme-toggle-checkbox" title="Переключить тему">
+                    <input type="checkbox" id="theme-toggle-checkbox">
+                    <span class="slider round">
+                        <span class="icon sun">☀️</span>
+                        <span class="icon moon">🌙</span>
+                    </span>
+                </label>
+            </div>
+            <!-- Опционально: Кнопка Старт (если не хотите запускать игру сразу по клику на режим/сложность) -->
+            <!-- <button id="start-selected-game" class="large-button" style="margin-top: 15px;">Начать Игру</button> -->
+        </div>
+         <button id="back-to-initial-button">Назад</button> <!-- Кнопка Назад -->
+    </div>
+
+    <!-- == Игровой Экран == -->
+    <div id="game-container" class="screen">
+        <div id="timer-container">
+            <div id="timer">Время: 00:00</div>
+        </div>
+        <div id="sudoku-board">
+            <!-- Ячейки генерируются JavaScript -->
+        </div>
+        <div id="controls">
+            <button id="undo-button" title="Отменить ход (Ctrl+Z)" disabled>↩️ Отмена</button>
+            <button id="check-button">Проверить</button>
+            <button id="hint-button" title="Использовать подсказку">💡 3/3</button>
+            <button id="exit-game-button" title="Выйти в меню">Меню</button>
+        </div>
+        <div id="status-message"></div>
+        <div id="numpad">
+            <button data-num="1">1</button>
+            <button data-num="2">2</button>
+            <button data-num="3">3</button>
+            <button data-num="4">4</button>
+            <button data-num="5">5</button>
+            <button data-num="6">6</button>
+            <button data-num="7">7</button>
+            <button data-num="8">8</button>
+            <button data-num="9">9</button>
+            <button id="note-toggle-button" title="Режим заметок (ВЫКЛ)">📝</button>
+            <button id="erase-button">Стереть</button>
+        </div>
+    </div>
+
+    <!-- Подключение основного скрипта игры ПОСЛЕ библиотек -->
+    <script src="script.js"></script>
+</body>
+</html>
