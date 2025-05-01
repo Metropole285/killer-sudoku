@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function preloadRewardedAd() { if (isAdReady || isShowingAd) return; console.log("ADS Load..."); isAdReady = false; setTimeout(() => { if (!isShowingAd) { isAdReady = true; console.log("ADS Ready."); } else { console.log("ADS Load aborted (showing)."); } }, 3000 + Math.random() * 2000); }
     function showRewardedAd(callbacks) { if (!isAdReady || isShowingAd) { console.log("ADS Not ready/Showing."); if (callbacks.onError) callbacks.onError("Реклама не готова."); preloadRewardedAd(); return; } console.log("ADS Show..."); isShowingAd = true; isAdReady = false; if(statusMessageElement) { statusMessageElement.textContent = "Показ рекламы..."; statusMessageElement.className = ''; } document.body.style.pointerEvents = 'none'; setTimeout(() => { const success = Math.random() > 0.2; document.body.style.pointerEvents = 'auto'; if(statusMessageElement) statusMessageElement.textContent = ""; isShowingAd = false; console.log("ADS Show End."); if (success) { console.log("ADS Success!"); if (callbacks.onSuccess) callbacks.onSuccess(); } else { console.log("ADS Error/Skip."); if (callbacks.onError) callbacks.onError("Реклама не загружена / пропущена."); } preloadRewardedAd(); }, 5000); }
 
+
     // --- Функции Управления Экранами ---
     function showScreen(screenToShow) { [initialScreen, newGameOptionsScreen, gameContainer].forEach(s => s?.classList.remove('visible')); if(screenToShow) screenToShow.classList.add('visible'); else console.error("showScreen: null screen!"); }
 
@@ -63,20 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function boardStringToObjectArray(boardString){if(!boardString||typeof boardString!=='string')return[];const g=[];for(let r=0;r<9;r++){g[r]=[];for(let c=0;c<9;c++){const i=r*9+c;const h=boardString[i]||'.';const v=(h==='.'||h==='0'||!"123456789".includes(h))?0:parseInt(h);g[r][c]={value:v,notes:new Set()};}}return g;}
     function clearSelection(){if(selectedCell)selectedCell.classList.remove('selected');if(boardElement)boardElement.querySelectorAll('.cell.highlighted').forEach(c=>c.classList.remove('highlighted'));selectedCell=null;selectedRow=-1;selectedCol=-1;}
     function updateNoteToggleButtonState(){if(noteToggleButton){noteToggleButton.classList.toggle('active',isNoteMode);noteToggleButton.title=`Заметки (${isNoteMode?'ВКЛ':'ВЫКЛ'})`;}}
-    function highlightRelatedCells(row, col) {
-         console.log(`Highlighting for [${row}, ${col}], mode: ${currentMode}`);
-         if (!boardElement) return;
-         boardElement.querySelectorAll('.cell.highlighted').forEach(el=>el.classList.remove('highlighted'));
-         if (currentMode === 'killer' && currentSolverData && selectedCell) {
-             const cellId = getCellId(row, col); if (!cellId) return;
-             const cageIndex = currentSolverData.cellToCageMap[cellId];
-             if (cageIndex !== undefined) {
-                 const cage = currentSolverData.cageDataArray[cageIndex];
-                 if (cage?.cells) { cage.cells.forEach(cId => { const coords = getCellCoords(cId); if(coords) boardElement.querySelector(`.cell[data-row='${coords.r}'][data-col='${coords.c}']`)?.classList.add('highlighted'); }); }
-             } else { boardElement.querySelectorAll(`.cell[data-row='${row}'], .cell[data-col='${col}']`).forEach(el=>el.classList.add('highlighted')); }
-         } else { boardElement.querySelectorAll(`.cell[data-row='${row}'], .cell[data-col='${col}']`).forEach(el=>el.classList.add('highlighted')); }
-         const cellValue = userGrid[row]?.[col]?.value; if (cellValue && cellValue !== 0) { for (let r_=0;r_<9;r_++) { for (let c_=0;c_<9;c_++) { if (userGrid[r_]?.[c_]?.value === cellValue) { boardElement.querySelector(`.cell[data-row='${r_}'][data-col='${c_}']`)?.classList.add('highlighted'); }}}}
-     }
+    function highlightRelatedCells(row, col) { console.log(`Highlighting for [${row}, ${col}], mode: ${currentMode}`); if (!boardElement) return; boardElement.querySelectorAll('.cell.highlighted').forEach(el=>el.classList.remove('highlighted')); if (currentMode === 'killer' && currentSolverData && selectedCell) { const cellId = getCellId(row, col); if (!cellId) return; const cageIndex = currentSolverData.cellToCageMap[cellId]; if (cageIndex !== undefined) { const cage = currentSolverData.cageDataArray[cageIndex]; if (cage?.cells) { cage.cells.forEach(cId => { const coords = getCellCoords(cId); if(coords) boardElement.querySelector(`.cell[data-row='${coords.r}'][data-col='${coords.c}']`)?.classList.add('highlighted'); }); } } else { boardElement.querySelectorAll(`.cell[data-row='${row}'], .cell[data-col='${col}']`).forEach(el=>el.classList.add('highlighted')); } } else { boardElement.querySelectorAll(`.cell[data-row='${row}'], .cell[data-col='${col}']`).forEach(el=>el.classList.add('highlighted')); } const cellValue = userGrid[row]?.[col]?.value; if (cellValue && cellValue !== 0) { console.log(`Highlighting cells with value ${cellValue}`); for (let r_=0;r_<9;r_++) { for (let c_=0;c_<9;c_++) { if (userGrid[r_]?.[c_]?.value === cellValue) { boardElement.querySelector(`.cell[data-row='${r_}'][data-col='${c_}']`)?.classList.add('highlighted'); }}}} }
     function updateHintButtonState(){if(!hintButton)return;const s=isGameSolved();let canHint=false,title="";if(currentMode==='classic'){canHint=currentSolution&&!s;if(!currentSolution)title="Н/Д";else if(s)title="Решено";else if(hintsRemaining>0)title="Подсказка";else title=`+${MAX_HINTS}(Ad)`;}else{canHint=false;title="Н/Д(Killer)";}hintButton.disabled=!canHint;hintButton.title=title;hintButton.textContent=`💡 ${hintsRemaining}/${MAX_HINTS}`;if(currentMode==='killer')hintButton.disabled=true;else if(hintsRemaining<=0&&canHint)hintButton.disabled=false;}
 
     // --- Инициализация ИГРЫ ---
@@ -131,201 +119,117 @@ document.addEventListener('DOMContentLoaded', () => {
     function resumeTimerIfNeeded(){const s=isGameSolved(),v=gameContainer?.classList.contains('visible');if(v&&!s)startTimer();else stopTimer();}
 
     // --- Отрисовка ---
-    /**
-     * Renders the entire Sudoku board based on the current state.
-     */
     function renderBoard() {
         console.log(`Render board start: mode=${currentMode}`);
         if (!boardElement) { console.error("Board element missing!"); return; }
-        boardElement.innerHTML = ''; // Clear previous board content
+        boardElement.innerHTML = '';
+        if (!userGrid || userGrid.length !== 9) { showError("Invalid grid data for rendering."); return; }
 
-        if (!userGrid || userGrid.length !== 9) {
-            showError("Invalid grid data for rendering.");
-            return;
-        }
+        const cellElementsMap = {};
+        for (let r = 0; r < 9; r++) { if (!userGrid[r] || userGrid[r].length !== 9) continue; for (let c = 0; c < 9; c++) { const cellId = getCellId(r, c); if (!cellId) continue; const cellElement = createCellElement(r, c); boardElement.appendChild(cellElement); cellElementsMap[cellId] = cellElement; } }
 
-        // 1. Create and append all cell elements first
-        const cellElementsMap = {}; // Store DOM elements by cell ID ("A1", "B2", etc.)
-        for (let r = 0; r < 9; r++) {
-            if (!userGrid[r] || userGrid[r].length !== 9) {
-                console.error(`Invalid row data at index ${r}`); continue;
-            }
-            for (let c = 0; c < 9; c++) {
-                const cellId = getCellId(r, c);
-                if (!cellId) continue;
-                const cellElement = createCellElement(r, c); // Create basic cell structure
-                boardElement.appendChild(cellElement);
-                cellElementsMap[cellId] = cellElement; // Store for later access
-            }
-        }
-
-        // 2. If Killer mode, add cage visualization AFTER all cells exist
         if (currentMode === "killer" && currentSolverData?.cageDataArray) {
              console.log("Rendering Killer Cages...");
-            currentSolverData.cageDataArray.forEach((cage, cageIndex) => {
-                if (!cage || !Array.isArray(cage.cells) || cage.cells.length === 0) {
-                    console.warn(`Skipping invalid cage data at index ${cageIndex}`);
-                    return;
-                }
-                const cageCellSet = new Set(cage.cells); // For quick lookup
+             currentSolverData.cageDataArray.forEach((cage, cageIndex) => {
+                 if (!cage || !Array.isArray(cage.cells) || cage.cells.length === 0) { console.warn(`Skipping invalid cage data at index ${cageIndex}`); return; }
+                 const cageCellSet = new Set(cage.cells);
+                 let anchorCellId = null; let minRow = 9, minCol = 9;
+                 cage.cells.forEach(cellId => { const coords = getCellCoords(cellId); if (coords) { if (coords.r < minRow) { minRow = coords.r; minCol = coords.c; anchorCellId = cellId; } else if (coords.r === minRow && coords.c < minCol) { minCol = coords.c; anchorCellId = cellId; } } });
 
-                // Find anchor cell (top-most, then left-most)
-                let anchorCellId = null;
-                let minRow = 9, minCol = 9;
-                cage.cells.forEach(cellId => {
-                    const coords = getCellCoords(cellId);
-                    if (coords) {
-                        if (coords.r < minRow) {
-                            minRow = coords.r; minCol = coords.c; anchorCellId = cellId;
-                        } else if (coords.r === minRow && coords.c < minCol) {
-                            minCol = coords.c; anchorCellId = cellId;
-                        }
-                    }
-                });
-
-                // Add classes and sum to cage cells
-                cage.cells.forEach(cellId => {
-                    const cellElement = cellElementsMap[cellId];
-                    if (!cellElement) { console.warn(`Cell element ${cellId} not found for cage ${cageIndex}`); return; }
-
-                    cellElement.classList.add('cage-cell'); // Mark as part of a cage
-
-                    // Add sum to the anchor cell
-                    if (cellId === anchorCellId) {
-                         cellElement.classList.add('cage-sum-anchor');
-                         // Ensure sum span doesn't already exist (e.g., from undo/redo)
-                         if (!cellElement.querySelector('.cage-sum')) {
-                             const sumSpan = document.createElement('span');
-                             sumSpan.className = 'cage-sum';
-                             sumSpan.textContent = cage.sum;
-                             cellElement.appendChild(sumSpan);
-                         }
-                    }
-
-                    // --- ИСПРАВЛЕННАЯ ЛОГИКА ГРАНИЦ ---
-                    const coords = getCellCoords(cellId);
-                    if (!coords) return; // Should not happen based on earlier checks
-                    const { r, c } = coords;
-                    const neighbors = getNeighbors(r, c);
-
-                    // Add TOP border if no neighbor above OR neighbor above is NOT in the same cage
-                    if (r === 0 || !neighbors.top || !cageCellSet.has(neighbors.top)) {
-                        cellElement.classList.add('cage-inner-border-top');
-                    }
-                    // Add LEFT border if no neighbor left OR neighbor left is NOT in the same cage
-                    if (c === 0 || !neighbors.left || !cageCellSet.has(neighbors.left)) {
-                        cellElement.classList.add('cage-inner-border-left');
-                    }
-                    // Add BOTTOM border if no neighbor below OR neighbor below is NOT in the same cage
-                    if (r === 8 || !neighbors.bottom || !cageCellSet.has(neighbors.bottom)) {
-                        cellElement.classList.add('cage-inner-border-bottom');
-                    }
-                    // Add RIGHT border if no neighbor right OR neighbor right is NOT in the same cage
-                    if (c === 8 || !neighbors.right || !cageCellSet.has(neighbors.right)) {
-                        cellElement.classList.add('cage-inner-border-right');
-                    }
-                    // --- КОНЕЦ ИСПРАВЛЕННОЙ ЛОГИКИ ---
-                });
-            });
-            console.log("Cage rendering finished.");
-         }
-         console.log("Board rendering complete.");
+                 cage.cells.forEach(cellId => {
+                     const cellElement = cellElementsMap[cellId]; if (!cellElement) return;
+                     cellElement.classList.add('cage-cell');
+                     if (cellId === anchorCellId) {
+                          cellElement.classList.add('cage-sum-anchor');
+                          if (!cellElement.querySelector('.cage-sum')) { const sumSpan = document.createElement('span'); sumSpan.className = 'cage-sum'; sumSpan.textContent = cage.sum; cellElement.appendChild(sumSpan); }
+                     }
+                     const coords = getCellCoords(cellId); if (!coords) return;
+                     const { r, c } = coords; const neighbors = getNeighbors(r, c);
+                     if (r === 0 || !neighbors.top || !cageCellSet.has(neighbors.top)) { cellElement.classList.add('cage-inner-border-top'); }
+                     if (c === 0 || !neighbors.left || !cageCellSet.has(neighbors.left)) { cellElement.classList.add('cage-inner-border-left'); }
+                     if (r === 8 || !neighbors.bottom || !cageCellSet.has(neighbors.bottom)) { cellElement.classList.add('cage-inner-border-bottom'); }
+                     if (c === 8 || !neighbors.right || !cageCellSet.has(neighbors.right)) { cellElement.classList.add('cage-inner-border-right'); }
+                 });
+             });
+             console.log("Cage rendering finished.");
+          }
+          console.log("Board rendering complete.");
     }
-
-    /**
-     * Creates a single cell element with its value/notes containers.
-     */
     function createCellElement(r, c) {
-        const cell = document.createElement('div');
-        cell.classList.add('cell');
-        cell.dataset.row = r;
-        cell.dataset.col = c;
-        const cellData = userGrid[r]?.[c];
-        if (!cellData) { cell.textContent = '?'; console.warn(`Missing grid data for ${r},${c}`); return cell; }
-
-        const valueContainer = document.createElement('div');
-        valueContainer.classList.add('cell-value-container');
-        const notesContainer = document.createElement('div');
-        notesContainer.classList.add('cell-notes-container');
-
-        if (cellData.value !== 0) {
-            valueContainer.textContent = cellData.value;
-            valueContainer.style.display = 'flex';
-            notesContainer.style.display = 'none';
-            if (currentMode === 'classic' && currentPuzzle) {
-                const idx = r * 9 + c;
-                if (currentPuzzle[idx] && currentPuzzle[idx] !== '.') { cell.classList.add('given'); }
-            }
-        } else if (cellData.notes instanceof Set && cellData.notes.size > 0) {
-            valueContainer.style.display = 'none';
-            notesContainer.style.display = 'grid';
-            notesContainer.innerHTML = ''; // Clear previous
-            for (let n = 1; n <= 9; n++) { const nd = document.createElement('div'); nd.classList.add('note-digit'); nd.textContent = cellData.notes.has(n) ? n : ''; nc.appendChild(nd); }
-        } else {
-            valueContainer.textContent = '';
-            valueContainer.style.display = 'flex';
-            notesContainer.style.display = 'none';
-        }
-        cell.appendChild(valueContainer);
-        cell.appendChild(notesContainer);
-
-        // Add thick borders for 3x3 blocks
-        if ((c + 1) % 3 === 0 && c < 8) cell.classList.add('thick-border-right');
-        if ((r + 1) % 3 === 0 && r < 8) cell.classList.add('thick-border-bottom');
-
+        const cell=document.createElement('div');cell.classList.add('cell');
+        cell.dataset.row=r;cell.dataset.col=c;
+        const cd=userGrid[r]?.[c]; if(!cd){cell.textContent='?';console.warn(`Missing grid data for ${r},${c}`);return cell;}
+        const vc=document.createElement('div');vc.classList.add('cell-value-container');
+        const nc=document.createElement('div');nc.classList.add('cell-notes-container');
+        if(cd.value!==0){ vc.textContent=cd.value;vc.style.display='flex';nc.style.display='none'; if(currentMode==='classic'&¤tPuzzle){ const i=r*9+c; if(currentPuzzle[i]&¤tPuzzle[i]!=='.')cell.classList.add('given'); }
+        } else if(cd.notes instanceof Set&&cd.notes.size>0){ vc.style.display='none';nc.style.display='grid';nc.innerHTML=''; for(let n=1;n<=9;n++){const nd=document.createElement('div');nd.classList.add('note-digit');nd.textContent=cd.notes.has(n)?n:'';nc.appendChild(nd);}
+        } else { vc.textContent='';vc.style.display='flex';nc.style.display='none'; }
+        cell.appendChild(vc);cell.appendChild(nc);
+        if((c+1)%3===0&&c<8)cell.classList.add('thick-border-right');
+        if((r+1)%3===0&&r<8)cell.classList.add('thick-border-bottom');
         return cell;
     }
-
+    // --- ИЗМЕНЕНИЕ: Упрощенная renderCell ---
     /**
      * Renders only a single cell (more efficient after user input).
+     * For Killer mode, might fallback to full render if notes change.
      */
      function renderCell(r, c) {
          if (!boardElement) return;
+
+          // --- ИЗМЕНЕНИЕ: Форсируем полную перерисовку при смене заметок в Killer ---
+          if (currentMode === 'killer' && userGrid[r]?.[c]?.value === 0) {
+              console.log("Note changed in Killer mode, forcing full board render.");
+              renderBoard();
+              // Восстанавливаем выделение, если оно было
+              if (selectedRow === r && selectedCol === c) {
+                  selectedCell = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
+                  if (selectedCell && !selectedCell.classList.contains('given')) { // Don't select 'given' visually
+                      selectedCell.classList.add('selected');
+                  }
+                  highlightRelatedCells(r, c); // Восстанавливаем подсветку
+              }
+              return;
+          }
+          // --- КОНЕЦ ИЗМЕНЕНИЯ ---
+
+         // Для классического режима или ввода/удаления ЦИФРЫ в Killer, обновляем одну ячейку
          const oldCell = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
          if (oldCell) {
              try {
-                 const newCell = createCellElement(r, c); // Create the basic cell content
-                 // Preserve state classes
+                 const newCell = createCellElement(r, c);
+                 // Preserve state classes that are independent of content
                  if (oldCell.classList.contains('selected')) newCell.classList.add('selected');
                  if (oldCell.classList.contains('incorrect')) newCell.classList.add('incorrect');
                  if (oldCell.classList.contains('highlighted')) newCell.classList.add('highlighted');
-                 // Preserve Killer-specific classes (borders/anchor need full rerender or complex logic)
+                 // Preserve Killer classes - essential for borders/sum
                  if (oldCell.classList.contains('cage-cell')) newCell.classList.add('cage-cell');
                  if (oldCell.classList.contains('cage-sum-anchor')) newCell.classList.add('cage-sum-anchor');
-                 // Copy border classes (ideally these shouldn't change, but for safety)
                  oldCell.classList.forEach(cls => { if (cls.startsWith('cage-inner-border-')) newCell.classList.add(cls); });
-                 // Copy sum if present
+                 // Copy sum span if present
                  const oldSum = oldCell.querySelector('.cage-sum');
                  if (oldSum) newCell.appendChild(oldSum.cloneNode(true));
 
-
-                 // Update selection reference if this is the selected cell
                  if (selectedRow === r && selectedCol === c) selectedCell = newCell;
-                 // Replace the old cell with the new one
                  oldCell.replaceWith(newCell);
-
-                 // !! CAVEAT: This simple renderCell won't redraw cage borders
-                 // if putting/removing a number SHOULD change the highlighting/error
-                 // state of a border itself. A full renderBoard is safer for complex UI.
              } catch (error) {
-                  console.error(`Error rendering cell [${r}, ${c}]:`, error);
-                  // Fallback to full render?
-                  renderBoard();
+                  console.error(`Error render cell [${r}, ${c}]:`, error);
+                  renderBoard(); // Fallback to full render
              }
          } else {
-              console.warn(`renderCell: Cell [${r}, ${c}] not found? Forcing full render.`);
-              renderBoard(); // Force full render if cell not found
+              console.warn(`renderCell: Cell [${r},${c}] not found? Render full.`);
+              renderBoard();
          }
      }
 
 
     // --- Логика подсказки ---
-    function provideHintInternal(){if(currentMode!=='classic')return showError("Подсказки только в классике");if(!selectedCell)return showError("Выберите ячейку"); const r=selectedRow,c=selectedCol;if(r<0||c<0||!userGrid[r]?.[c])return showError("Ошибка данных ячейки"); if(userGrid[r][c].value!==0)return showError("Ячейка заполнена");if(selectedCell.classList.contains('given')) return showError("Начальная цифра");pushHistoryState();let hintUsed=false;try{const sv=getSolutionValue(r,c);if(sv>0){console.log(`Hint [${r},${c}]: ${sv}`);userGrid[r][c].value=sv;if(userGrid[r][c].notes)userGrid[r][c].notes.clear();renderCell(r,c);const hEl=boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);if(hEl){hEl.classList.remove('selected');const hc=getComputedStyle(document.documentElement).getPropertyValue('--highlight-hint-flash').trim()||'#fffacd';hEl.style.transition='background-color 0.1s ease-out';hEl.style.backgroundColor=hc;setTimeout(()=>{if(hEl){hEl.style.backgroundColor='';hEl.style.transition='';}clearSelection();},500);}else{clearSelection();}hintsRemaining--;hintUsed=true;updateHintButtonState();clearErrors();saveGameState();if(isGameSolved())checkGame();}else throw new Error(`Err getting solution [${r},${c}]`);}catch(e){console.error("Hint Err:",e.message);showError(e.message);if(!hintUsed&&historyStack.length>0){historyStack.pop();updateUndoButtonState();}}}
+    function provideHintInternal(){if(currentMode!=='classic')return showError("Подсказки только в классике");if(!selectedCell)return showError("Выберите ячейку"); const r=selectedRow,c=selectedCol;if(r<0||c<0||!userGrid[r]?.[c])return showError("Ошибка данных ячейки"); if(userGrid[r][c].value!==0)return showError("Ячейка заполнена");if(selectedCell.classList.contains('given')) return showError("Начальная цифра");pushHistoryState();let hintUsed=false;try{const sv=getSolutionValue(r,c);if(sv===null)throw new Error("Решение недоступно");if(sv>0){console.log(`Hint [${r},${c}]: ${sv}`);userGrid[r][c].value=sv;if(userGrid[r][c].notes)userGrid[r][c].notes.clear();renderCell(r,c);const hEl=boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);if(hEl){hEl.classList.remove('selected');const hc=getComputedStyle(document.documentElement).getPropertyValue('--highlight-hint-flash').trim()||'#fffacd';hEl.style.transition='background-color 0.1s ease-out';hEl.style.backgroundColor=hc;setTimeout(()=>{if(hEl){hEl.style.backgroundColor='';hEl.style.transition='';}clearSelection();},500);}else{clearSelection();}hintsRemaining--;hintUsed=true;updateHintButtonState();clearErrors();saveGameState();if(isGameSolved())checkGame();}else throw new Error(`Err getting solution [${r},${c}]`);}catch(e){console.error("Hint Err:",e.message);showError(e.message);if(!hintUsed&&historyStack.length>0){historyStack.pop();updateUndoButtonState();}}}
     function offerRewardedAdForHints(){if(currentMode!=='classic'||isShowingAd)return;console.log("Offering ad...");if(confirm(`Подсказки зак-сь! Реклама за ${MAX_HINTS} подсказку?`)){if(!isAdReady){showError("Реклама грузится...");preloadRewardedAd();return;}showRewardedAd({onSuccess:()=>{hintsRemaining+=MAX_HINTS;updateHintButtonState();saveGameState();showSuccess(`+${MAX_HINTS} подсказка!`);},onError:(msg)=>{showError(`Ошибка: ${msg||'Реклама?'} Подсказка не добавлена.`);}});}}
 
     // --- Логика Проверки ---
     function checkGame(){console.log(`Check: ${currentMode}`);clearErrors();if(!userGrid||userGrid.length!==9)return;let isValid=false;let isComplete=!userGrid.flat().some(c=>!c||c.value===0);if(currentMode==="classic"){if(!currentSolution){showError("Нет решения!");return;}isValid=validateClassicSudoku();}else if(currentMode==="killer"){if(!currentSolverData){showError("Нет данных Killer!");return;}isValid=validateKillerSudoku();}if(isValid&&isComplete){showSuccess("Поздравляем! Решено верно!");stopTimer();clearSelection();updateHintButtonState();/* submitGameResult(); */}else if(!isValid){showError("Найдены ошибки.");}else{if(statusMessageElement){statusMessageElement.textContent="Пока верно, но не закончено.";statusMessageElement.className='';}}}
-    function validateClassicSudoku(){let ok=true;for(let r=0;r<9;r++){for(let c=0;c<9;c++){const cd=userGrid[r]?.[c];const el=boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);if(!cd||!el||cd.value===0||el.classList.contains('given'))continue;const sv=getSolutionValue(r,c);if(sv===null){console.error(`Classic validation Error: No solution value for ${r},${c}`);ok=false;break;}if(cd.value!==sv){el.classList.add('incorrect');ok=false;}}if(!ok)break;}return ok;}
+    function validateClassicSudoku(){let ok=true;if(!currentSolution){console.error("Classic valid Err: no solution!");return false;}for(let r=0;r<9;r++){for(let c=0;c<9;c++){const cd=userGrid[r]?.[c];const el=boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);if(!cd||!el||cd.value===0||el.classList.contains('given'))continue;const sv=getSolutionValue(r,c);if(sv===null){console.error(`Classic valid Err: No sol value for ${r},${c}`);ok=false;break;}if(cd.value!==sv){el.classList.add('incorrect');ok=false;}}if(!ok)break;}return ok;}
     function validateKillerSudoku(){let ok=true;const grid=userGrid.map(r=>r.map(c=>c.value));for(let i=0;i<9;i++){if(!isUnitValid(getRow(grid,i))||!isUnitValid(getCol(grid,i))||!isUnitValid(getBlock(grid,i))){console.warn("Classic rule violation");ok=false;break;}}if(!ok){showError("Нарушены правила Судоку.");return false;}if(!currentSolverData?.cageDataArray)return false;for(const cage of currentSolverData.cageDataArray){const vals=[];let sum=0;let complete=true;let els=[];for(const cid of cage.cells){const crds=getCellCoords(cid);if(!crds)continue;const v=grid[crds.r][crds.c];const el=boardElement?.querySelector(`.cell[data-row='${crds.r}'][data-col='${crds.c}']`);if(el)els.push(el);if(v===0){complete=false;}else{vals.push(v);sum+=v;}}if(new Set(vals).size!==vals.length){console.warn(`Cage ${cage.id} unique violation:`,vals);ok=false;els.forEach(e=>e.classList.add('incorrect'));}if(complete&&sum!==cage.sum){console.warn(`Cage ${cage.id} sum violation: got ${sum}, expected ${cage.sum}`);ok=false;els.forEach(e=>e.classList.add('incorrect'));}}return ok;}
     function isUnitValid(unit){const nums=unit.filter(n=>n!==0);return new Set(nums).size===nums.length;}
     function getRow(g,r){return g[r];} function getCol(g,c){return g.map(rw=>rw[c]);} function getBlock(g,b){const sr=Math.floor(b/3)*3,sc=(b%3)*3,bl=[];for(let r=0;r<3;r++)for(let c=0;c<3;c++)bl.push(g[sr+r][sc+c]);return bl;}
@@ -340,13 +244,122 @@ document.addEventListener('DOMContentLoaded', () => {
         difficultyButtonsContainer?.addEventListener('click', (event) => { const target = event.target.closest('button.difficulty-button'); if (target && !target.classList.contains('selected')) { difficultyButtonsContainer.querySelectorAll('.selected').forEach(btn => btn.classList.remove('selected')); target.classList.add('selected'); const selectedDifficulty = target.dataset.difficulty; const selectedMode = gameModeSelectionContainer?.querySelector('button.selected')?.dataset.mode || 'classic'; console.log(`DIFFICULTY selected: ${selectedDifficulty}. Starting with mode: ${selectedMode}`); initGame(selectedMode, selectedDifficulty); } });
         themeToggleCheckbox?.addEventListener('change', handleThemeToggle);
         backToInitialButton?.addEventListener('click', () => { console.log("Back btn"); showScreen(initialScreen); checkContinueButton(); });
-        boardElement?.addEventListener('click', (e)=>{ try { /*console.log("Board click event");*/ const target = e.target.closest('.cell'); if (!target || isShowingAd || isGameSolved()) return; const r = parseInt(target.dataset.row); const c = parseInt(target.dataset.col); /*console.log(`Clicked cell: [${r}, ${c}]`);*/ if (isNaN(r) || isNaN(c)) return; if (target === selectedCell) { clearSelection(); } else { clearSelection(); selectedCell = target; selectedRow = r; selectedCol = c; if (!(currentMode === 'classic' && target.classList.contains('given'))) { selectedCell.classList.add('selected'); } /*console.log("Highlighting...");*/ highlightRelatedCells(r, c); /*console.log("Highlighting done.");*/ } clearErrors(); /*console.log("Board click handler finished.");*/ } catch (error) { console.error("!!!! BOARD CLICK HANDLER ERROR !!!!"); console.error(error); showError(`Ошибка клика: ${error.message}`); } });
-        numpad?.addEventListener('click', (e)=>{const b=e.target.closest('button');if(!b||isShowingAd||isGameSolved())return;if(b.id==='note-toggle-button'){isNoteMode=!isNoteMode;updateNoteToggleButtonState();return;}if(!selectedCell||(currentMode==='classic'&&selectedCell.classList.contains('given')))return;clearErrors();if(!userGrid[selectedRow]?.[selectedCol])return;const cd=userGrid[selectedRow][selectedCol];let r=false,ch=false,p=false;if(b.id==='erase-button'){p=(cd.value!==0)||(cd.notes?.size>0);}else if(b.dataset.num){const n=parseInt(b.dataset.num);if(isNoteMode)p=(cd.value===0);else p=(cd.value!==n);}if(p)pushHistoryState();if(b.id==='erase-button'){if(cd.value!==0){cd.value=0;r=true;ch=true;}else if(cd.notes?.size>0){cd.notes.clear();r=true;ch=true;}}else if(b.dataset.num){const n=parseInt(b.dataset.num);if(isNoteMode){if(cd.value===0){if(!(cd.notes instanceof Set))cd.notes=new Set();if(cd.notes.has(n))cd.notes.delete(n);else cd.notes.add(n);r=true;ch=true;}}else{if(cd.value!==n){cd.value=n;if(cd.notes)cd.notes.clear();r=true;ch=true;}else{cd.value=0;r=true;ch=true;}}}if(r)renderCell(selectedRow,selectedCol);if(ch)saveGameState();});
+        boardElement?.addEventListener('click', (e)=>{ try { const target = e.target.closest('.cell'); if (!target || isShowingAd || isGameSolved()) return; const r = parseInt(target.dataset.row); const c = parseInt(target.dataset.col); if (isNaN(r) || isNaN(c)) return; if (target === selectedCell) { clearSelection(); } else { clearSelection(); selectedCell = target; selectedRow = r; selectedCol = c; if (!(currentMode === 'classic' && target.classList.contains('given'))) { selectedCell.classList.add('selected'); } highlightRelatedCells(r, c); } clearErrors(); } catch (error) { console.error("!!!! BOARD CLICK HANDLER ERROR !!!!", error); showError(`Ошибка клика: ${error.message}`); } });
+        numpad?.addEventListener('click', (e)=>{
+            const button = e.target.closest('button');
+            if (!button || isShowingAd || isGameSolved() || !selectedCell) return; // Добавил !selectedCell
+            // Не позволяем менять given в классике
+            if (currentMode === 'classic' && selectedCell.classList.contains('given')) return;
+
+            clearErrors();
+            if (!userGrid[selectedRow]?.[selectedCol]) return; // Проверка существования ячейки
+
+            const cellData = userGrid[selectedRow][selectedCol];
+            let needsRender = false; // Флаг, нужна ли перерисовка (renderCell или renderBoard)
+            let stateChanged = false; // Флаг, изменилось ли состояние для сохранения
+            let potentialChange = false; // Флаг, возможно ли изменение для undo
+
+             // --- ИЗМЕНЕНИЕ: Определяем, нужен ли полный ререндер ---
+             let fullRenderNeeded = false;
+
+            // Определяем потенциальное изменение для undo
+            if (button.id === 'erase-button') { potentialChange = (cellData.value !== 0) || (cellData.notes?.size > 0); }
+            else if (button.dataset.num) { const num = parseInt(button.dataset.num); if (isNoteMode) { potentialChange = (cd.value === 0); } else { potentialChange = (cd.value !== num); } }
+
+            // Сохраняем состояние ДО изменения, если оно возможно
+            if (potentialChange) { pushHistoryState(); }
+
+            // Обработка кнопок
+            if (button.id === 'erase-button') {
+                if (cellData.value !== 0) { cellData.value = 0; needsRender = true; stateChanged = true; }
+                else if (cellData.notes?.size > 0) { cellData.notes.clear(); needsRender = true; stateChanged = true; fullRenderNeeded = (currentMode === 'killer'); } // Полный ререндер при удалении заметок в Killer
+            } else if (button.dataset.num) {
+                const num = parseInt(button.dataset.num);
+                if (isNoteMode) {
+                    if (cellData.value === 0) {
+                        if (!(cellData.notes instanceof Set)) cellData.notes = new Set();
+                        if (cellData.notes.has(num)) cellData.notes.delete(num); else cellData.notes.add(num);
+                        needsRender = true; stateChanged = true; fullRenderNeeded = (currentMode === 'killer'); // Полный ререндер при изменении заметок в Killer
+                    } else { console.log("Cannot add note to cell with value."); }
+                } else { // Ввод значения
+                    if (cellData.value !== num) { cellData.value = num; if (cellData.notes) cellData.notes.clear(); needsRender = true; stateChanged = true; }
+                    else { cellData.value = 0; needsRender = true; stateChanged = true; } // Повторный клик стирает
+                }
+            }
+
+            // Перерисовка
+            if (needsRender) {
+                if (fullRenderNeeded) {
+                    console.log("Note changed, forcing full renderBoard.");
+                    renderBoard();
+                     // Восстанавливаем выделение после полной перерисовки
+                     if (selectedRow !== -1 && selectedCol !== -1) {
+                         selectedCell = boardElement?.querySelector(`.cell[data-row='${selectedRow}'][data-col='${selectedCol}']`);
+                         if (selectedCell && !(currentMode === 'classic' && selectedCell.classList.contains('given'))) {
+                             selectedCell.classList.add('selected');
+                             highlightRelatedCells(selectedRow, selectedCol); // И подсветку
+                         } else {
+                             // Сброс, если ячейка не найдена или это given
+                             selectedCell = null; selectedRow = -1; selectedCol = -1;
+                         }
+                     }
+                } else {
+                    renderCell(selectedRow, selectedCol);
+                }
+            }
+            // Сохранение
+            if (stateChanged) { saveGameState(); }
+        });
         checkButton?.addEventListener('click', checkGame);
         undoButton?.addEventListener('click', handleUndo);
         hintButton?.addEventListener('click', ()=>{if(isShowingAd||isGameSolved())return;if(currentMode==='classic'&&hintsRemaining>0)provideHintInternal();else if(currentMode==='classic')offerRewardedAdForHints();else showError("Подсказки недоступны");});
         exitGameButton?.addEventListener('click', ()=>{console.log("Exit btn");stopTimer();showScreen(initialScreen);checkContinueButton();});
-        document.addEventListener('keydown', (e)=>{if(document.activeElement.tagName==='INPUT'||isShowingAd||!gameContainer?.classList.contains('visible')||isGameSolved())return;if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();handleUndo();return;}if(e.key.toLowerCase()==='n'||e.key.toLowerCase()==='т'){isNoteMode=!isNoteMode;updateNoteToggleButtonState();e.preventDefault();return;}if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){if(!selectedCell){const sc=boardElement?.querySelector(`.cell[data-row='0'][data-col='0']`);if(sc)sc.click();else return;}let nr=selectedRow,nc=selectedCol;const mv=(cur,d,m)=>Math.min(m,Math.max(0,cur+d));if(e.key==='ArrowUp')nr=mv(selectedRow,-1,8);if(e.key==='ArrowDown')nr=mv(selectedRow,1,8);if(e.key==='ArrowLeft')nc=mv(selectedCol,-1,8);if(e.key==='ArrowRight')nc=mv(selectedCol,1,8);if(nr!==selectedRow||nc!==selectedCol){const nextEl=boardElement?.querySelector(`.cell[data-row='${nr}'][data-col='${nc}']`);if(nextEl)nextEl.click();}e.preventDefault();return;}if(!selectedCell||(currentMode==='classic'&&selectedCell.classList.contains('given')))return;if(!userGrid[selectedRow]?.[selectedCol])return;const cd=userGrid[selectedRow][selectedCol];let r=false,ch=false,p=false;if(e.key>='1'&&e.key<='9'){const n=parseInt(e.key);if(isNoteMode)p=(cd.value===0);else p=(cd.value!==n);}else if(e.key==='Backspace'||e.key==='Delete'){p=(cd.value!==0)||(cd.notes?.size>0);}if(p)pushHistoryState();if(e.key>='1'&&e.key<='9'){clearErrors();const n=parseInt(e.key);if(isNoteMode){if(cd.value===0){if(!(cd.notes instanceof Set))cd.notes=new Set();if(cd.notes.has(n))cd.notes.delete(n);else cd.notes.add(n);r=true;ch=true;}}else{if(cd.value!==n){cd.value=n;if(cd.notes)cd.notes.clear();r=true;ch=true;}else{cd.value=0;r=true;ch=true;}}e.preventDefault();}else if(e.key==='Backspace'||e.key==='Delete'){clearErrors();if(cd.value!==0){cd.value=0;r=true;ch=true;}else if(cd.notes?.size>0){cd.notes.clear();r=true;ch=true;}e.preventDefault();}if(r)renderCell(selectedRow,selectedCol);if(ch)saveGameState();});
+        document.addEventListener('keydown', (e)=>{
+            if(document.activeElement.tagName==='INPUT'||isShowingAd||!gameContainer?.classList.contains('visible')||isGameSolved())return;
+            if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();handleUndo();return;}
+            if(e.key.toLowerCase()==='n'||e.key.toLowerCase()==='т'){isNoteMode=!isNoteMode;updateNoteToggleButtonState();e.preventDefault();return;}
+            if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){ if(!selectedCell){const sc=boardElement?.querySelector(`.cell[data-row='0'][data-col='0']`);if(sc)sc.click();else return;}let nr=selectedRow,nc=selectedCol;const mv=(cur,d,m)=>Math.min(m,Math.max(0,cur+d));if(e.key==='ArrowUp')nr=mv(selectedRow,-1,8);if(e.key==='ArrowDown')nr=mv(selectedRow,1,8);if(e.key==='ArrowLeft')nc=mv(selectedCol,-1,8);if(e.key==='ArrowRight')nc=mv(selectedCol,1,8);if(nr!==selectedRow||nc!==selectedCol){const nextEl=boardElement?.querySelector(`.cell[data-row='${nr}'][data-col='${nc}']`);if(nextEl)nextEl.click();}e.preventDefault();return; }
+            if(!selectedCell||(currentMode==='classic'&&selectedCell.classList.contains('given')))return;
+            if(!userGrid[selectedRow]?.[selectedCol])return;
+
+            const cd=userGrid[selectedRow][selectedCol];
+            let render=false,changed=false,potential=false, fullRenderNeeded = false; // Флаг полного ререндера
+
+            if(e.key>='1'&&e.key<='9'){ const n=parseInt(e.key); if(isNoteMode){potential=(cd.value===0);}else{potential=(cd.value!==n);} }
+            else if(e.key==='Backspace'||e.key==='Delete'){ potential=(cd.value!==0)||(cd.notes?.size>0); }
+
+            if(potential)pushHistoryState();
+
+            if(e.key>='1'&&e.key<='9'){
+                clearErrors();const n=parseInt(e.key);
+                if(isNoteMode){ if(cd.value===0){if(!(cd.notes instanceof Set))cd.notes=new Set();if(cd.notes.has(n))cd.notes.delete(n);else cd.notes.add(n);render=true;changed=true; fullRenderNeeded=(currentMode==='killer');} } // Полный ререндер для Killer
+                else{ if(cd.value!==n){cd.value=n;if(cd.notes)cd.notes.clear();render=true;changed=true;}else{cd.value=0;render=true;changed=true;} }
+                e.preventDefault();
+            } else if(e.key==='Backspace'||e.key==='Delete'){
+                clearErrors();
+                if(cd.value!==0){cd.value=0;render=true;changed=true;}
+                else if(cd.notes?.size>0){cd.notes.clear();render=true;changed=true; fullRenderNeeded=(currentMode==='killer');} // Полный ререндер для Killer
+                e.preventDefault();
+            }
+
+            if(render){
+                if(fullRenderNeeded) {
+                     console.log("Note changed by key, forcing full renderBoard.");
+                     renderBoard();
+                     // Восстанавливаем выделение
+                     if (selectedRow !== -1 && selectedCol !== -1) {
+                         selectedCell = boardElement?.querySelector(`.cell[data-row='${selectedRow}'][data-col='${selectedCol}']`);
+                         if (selectedCell && !(currentMode === 'classic' && selectedCell.classList.contains('given'))) {
+                             selectedCell.classList.add('selected');
+                             highlightRelatedCells(selectedRow, selectedCol);
+                         } else { selectedCell = null; selectedRow = -1; selectedCol = -1; }
+                     }
+                } else {
+                    renderCell(selectedRow,selectedCol);
+                }
+            }
+            if(changed)saveGameState();
+        });
 
         console.log("Event listeners added.");
     }
