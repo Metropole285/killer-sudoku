@@ -267,7 +267,7 @@ input:checked + .slider .moon { opacity: 1; }
 .cell.cage-sum-anchor { position: relative; } /* Anchor for the sum */
 
 .cage-sum {
-    position: absolute; top: 1px; left: 2px;
+    position: absolute; top: 4px; left: 4px;
     font-size: clamp(0.5em, 1.8vmin, 0.7em); font-weight: bold;
     color: var(--cage-sum-color); line-height: 1;
     z-index: 2; pointer-events: none; user-select: none; -webkit-user-select: none;
