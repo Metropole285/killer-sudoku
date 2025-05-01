@@ -7,10 +7,9 @@
     <!-- Подключение CSS стилей -->
     <link rel="stylesheet" href="style.css">
     <!-- Подключение библиотек -->
-    <!-- ВАЖНО: ПОРЯДОК ИМЕЕТ ЗНАЧЕНИЕ -->
-    <script src="sudoku.js"></script>       <!-- Сначала классическая (если нужна) -->
-    <script src="killerSudoku.js"></script> <!-- ПОТОМ Killer Sudoku -->
-    <!-- Telegram SDK (можно и раньше, но обычно не критично) -->
+    <script src="sudoku.js"></script>
+    <script src="killerSudoku.js"></script>
+    <!-- Подключение Telegram Web App SDK (если используется) -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
@@ -28,13 +27,11 @@
     <div id="new-game-options" class="screen">
         <h2>Начать новую игру</h2>
         <div class="options-container">
-            <!-- Выбор Режима -->
             <div id="game-mode-selection">
                  <h3>Выберите режим:</h3>
                  <button class="mode-button selected" data-mode="classic">Классический</button>
                  <button class="mode-button" data-mode="killer">Killer Sudoku</button>
             </div>
-            <!-- Выбор Сложности -->
             <div class="difficulty-selection">
                 <h3>Выберите сложность:</h3>
                 <button class="difficulty-button" data-difficulty="easy">Лёгкий</button>
@@ -44,7 +41,6 @@
                 <button class="difficulty-button" data-difficulty="insane">Безумный</button>
                 <button class="difficulty-button" data-difficulty="inhuman">Нечеловеческий</button>
             </div>
-            <!-- Выбор Темы -->
             <div class="theme-selection">
                 <h3>Тема:</h3>
                 <label class="theme-switch" for="theme-toggle-checkbox" title="Переключить тему">
@@ -61,9 +57,18 @@
 
     <!-- == Игровой Экран == -->
     <div id="game-container" class="screen">
-        <div id="timer-container">
-            <div id="timer">Время: 00:00</div>
+        <!-- === НОВЫЙ БЛОК: Таймер и Логические Кнопки === -->
+        <div id="top-controls">
+            <div id="timer-container">
+                <div id="timer">Время: 00:00</div>
+            </div>
+            <div id="solver-buttons">
+                <button id="logic-step-button" title="Найти следующий логический шаг (Hidden Single)">Next Step</button>
+                <button id="logic-solve-button" title="Применить все простые шаги (Hidden Singles)">Solve</button>
+            </div>
         </div>
+        <!-- ========================================= -->
+
         <div id="sudoku-board">
             <!-- Ячейки генерируются JavaScript -->
         </div>
