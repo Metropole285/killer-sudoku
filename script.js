@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const cd=userGrid[r]?.[c]; if(!cd){cell.textContent='?';console.warn(`Missing grid data for ${r},${c}`);return cell;}
         const vc=document.createElement('div');vc.classList.add('cell-value-container');
         const nc=document.createElement('div');nc.classList.add('cell-notes-container');
-        if(cd.value!==0){ vc.textContent=cd.value;vc.style.display='flex';nc.style.display='none'; if(currentMode==='classic'&¤tPuzzle){ const i=r*9+c; if(currentPuzzle[i]&¤tPuzzle[i]!=='.')cell.classList.add('given'); }
+        if(cd.value!==0){ vc.textContent=cd.value;vc.style.display='flex';nc.style.display='none'; if(currentMode==='classic' && currentPuzzle){ const i=r*9+c; if(currentPuzzle[i] && currentPuzzle[i]!=='.')cell.classList.add('given'); }
         } else if(cd.notes instanceof Set&&cd.notes.size>0){ vc.style.display='none';nc.style.display='grid';nc.innerHTML=''; for(let n=1;n<=9;n++){const nd=document.createElement('div');nd.classList.add('note-digit');nd.textContent=cd.notes.has(n)?n:'';nc.appendChild(nd);}
         } else { vc.textContent='';vc.style.display='flex';nc.style.display='none'; }
         cell.appendChild(vc);cell.appendChild(nc);
