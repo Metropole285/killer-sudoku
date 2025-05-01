@@ -232,6 +232,32 @@ input:checked + .slider .moon { opacity: 1; }
 #game-container h1 { margin-top: 5px; margin-bottom: 8px; color: var(--text-primary); font-size: 1.6em; flex-shrink: 0; }
 #timer-container { margin-bottom: 8px; width: clamp(270px, 90vw, 500px); max-width: 100%; text-align: right; flex-shrink: 0; }
 #timer { font-size: 1em; font-weight: bold; color: var(--text-secondary); padding: 5px 10px; background-color: var(--bg-tertiary); border-radius: 4px; display: inline-block; }
+#solver-buttons {
+    display: flex;
+    gap: 8px; /* Расстояние между кнопками решателя */
+    flex-shrink: 0; /* Не сжимать */
+}
+
+#solver-buttons button {
+    padding: 5px 10px; /* Немного меньше паддинг */
+    font-size: 0.85em; /* Немного меньше шрифт */
+    cursor: pointer;
+    border: none;
+    border-radius: 5px;
+    background-color: var(--button-warning-bg); /* Цвет как у Undo */
+    color: var(--text-warning-fg);
+    transition: background-color 0.2s, opacity 0.2s;
+    white-space: nowrap;
+}
+#solver-buttons button:hover:not(:disabled) {
+    background-color: var(--button-warning-hover);
+}
+#solver-buttons button:disabled {
+     background-color: var(--button-disabled-bg);
+     opacity: var(--button-disabled-opacity);
+     cursor: not-allowed;
+     color: var(--text-disabled);
+}
 #sudoku-board { display: grid; grid-template-columns: repeat(9, minmax(28px, 1fr)); grid-template-rows: repeat(9, minmax(28px, 1fr)); width: clamp(260px, 85vmin, 480px); height: clamp(260px, 85vmin, 480px); max-width: 95vw; max-height: 65vh; border: 3px solid var(--border-secondary); margin-bottom: 10px; background-color: var(--bg-secondary); overflow: hidden; transition: filter var(--transition-duration) ease-in-out, background-color var(--transition-duration) ease, border-color var(--transition-duration) ease; flex-shrink: 0; position: relative; /* Needed for absolute positioning of cage elements */ }
 
 /* --- Стили ячеек и их состояний --- */
