@@ -19,13 +19,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const undoButton = document.getElementById('undo-button');
     const statusMessageElement = document.getElementById('status-message');
     const numpad = document.getElementById('numpad');
-    const noteToggleButton = document.getElementById('note-toggle-button'); // <<< Проверим его
+    const noteToggleButton = document.getElementById('note-toggle-button');
     const timerElement = document.getElementById('timer');
+    // --- НОВЫЕ ЭЛЕМЕНТЫ ---
+    const logicStepButton = document.getElementById('logic-step-button');
+    const logicSolveButton = document.getElementById('logic-solve-button');
 
     // --- Проверка всех элементов ---
-    const essentialElements = { initialScreen, newGameOptionsScreen, gameContainer, startNewGameButton, continueGameButton, gameModeSelectionContainer, difficultyButtonsContainer, themeToggleCheckbox, backToInitialButton, exitGameButton, boardElement, checkButton, hintButton, undoButton, statusMessageElement, numpad, noteToggleButton, timerElement };
+    const essentialElements = { initialScreen, newGameOptionsScreen, gameContainer, startNewGameButton, continueGameButton, gameModeSelectionContainer, difficultyButtonsContainer, themeToggleCheckbox, backToInitialButton, exitGameButton, boardElement, checkButton, hintButton, undoButton, statusMessageElement, numpad, noteToggleButton, timerElement, logicStepButton, logicSolveButton }; // Добавили новые кнопки
     for (const key in essentialElements) { if (!essentialElements[key]) { const errorMsg = `Критическая ошибка: HTML элемент для '${key}' не найден!`; console.error(errorMsg); document.body.innerHTML = `<p style='color:red;font-size:18px; padding: 20px;'>${errorMsg}</p>`; return; } }
-    console.log("Note Toggle Button Element on Load:", noteToggleButton); // <<< ЛОГ 1: Проверка наличия кнопки
 
     // --- Ключи localStorage ---
     const SAVE_KEY = 'sudokuGameState';
@@ -36,12 +38,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentPuzzle = null, currentSolution = null, currentCageData = null, currentSolverData = null;
     let userGrid = [], historyStack = [];
     let selectedCell = null, selectedRow = -1, selectedCol = -1;
-    let isNoteMode = false; // <<< НАЧАЛЬНОЕ СОСТОЯНИЕ
-    let timerInterval = null, secondsElapsed = 0;
+    let isNoteMode = false, timerInterval = null, secondsElapsed = 0;
     const MAX_HINTS = 3; let hintsRemaining = MAX_HINTS;
+    let isLogicSolverRunning = false; // Флаг для кнопки Solve Logic
 
     // === Placeholder Рекламы ===
-    let isAdReady = false, isShowingAd = false;
+    let isAdReady = false, isShowingAd = false; function initializeAds(){/*...*/} function preloadRewardedAd(){/*...*/} function showRewardedAd(cb){/*...*/}
     function initializeAds() { console.log("ADS Init..."); setTimeout(() => { preloadRewardedAd(); }, 2000); }
     function preloadRewardedAd() { if (isAdReady || isShowingAd) return; console.log("ADS Load..."); isAdReady = false; setTimeout(() => { if (!isShowingAd) { isAdReady = true; console.log("ADS Ready."); } else { console.log("ADS Load aborted (showing)."); } }, 3000 + Math.random() * 2000); }
     function showRewardedAd(callbacks) { if (!isAdReady || isShowingAd) { console.log("ADS Not ready/Showing."); if (callbacks.onError) callbacks.onError("Реклама не готова."); preloadRewardedAd(); return; } console.log("ADS Show..."); isShowingAd = true; isAdReady = false; if(statusMessageElement) { statusMessageElement.textContent = "Показ рекламы..."; statusMessageElement.className = ''; } document.body.style.pointerEvents = 'none'; setTimeout(() => { const success = Math.random() > 0.2; document.body.style.pointerEvents = 'auto'; if(statusMessageElement) statusMessageElement.textContent = ""; isShowingAd = false; console.log("ADS Show End."); if (success) { console.log("ADS Success!"); if (callbacks.onSuccess) callbacks.onSuccess(); } else { console.log("ADS Error/Skip."); if (callbacks.onError) callbacks.onError("Реклама не загружена / пропущена."); } preloadRewardedAd(); }, 5000); }
@@ -64,73 +66,37 @@ document.addEventListener('DOMContentLoaded', () => {
     function isGameSolved(){ if(!userGrid||userGrid.length!==9)return false; return !userGrid.flat().some(c=>!c||c.value===0); }
     function boardStringToObjectArray(boardString){if(!boardString||typeof boardString!=='string')return[];const g=[];for(let r=0;r<9;r++){g[r]=[];for(let c=0;c<9;c++){const i=r*9+c;const h=boardString[i]||'.';const v=(h==='.'||h==='0'||!"123456789".includes(h))?0:parseInt(h);g[r][c]={value:v,notes:new Set()};}}return g;}
     function clearSelection(){if(selectedCell)selectedCell.classList.remove('selected');if(boardElement)boardElement.querySelectorAll('.cell.highlighted').forEach(c=>c.classList.remove('highlighted'));selectedCell=null;selectedRow=-1;selectedCol=-1;}
-
-    /**
-     * Обновляет визуальное состояние кнопки заметок.
-     */
-    function updateNoteToggleButtonState(){
-        console.log(`updateNoteToggleButtonState called. isNoteMode = ${isNoteMode}`); // <<< ЛОГ 2: Вызов функции и текущее состояние
-        if(noteToggleButton){
-             // Применяем или убираем класс 'active'
-             noteToggleButton.classList.toggle('active', isNoteMode);
-             // Обновляем title для подсказки
-             noteToggleButton.title = `Заметки (${isNoteMode ? 'ВКЛ' : 'ВЫКЛ'})`;
-             console.log("Button class list after toggle:", noteToggleButton.classList); // <<< ЛОГ 3: Классы после изменения
-             console.log("Button title set to:", noteToggleButton.title); // <<< ЛОГ 4: Установленный title
-        } else {
-             console.error("updateNoteToggleButtonState: noteToggleButton element not found!");
-        }
-    }
-
-    function highlightRelatedCells(row, col) { console.log(`Highlighting for [${row}, ${col}], mode: ${currentMode}`); if (!boardElement) return; boardElement.querySelectorAll('.cell.highlighted').forEach(el=>el.classList.remove('highlighted')); if (currentMode === 'killer' && currentSolverData && selectedCell) { const cellId = getCellId(row, col); if (!cellId) return; const cageIndex = currentSolverData.cellToCageMap[cellId]; if (cageIndex !== undefined) { const cage = currentSolverData.cageDataArray[cageIndex]; if (cage?.cells) { cage.cells.forEach(cId => { const coords = getCellCoords(cId); if(coords) boardElement.querySelector(`.cell[data-row='${coords.r}'][data-col='${coords.c}']`)?.classList.add('highlighted'); }); } } else { boardElement.querySelectorAll(`.cell[data-row='${row}'], .cell[data-col='${col}']`).forEach(el=>el.classList.add('highlighted')); } } else { boardElement.querySelectorAll(`.cell[data-row='${row}'], .cell[data-col='${col}']`).forEach(el=>el.classList.add('highlighted')); } const cellValue = userGrid[row]?.[col]?.value; if (cellValue && cellValue !== 0) { /*console.log(`Highlighting cells with value ${cellValue}`);*/ for (let r_=0;r_<9;r_++) { for (let c_=0;c_<9;c_++) { if (userGrid[r_]?.[c_]?.value === cellValue) { boardElement.querySelector(`.cell[data-row='${r_}'][data-col='${c_}']`)?.classList.add('highlighted'); }}}} }
-    function updateHintButtonState(){if(!hintButton)return;const s=isGameSolved();let canHint=false,title="";if(currentMode==='classic'){canHint=currentSolution&&!s;if(!currentSolution)title="Н/Д";else if(s)title="Решено";else if(hintsRemaining>0)title="Подсказка";else title=`+${MAX_HINTS}(Ad)`;}else{canHint=false;title="Н/Д(Killer)";}hintButton.disabled=!canHint;hintButton.title=title;hintButton.textContent=`💡 ${hintsRemaining}/${MAX_HINTS}`;if(currentMode==='killer')hintButton.disabled=true;else if(hintsRemaining<=0&&canHint)hintButton.disabled=false;}
+    function updateNoteToggleButtonState(){if(noteToggleButton){noteToggleButton.classList.toggle('active',isNoteMode);noteToggleButton.title=`Заметки (${isNoteMode?'ВКЛ':'ВЫКЛ'})`;}}
+    function highlightRelatedCells(row, col) { /* ... как раньше ... */ console.log(`Highlighting for [${row}, ${col}], mode: ${currentMode}`); if (!boardElement) return; boardElement.querySelectorAll('.cell.highlighted').forEach(el=>el.classList.remove('highlighted')); if (currentMode === 'killer' && currentSolverData && selectedCell) { const cellId = getCellId(row, col); if (!cellId) return; const cageIndex = currentSolverData.cellToCageMap[cellId]; if (cageIndex !== undefined) { const cage = currentSolverData.cageDataArray[cageIndex]; if (cage?.cells) { cage.cells.forEach(cId => { const coords = getCellCoords(cId); if(coords) boardElement.querySelector(`.cell[data-row='${coords.r}'][data-col='${coords.c}']`)?.classList.add('highlighted'); }); } } else { boardElement.querySelectorAll(`.cell[data-row='${row}'], .cell[data-col='${col}']`).forEach(el=>el.classList.add('highlighted')); } } else { boardElement.querySelectorAll(`.cell[data-row='${row}'], .cell[data-col='${col}']`).forEach(el=>el.classList.add('highlighted')); } const cellValue = userGrid[row]?.[col]?.value; if (cellValue && cellValue !== 0) { /*console.log(`Highlighting cells with value ${cellValue}`);*/ for (let r_=0;r_<9;r_++) { for (let c_=0;c_<9;c_++) { if (userGrid[r_]?.[c_]?.value === cellValue) { boardElement.querySelector(`.cell[data-row='${r_}'][data-col='${c_}']`)?.classList.add('highlighted'); }}}} }
+    function updateHintButtonState(){if(!hintButton)return;console.log(`Upd hints. Mode:${currentMode}, Left:${hintsRemaining}`);const s=isGameSolved();let canHint=false,title="";if(currentMode==='classic'){canHint=currentSolution&&!s;if(!currentSolution)title="Н/Д";else if(s)title="Решено";else if(hintsRemaining>0)title="Подсказка";else title=`+${MAX_HINTS}(Ad)`;}else{canHint=false;title="Н/Д(Killer)";}hintButton.disabled=!canHint;hintButton.title=title;hintButton.textContent=`💡 ${hintsRemaining}/${MAX_HINTS}`;if(currentMode==='killer')hintButton.disabled=true;else if(hintsRemaining<=0&&canHint)hintButton.disabled=false;console.log(`Hint btn: disabled=${hintButton.disabled}, title='${hintButton.title}'`);}
 
     // --- Инициализация ИГРЫ ---
     function initGame(mode = "classic", difficulty = "medium", restoreState = null) {
         console.log(`%cInitGame START: mode=${mode}, difficulty=${difficulty}, restore=${!!restoreState}`, "color: blue; font-weight: bold;");
-        if (mode === "classic") { if (typeof sudoku === 'undefined') return showError("Ошибка: sudoku.js не найден."); }
-        else if (mode === "killer") { if (typeof killerSudoku === 'undefined') return showError("Ошибка: killerSudoku.js не найден."); if (typeof killerSudoku._initializeSolverData !== 'function') return showError("Ошибка: killerSudoku.js неполный (_initializeSolverData)."); if (typeof killerSudoku.generate !== 'function') return showError("Ошибка: killerSudoku.js неполный (generate)."); }
-        else return showError("Ошибка: Неизвестный режим: " + mode);
-        console.log(`${mode} library OK.`);
+        // --- Проверка библиотек и элементов (как раньше) ---
+        if (mode === "classic") { if (typeof sudoku === 'undefined') return showError("Ошибка: sudoku.js не найден."); } else if (mode === "killer") { if (typeof killerSudoku === 'undefined') return showError("Ошибка: killerSudoku.js не найден."); if (typeof killerSudoku._initializeSolverData !== 'function') return showError("Ошибка: killerSudoku.js неполный (_initializeSolverData)."); if (typeof killerSudoku.generate !== 'function') return showError("Ошибка: killerSudoku.js неполный (generate)."); } else return showError("Ошибка: Неизвестный режим: " + mode); console.log(`${mode} library OK.`);
 
-        currentMode = mode; currentDifficulty = difficulty;
-        stopTimer(); historyStack = []; updateUndoButtonState();
-        isNoteMode = false; updateNoteToggleButtonState(); // Сброс при старте
-        clearSelection(); clearErrors();
-        statusMessageElement.textContent = 'Генерация...'; statusMessageElement.className = '';
-        currentPuzzle = null; currentSolution = null; currentCageData = null; currentSolverData = null; userGrid = [];
+        currentMode = mode; currentDifficulty = difficulty; stopTimer(); historyStack = []; updateUndoButtonState(); isNoteMode = false; updateNoteToggleButtonState(); clearSelection(); clearErrors(); statusMessageElement.textContent = 'Генерация...'; statusMessageElement.className = ''; currentPuzzle = null; currentSolution = null; currentCageData = null; currentSolverData = null; userGrid = [];
 
         let success = false;
         try {
-            if (restoreState) {
-                console.log("Restoring state...");
-                currentMode = restoreState.mode || "classic"; currentDifficulty = restoreState.difficulty || 'medium'; secondsElapsed = restoreState.time || 0; hintsRemaining = restoreState.hints ?? MAX_HINTS;
-                isNoteMode = restoreState.isNoteMode || false; // <<< Восстанавливаем режим заметок
-                userGrid = restoreState.grid.map(r => r.map(c => ({ value: c.value, notes: new Set(c.notesArray || []) })));
-                if (currentMode === "classic") { currentPuzzle = restoreState.puzzle; currentSolution = restoreState.solution; if (!currentPuzzle || !currentSolution) throw new Error("Invalid classic save."); }
-                else if (currentMode === "killer") { currentCageData = restoreState.cageData; if (!currentCageData?.cages) throw new Error("Invalid killer save (cages)."); console.log("Re-init solver data..."); currentSolverData = killerSudoku._initializeSolverData(currentCageData.cages); if (!currentSolverData) throw new Error("Fail re-init solver data."); console.log("Solver data re-init OK."); }
-                else throw new Error("Unknown save mode: " + currentMode);
-                console.log("Restore OK."); success = true;
-            } else {
-                secondsElapsed = 0; hintsRemaining = MAX_HINTS; clearSavedGameState();
-                if (currentMode === "classic") { console.log(`Gen CLASSIC: ${currentDifficulty}...`); currentPuzzle = sudoku.generate(currentDifficulty); if (!currentPuzzle) throw new Error("Classic gen failed."); currentSolution = sudoku.solve(currentPuzzle); if (!currentSolution) throw new Error("Classic solve failed."); userGrid = boardStringToObjectArray(currentPuzzle); console.log("New classic OK."); success = true; }
-                else if (currentMode === "killer") { console.log(`Gen KILLER: ${currentDifficulty}...`); console.log("Call killer.generate..."); const puzzle = killerSudoku.generate(currentDifficulty); console.log("Killer gen result:", puzzle); if (!puzzle?.cages) throw new Error("Killer gen failed (no cages)."); currentCageData = puzzle; console.log("Init solver data..."); currentSolverData = killerSudoku._initializeSolverData(currentCageData.cages); console.log("Solver init result:", currentSolverData); if (!currentSolverData) throw new Error("Cage validation/init failed."); userGrid = boardStringToObjectArray(killerSudoku.BLANK_BOARD); console.log("New killer OK."); success = true; }
-            }
+            if (restoreState) { /* ... (код восстановления как раньше) ... */ console.log("Restoring state..."); currentMode=restoreState.mode||"classic";currentDifficulty=restoreState.difficulty||'medium';secondsElapsed=restoreState.time||0;hintsRemaining=restoreState.hints??MAX_HINTS;isNoteMode=restoreState.isNoteMode||false;userGrid=restoreState.grid.map(r=>r.map(c=>({value:c.value,notes:new Set(c.notesArray||[])})));if(currentMode==="classic"){currentPuzzle=restoreState.puzzle;currentSolution=restoreState.solution;if(!currentPuzzle||!currentSolution)throw new Error("Inv classic save.");}else if(currentMode==="killer"){currentCageData=restoreState.cageData;if(!currentCageData?.cages)throw new Error("Inv killer save (cages).");console.log("Re-init solver data...");currentSolverData=killerSudoku._initializeSolverData(currentCageData.cages);if(!currentSolverData)throw new Error("Fail re-init solver data.");console.log("Solver data re-init OK.");}else throw new Error("Unk save mode:"+currentMode);console.log("Restore OK.");success=true;
+            } else { secondsElapsed = 0; hintsRemaining = MAX_HINTS; clearSavedGameState(); if (currentMode === "classic") { /* ... (генерация классики) ... */ console.log(`Gen CLASSIC: ${currentDifficulty}...`); currentPuzzle = sudoku.generate(currentDifficulty); if (!currentPuzzle) throw new Error("Classic gen failed."); currentSolution = sudoku.solve(currentPuzzle); if (!currentSolution) throw new Error("Classic solve failed."); userGrid = boardStringToObjectArray(currentPuzzle); console.log("New classic OK."); success = true; } else if (currentMode === "killer") { /* ... (генерация killer) ... */ console.log(`Gen KILLER: ${currentDifficulty}...`); console.log("Call killer.generate..."); const puzzle = killerSudoku.generate(currentDifficulty); console.log("Killer gen result:", puzzle); if (!puzzle?.cages) throw new Error("Killer gen failed (no cages)."); currentCageData = puzzle; console.log("Init solver data..."); currentSolverData = killerSudoku._initializeSolverData(currentCageData.cages); console.log("Solver init result:", currentSolverData); if (!currentSolverData) throw new Error("Cage validation/init failed."); userGrid = boardStringToObjectArray(killerSudoku.BLANK_BOARD); console.log("New killer OK."); success = true; } }
         } catch (error) { console.error("INIT DATA ERR:", error); showError(`Ошибка init (${mode}): ${error.message}`); showScreen(initialScreen); checkContinueButton(); return; }
 
-        if (success) { statusMessageElement.textContent = ''; console.log("Rendering..."); updateNoteToggleButtonState(); /* Обновляем вид кнопки заметок */ renderBoard(); updateHintButtonState(); updateUndoButtonState(); updateTimerDisplay(); showScreen(gameContainer); console.log("Schedule timer..."); setTimeout(() => { console.log("setTimeout: start timer."); startTimer(); }, 50); console.log("InitGame COMPLETE."); }
+        if (success) { statusMessageElement.textContent = ''; console.log("Rendering..."); updateNoteToggleButtonState(); renderBoard(); updateHintButtonState(); updateUndoButtonState(); updateLogicSolverButtonsState(); /* <<< ОБНОВЛЯЕМ СОСТОЯНИЕ НОВЫХ КНОПОК */ updateTimerDisplay(); showScreen(gameContainer); console.log("Schedule timer..."); setTimeout(() => { console.log("setTimeout: start timer."); startTimer(); }, 50); console.log("InitGame COMPLETE."); }
         else { console.error("InitGame no success flag."); showError("Ошибка инициализации."); showScreen(initialScreen); checkContinueButton(); }
     }
 
     // --- Функции сохранения/загрузки состояния ---
-    function saveGameState(){if(!userGrid||userGrid.length!==9)return;/*console.log(`Saving:${currentMode}`);*/try{const g=userGrid.map(r=>r.map(c=>({value:c.value,notesArray:Array.from(c.notes||[])})));const s={mode:currentMode,difficulty:currentDifficulty,grid:g,time:secondsElapsed,hints:hintsRemaining,timestamp:Date.now(),isNoteMode: isNoteMode, /* <<< Сохраняем режим заметок */ puzzle:currentMode==='classic'?currentPuzzle:null,solution:currentMode==='classic'?currentSolution:null,cageData:currentMode==='killer'?currentCageData:null};localStorage.setItem(SAVE_KEY,JSON.stringify(s));}catch(e){console.error("SaveErr:",e);showError("Ошибка сохр.");}}
-    function loadGameState(){const d=localStorage.getItem(SAVE_KEY);if(!d)return null;try{const s=JSON.parse(d);if(s&&typeof s==='object'&&s.mode&&s.difficulty&&Array.isArray(s.grid)&&typeof s.timestamp==='number'&&(s.mode==='classic'?!(!s.puzzle||!s.solution):true)&&(s.mode==='killer'?!(!s.cageData||!s.cageData.cages):true)){console.log("Save found:",new Date(s.timestamp).toLocaleString(),`M:${s.mode}`,`D:${s.difficulty}`);return s;}else{console.warn("Inv save. Clearing.",s);clearSavedGameState();return null;}}catch(e){console.error("ParseSaveErr:",e);clearSavedGameState();return null;}}
+    function saveGameState(){if(!userGrid||userGrid.length!==9)return;try{const g=userGrid.map(r=>r.map(c=>({value:c.value,notesArray:Array.from(c.notes||[])})));const s={mode:currentMode,difficulty:currentDifficulty,grid:g,time:secondsElapsed,hints:hintsRemaining,timestamp:Date.now(),isNoteMode: isNoteMode, puzzle:currentMode==='classic'?currentPuzzle:null,solution:currentMode==='classic'?currentSolution:null,cageData:currentMode==='killer'?currentCageData:null};localStorage.setItem(SAVE_KEY,JSON.stringify(s));}catch(e){console.error("SaveErr:",e);showError("Ошибка сохр.");}}
+    function loadGameState(){const d=localStorage.getItem(SAVE_KEY);if(!d)return null;try{const s=JSON.parse(d);if(s?.mode&&s?.difficulty&&Array.isArray(s.grid)&&typeof s.timestamp==='number'&&(s.mode==='classic'?!(!s.puzzle||!s.solution):true)&&(s.mode==='killer'?!(!s.cageData||!s.cageData.cages):true)){console.log("Save found:",new Date(s.timestamp).toLocaleString(),`M:${s.mode}`,`D:${s.difficulty}`);return s;}else{console.warn("Inv save. Clearing.",s);clearSavedGameState();return null;}}catch(e){console.error("ParseSaveErr:",e);clearSavedGameState();return null;}}
     function clearSavedGameState(){try{localStorage.removeItem(SAVE_KEY);console.log("Save cleared.");checkContinueButton();}catch(e){console.error("Err clr save:",e);}}
 
     // --- Функции для Undo ---
     function createHistoryState(){if(!userGrid||userGrid.length!==9)return null;const g=userGrid.map(r=>r.map(c=>({value:c.value,notes:new Set(c.notes||[])})));return{grid:g,hints:hintsRemaining};}
-    function pushHistoryState(){const s=createHistoryState();if(s){historyStack.push(s);updateUndoButtonState();}else{console.warn("Inv hist push");}}
-    function handleUndo(){if(historyStack.length===0||isShowingAd)return;stopTimer();const ps=historyStack.pop();console.log("Undo...");try{userGrid=ps.grid;hintsRemaining=ps.hints;renderBoard();clearSelection();clearErrors();updateHintButtonState();updateUndoButtonState();saveGameState();console.log("Undo OK.");}catch(e){console.error("Undo Err:",e);showError("Ошибка отмены");historyStack=[];updateUndoButtonState();}finally{resumeTimerIfNeeded();}}
+    function pushHistoryState(){if(isGameSolved()) return; const s=createHistoryState();if(s){historyStack.push(s);updateUndoButtonState();}else{console.warn("Inv hist push");}}
+    function handleUndo(){if(historyStack.length===0||isShowingAd)return;stopTimer();const ps=historyStack.pop();console.log("Undo...");try{userGrid=ps.grid;hintsRemaining=ps.hints;renderBoard();clearSelection();clearErrors();updateHintButtonState();updateUndoButtonState();updateLogicSolverButtonsState(); /* <<< Обновляем кнопки решателя */ saveGameState();console.log("Undo OK.");}catch(e){console.error("Undo Err:",e);showError("Ошибка отмены");historyStack=[];updateUndoButtonState();updateLogicSolverButtonsState();}finally{resumeTimerIfNeeded();}}
     function updateUndoButtonState(){if(undoButton)undoButton.disabled=historyStack.length===0;}
 
     // --- Функции для таймера ---
@@ -139,10 +105,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateTimerDisplay(){if(!timerElement)return;const m=Math.floor(secondsElapsed/60),s=secondsElapsed%60;timerElement.textContent=`Время: ${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;}
     function resumeTimerIfNeeded(){const s=isGameSolved(),v=gameContainer?.classList.contains('visible');if(v&&!s)startTimer();else stopTimer();}
 
-
     // --- Отрисовка ---
-    function renderBoard() { console.log(`Render board start: mode=${currentMode}`); if (!boardElement) { console.error("Board element missing!"); return; } boardElement.innerHTML = ''; if (!userGrid || userGrid.length !== 9) { showError("Invalid grid data for rendering."); return; } const cellElementsMap = {}; for (let r = 0; r < 9; r++) { if (!userGrid[r] || userGrid[r].length !== 9) continue; for (let c = 0; c < 9; c++) { const cellId = getCellId(r, c); if (!cellId) continue; const cellElement = createCellElement(r, c); boardElement.appendChild(cellElement); cellElementsMap[cellId] = cellElement; } } if (currentMode === "killer" && currentSolverData?.cageDataArray) { /*console.log("Rendering Killer Cages...");*/ currentSolverData.cageDataArray.forEach((cage, cageIndex) => { if (!cage || !Array.isArray(cage.cells) || cage.cells.length === 0) { console.warn(`Skipping invalid cage data at index ${cageIndex}`); return; } const cageCellSet = new Set(cage.cells); let anchorCellId = null; let minRow = 9, minCol = 9; cage.cells.forEach(cellId => { const coords = getCellCoords(cellId); if (coords) { if (coords.r < minRow) { minRow = coords.r; minCol = coords.c; anchorCellId = cellId; } else if (coords.r === minRow && coords.c < minCol) { minCol = coords.c; anchorCellId = cellId; } } }); cage.cells.forEach(cellId => { const cellElement = cellElementsMap[cellId]; if (!cellElement) return; cellElement.classList.add('cage-cell'); if (cellId === anchorCellId) { cellElement.classList.add('cage-sum-anchor'); if (!cellElement.querySelector('.cage-sum')) { const sumSpan = document.createElement('span'); sumSpan.className = 'cage-sum'; sumSpan.textContent = cage.sum; cellElement.appendChild(sumSpan); } } const coords = getCellCoords(cellId); if (!coords) return; const { r, c } = coords; const neighbors = getNeighbors(r, c); if (r === 0 || !neighbors.top || !cageCellSet.has(neighbors.top)) { cellElement.classList.add('cage-inner-border-top'); } if (c === 0 || !neighbors.left || !cageCellSet.has(neighbors.left)) { cellElement.classList.add('cage-inner-border-left'); } if (r === 8 || !neighbors.bottom || !cageCellSet.has(neighbors.bottom)) { cellElement.classList.add('cage-inner-border-bottom'); } if (c === 8 || !neighbors.right || !cageCellSet.has(neighbors.right)) { cellElement.classList.add('cage-inner-border-right'); } }); }); /*console.log("Cage rendering finished.");*/ } console.log("Board rendering complete."); }
-    function createCellElement(r, c) { const cell=document.createElement('div');cell.classList.add('cell'); cell.dataset.row=r;cell.dataset.col=c; const cd=userGrid[r]?.[c]; if(!cd){cell.textContent='?';console.warn(`Missing grid data for ${r},${c}`);return cell;} const vc=document.createElement('div');vc.classList.add('cell-value-container'); const nc=document.createElement('div');nc.classList.add('cell-notes-container'); if(cd.value!==0){ vc.textContent=cd.value;vc.style.display='flex';nc.style.display='none'; if(currentMode==='classic'&& currentPuzzle){ const i=r*9+c; if(currentPuzzle[i]&& currentPuzzle[i]!=='.')cell.classList.add('given'); } } else if(cd.notes instanceof Set&&cd.notes.size>0){ vc.style.display='none';nc.style.display='grid';nc.innerHTML=''; for(let n=1;n<=9;n++){const nd=document.createElement('div');nd.classList.add('note-digit');nd.textContent=cd.notes.has(n)?n:'';nc.appendChild(nd);} } else { vc.textContent='';vc.style.display='flex';nc.style.display='none'; } cell.appendChild(vc);cell.appendChild(nc); if((c+1)%3===0&&c<8)cell.classList.add('thick-border-right'); if((r+1)%3===0&&r<8)cell.classList.add('thick-border-bottom'); return cell; }
+    function renderBoard() { /* ... как в предыдущем ответе ... */ console.log(`Render board start: mode=${currentMode}`); if (!boardElement) { console.error("Board element missing!"); return; } boardElement.innerHTML = ''; if (!userGrid || userGrid.length !== 9) { showError("Invalid grid data for rendering."); return; } const cellElementsMap = {}; for (let r = 0; r < 9; r++) { if (!userGrid[r] || userGrid[r].length !== 9) continue; for (let c = 0; c < 9; c++) { const cellId = getCellId(r, c); if (!cellId) continue; const cellElement = createCellElement(r, c); boardElement.appendChild(cellElement); cellElementsMap[cellId] = cellElement; } } if (currentMode === "killer" && currentSolverData?.cageDataArray) { /*console.log("Rendering Killer Cages...");*/ currentSolverData.cageDataArray.forEach((cage, cageIndex) => { if (!cage || !Array.isArray(cage.cells) || cage.cells.length === 0) { console.warn(`Skipping invalid cage data at index ${cageIndex}`); return; } const cageCellSet = new Set(cage.cells); let anchorCellId = null; let minRow = 9, minCol = 9; cage.cells.forEach(cellId => { const coords = getCellCoords(cellId); if (coords) { if (coords.r < minRow) { minRow = coords.r; minCol = coords.c; anchorCellId = cellId; } else if (coords.r === minRow && coords.c < minCol) { minCol = coords.c; anchorCellId = cellId; } } }); cage.cells.forEach(cellId => { const cellElement = cellElementsMap[cellId]; if (!cellElement) return; cellElement.classList.add('cage-cell'); if (cellId === anchorCellId) { cellElement.classList.add('cage-sum-anchor'); if (!cellElement.querySelector('.cage-sum')) { const sumSpan = document.createElement('span'); sumSpan.className = 'cage-sum'; sumSpan.textContent = cage.sum; cellElement.appendChild(sumSpan); } } const coords = getCellCoords(cellId); if (!coords) return; const { r, c } = coords; const neighbors = getNeighbors(r, c); if (r === 0 || !neighbors.top || !cageCellSet.has(neighbors.top)) { cellElement.classList.add('cage-inner-border-top'); } if (c === 0 || !neighbors.left || !cageCellSet.has(neighbors.left)) { cellElement.classList.add('cage-inner-border-left'); } if (r === 8 || !neighbors.bottom || !cageCellSet.has(neighbors.bottom)) { cellElement.classList.add('cage-inner-border-bottom'); } if (c === 8 || !neighbors.right || !cageCellSet.has(neighbors.right)) { cellElement.classList.add('cage-inner-border-right'); } }); }); /*console.log("Cage rendering finished.");*/ } console.log("Board rendering complete."); }
+    function createCellElement(r, c) { const cell=document.createElement('div');cell.classList.add('cell'); cell.dataset.row=r;cell.dataset.col=c; const cd=userGrid[r]?.[c]; if(!cd){cell.textContent='?';console.warn(`Missing grid data for ${r},${c}`);return cell;} const vc=document.createElement('div');vc.classList.add('cell-value-container'); const nc=document.createElement('div');nc.classList.add('cell-notes-container'); if(cd.value!==0){ vc.textContent=cd.value;vc.style.display='flex';nc.style.display='none'; if(currentMode==='classic'&¤tPuzzle){ const i=r*9+c; if(currentPuzzle[i]&¤tPuzzle[i]!=='.')cell.classList.add('given'); } } else if(cd.notes instanceof Set&&cd.notes.size>0){ vc.style.display='none';nc.style.display='grid';nc.innerHTML=''; for(let n=1;n<=9;n++){const nd=document.createElement('div');nd.classList.add('note-digit');nd.textContent=cd.notes.has(n)?n:'';nc.appendChild(nd);} } else { vc.textContent='';vc.style.display='flex';nc.style.display='none'; } cell.appendChild(vc);cell.appendChild(nc); if((c+1)%3===0&&c<8)cell.classList.add('thick-border-right'); if((r+1)%3===0&&r<8)cell.classList.add('thick-border-bottom'); return cell; }
     function renderCell(r, c) { if (!boardElement) return; if (currentMode === 'killer' && userGrid[r]?.[c]?.value === 0) { console.log("Note changed in Killer mode, forcing full board render."); renderBoard(); if (selectedRow === r && selectedCol === c) { selectedCell = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`); if (selectedCell) { selectedCell.classList.add('selected'); highlightRelatedCells(r, c); } else { selectedCell = null; selectedRow = -1; selectedCol = -1; } } return; } const oldCell = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`); if (oldCell) { try { const newCell = createCellElement(r, c); oldCell.classList.forEach(cls => { if(cls!=='cell' && !cls.startsWith('thick-') && !cls.startsWith('cage-inner-')) newCell.classList.add(cls); }); ['cage-cell', 'cage-sum-anchor', 'cage-inner-border-top', 'cage-inner-border-bottom', 'cage-inner-border-left', 'cage-inner-border-right'].forEach(cls => { if (oldCell.classList.contains(cls)) newCell.classList.add(cls); }); const oldSum = oldCell.querySelector('.cage-sum'); if (oldSum) newCell.appendChild(oldSum.cloneNode(true)); if (selectedRow === r && selectedCol === c) selectedCell = newCell; oldCell.replaceWith(newCell); } catch (error) { console.error(`Error render cell [${r}, ${c}]:`, error); renderBoard(); } } else { console.warn(`renderCell: Cell [${r},${c}] not found? Render full.`); renderBoard(); } }
 
     // --- Логика подсказки ---
@@ -150,11 +115,205 @@ document.addEventListener('DOMContentLoaded', () => {
     function offerRewardedAdForHints(){if(currentMode!=='classic'||isShowingAd)return;console.log("Offering ad...");if(confirm(`Подсказки зак-сь! Реклама за ${MAX_HINTS} подсказку?`)){if(!isAdReady){showError("Реклама грузится...");preloadRewardedAd();return;}showRewardedAd({onSuccess:()=>{hintsRemaining+=MAX_HINTS;updateHintButtonState();saveGameState();showSuccess(`+${MAX_HINTS} подсказка!`);},onError:(msg)=>{showError(`Ошибка: ${msg||'Реклама?'} Подсказка не добавлена.`);}});}}
 
     // --- Логика Проверки ---
-    function checkGame(){console.log(`Check: ${currentMode}`);clearErrors();if(!userGrid||userGrid.length!==9)return;let isValid=false;let isComplete=!userGrid.flat().some(c=>!c||c.value===0);if(currentMode==="classic"){if(!currentSolution){showError("Нет решения!");return;}isValid=validateClassicSudoku();}else if(currentMode==="killer"){if(!currentSolverData){showError("Нет данных Killer!");return;}isValid=validateKillerSudoku();}if(isValid&&isComplete){showSuccess("Поздравляем! Решено верно!");stopTimer();clearSelection();updateHintButtonState();/* submitGameResult(); */}else if(!isValid){showError("Найдены ошибки.");}else{if(statusMessageElement){statusMessageElement.textContent="Пока верно, но не закончено.";statusMessageElement.className='';}}}
+    function checkGame(){console.log(`Check: ${currentMode}`);clearErrors();if(!userGrid||userGrid.length!==9)return;let isValid=false;let isComplete=!userGrid.flat().some(c=>!c||c.value===0);if(currentMode==="classic"){if(!currentSolution){showError("Нет решения!");return;}isValid=validateClassicSudoku();}else if(currentMode==="killer"){if(!currentSolverData){showError("Нет данных Killer!");return;}isValid=validateKillerSudoku();}if(isValid&&isComplete){showSuccess("Поздравляем! Решено верно!");stopTimer();clearSelection();updateHintButtonState();updateLogicSolverButtonsState();}else if(!isValid){showError("Найдены ошибки.");}else{if(statusMessageElement){statusMessageElement.textContent="Пока верно, но не закончено.";statusMessageElement.className='';}}}
     function validateClassicSudoku(){let ok=true;if(!currentSolution){console.error("Classic valid Err: no solution!");return false;}for(let r=0;r<9;r++){for(let c=0;c<9;c++){const cd=userGrid[r]?.[c];const el=boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);if(!cd||!el||cd.value===0||el.classList.contains('given'))continue;const sv=getSolutionValue(r,c);if(sv===null){console.error(`Classic valid Err: No sol value for ${r},${c}`);ok=false;break;}if(cd.value!==sv){el.classList.add('incorrect');ok=false;}}if(!ok)break;}return ok;}
-    function validateKillerSudoku(){let ok=true;const grid=userGrid.map(r=>r.map(c=>c.value));for(let i=0;i<9;i++){if(!isUnitValid(getRow(grid,i))||!isUnitValid(getCol(grid,i))||!isUnitValid(getBlock(grid,i))){console.warn("Classic rule violation");ok=false;break;}}if(!ok){showError("Нарушены правила Судоку.");return false;}if(!currentSolverData?.cageDataArray)return false;for(const cage of currentSolverData.cageDataArray){const vals=[];let sum=0;let complete=true;let els=[];for(const cid of cage.cells){const crds=getCellCoords(cid);if(!crds)continue;const v=grid[crds.r][crds.c];const el=boardElement?.querySelector(`.cell[data-row='${crds.r}'][data-col='${crds.c}']`);if(el)els.push(el);if(v===0){complete=false;}else{vals.push(v);sum+=v;}}if(new Set(vals).size!==vals.length){console.warn(`Cage ${cage.id} unique violation:`,vals);ok=false;els.forEach(e=>e.classList.add('incorrect'));}if(complete&&sum!==cage.sum){console.warn(`Cage ${cage.id} sum violation: got ${sum}, expected ${cage.sum}`);ok=false;els.forEach(e=>e.classList.add('incorrect'));}}return ok;}
+    function validateKillerSudoku(){let ok=true;const grid=userGrid.map(r=>r.map(c=>c.value));for(let i=0;i<9;i++){if(!isUnitValid(getRow(grid,i))||!isUnitValid(getCol(grid,i))||!isUnitValid(getBlock(grid,i))){ok=false;break;}}if(!ok){showError("Нарушены правила Судоку.");return false;}if(!currentSolverData?.cageDataArray)return false;for(const cage of currentSolverData.cageDataArray){const vals=[];let sum=0;let complete=true;let els=[];for(const cid of cage.cells){const crds=getCellCoords(cid);if(!crds)continue;const v=grid[crds.r][crds.c];const el=boardElement?.querySelector(`.cell[data-row='${crds.r}'][data-col='${crds.c}']`);if(el)els.push(el);if(v===0){complete=false;}else{vals.push(v);sum+=v;}}if(new Set(vals).size!==vals.length){console.warn(`Cage ${cage.id} unique violation:`,vals);ok=false;els.forEach(e=>e.classList.add('incorrect'));}if(complete&&sum!==cage.sum){console.warn(`Cage ${cage.id} sum violation: got ${sum}, expected ${cage.sum}`);ok=false;els.forEach(e=>e.classList.add('incorrect'));}}return ok;}
     function isUnitValid(unit){const nums=unit.filter(n=>n!==0);return new Set(nums).size===nums.length;}
     function getRow(g,r){return g[r];} function getCol(g,c){return g.map(rw=>rw[c]);} function getBlock(g,b){const sr=Math.floor(b/3)*3,sc=(b%3)*3,bl=[];for(let r=0;r<3;r++)for(let c=0;c<3;c++)bl.push(g[sr+r][sc+c]);return bl;}
+
+    // --- НОВЫЙ БЛОК: ЛОГИЧЕСКИЙ РЕШАТЕЛЬ ---
+
+    /**
+     * Находит ОДНУ скрытую одиночку (Hidden Single) на доске.
+     * Работает только для классического режима.
+     * @returns {object | null} Объект { r, c, digit } или null, если не найдено.
+     */
+    function findHiddenSingles() {
+        if (currentMode !== 'classic') return null;
+
+        for (let i = 0; i < 9; i++) {
+            // Проверка строк, столбцов, блоков
+            const rowResult = findHiddenSingleInUnit(getRowIndices(i));
+            if (rowResult) return rowResult;
+            const colResult = findHiddenSingleInUnit(getColIndices(i));
+            if (colResult) return colResult;
+            const blockResult = findHiddenSingleInUnit(getBlockIndices(i));
+            if (blockResult) return blockResult;
+        }
+        return null; // Не найдено
+    }
+
+    /**
+     * Ищет Hidden Single внутри заданного юнита (массива индексов ячеек [r, c]).
+     * @param {number[][]} unitIndices - Массив пар [r, c] ячеек юнита.
+     * @returns {object | null} Объект { r, c, digit } или null.
+     */
+    function findHiddenSingleInUnit(unitIndices) {
+        for (let digit = 1; digit <= 9; digit++) {
+            let possiblePlaces = []; // Массив координат [r, c]
+            let digitAlreadyPresent = false;
+
+            for (const [r, c] of unitIndices) {
+                const cellData = userGrid[r]?.[c];
+                if (!cellData) continue; // Пропуск некорректных данных
+
+                if (cellData.value === digit) {
+                    digitAlreadyPresent = true;
+                    break; // Цифра уже есть в юните, искать ее не нужно
+                }
+                if (cellData.value === 0) { // Только пустые ячейки
+                    // Получаем кандидатов (если заметок нет, то все цифры возможны, иначе - только заметки)
+                    const candidates = (cellData.notes && cellData.notes.size > 0)
+                       ? cellData.notes
+                       : new Set([1, 2, 3, 4, 5, 6, 7, 8, 9]); // TODO: Улучшить - нужны реальные кандидаты по правилам
+
+                    if (candidates.has(digit)) {
+                        possiblePlaces.push([r, c]);
+                    }
+                }
+            }
+
+            // Если цифра не присутствует и для нее есть ровно одно место
+            if (!digitAlreadyPresent && possiblePlaces.length === 1) {
+                const [r, c] = possiblePlaces[0];
+                console.log(`Hidden Single found: Digit ${digit} in cell [${r}, ${c}] (unit check)`);
+                return { r, c, digit };
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Применяет найденный Hidden Single на доску.
+     * @param {object} foundInfo - Объект { r, c, digit }.
+     */
+    function applyFoundSingle(foundInfo) {
+        if (!foundInfo) return;
+        const { r, c, digit } = foundInfo;
+        if (userGrid[r]?.[c]?.value === 0) {
+            console.log(`Applying Hidden Single: Setting [${r}, ${c}] = ${digit}`);
+            pushHistoryState(); // Сохраняем перед изменением
+            userGrid[r][c].value = digit;
+            if (userGrid[r][c].notes) userGrid[r][c].notes.clear();
+            stateChanged = true; // Используем флаг для saveGameState в вызывающей функции
+            renderCell(r, c); // Обновляем ячейку
+            // Выделяем найденную ячейку для наглядности
+            const cellElement = boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
+            if(cellElement) {
+                clearSelection();
+                selectedCell = cellElement;
+                selectedRow = r;
+                selectedCol = c;
+                selectedCell.classList.add('selected');
+                highlightRelatedCells(r, c); // Подсвечиваем
+                // Короткая вспышка
+                 const hintColor = getComputedStyle(document.documentElement).getPropertyValue('--highlight-hint-flash').trim() || '#fffacd';
+                 selectedCell.style.transition = 'background-color 0.1s ease-out';
+                 selectedCell.style.backgroundColor = hintColor;
+                 setTimeout(() => {
+                     if(selectedCell && selectedCell.dataset.row == r && selectedCell.dataset.col == c) { // Проверка, что ячейка та же
+                        selectedCell.style.backgroundColor = '';
+                        selectedCell.style.transition = '';
+                     }
+                 }, 600);
+            }
+        } else {
+             console.warn(`Attempted to apply Hidden Single ${digit} to already filled cell [${r}, ${c}]`);
+        }
+    }
+
+
+    /**
+     * Выполняет один шаг логического решателя (поиск Hidden Single).
+     */
+    function doLogicStep() {
+         console.log("--- Logic Step ---");
+         if (currentMode !== 'classic') {
+             showError("Логический решатель работает только для классики.");
+             return;
+         }
+         if (isGameSolved()) {
+             showSuccess("Судоку уже решено!");
+             return;
+         }
+         clearErrors(); // Убираем предыдущие подсветки ошибок
+
+         const found = findHiddenSingles();
+         if (found) {
+             applyFoundSingle(found);
+             showSuccess(`Найден Hidden Single: ${found.digit} в [${String.fromCharCode(65 + found.r)}${found.c + 1}]`);
+             saveGameState(); // Сохраняем после успешного шага
+             // Обновляем состояние кнопок (может быть, игра решилась)
+             updateLogicSolverButtonsState();
+         } else {
+             showError("Не найдено простых шагов (Hidden Singles).");
+             // Можно добавить поиск других техник здесь в будущем
+         }
+    }
+
+    /**
+     * Запускает логический решатель до тех пор, пока он может находить Hidden Singles.
+     */
+    function runLogicSolver() {
+         console.log("--- Running Logic Solver (Hidden Singles) ---");
+         if (currentMode !== 'classic') { showError("Логический решатель работает только для классики."); return; }
+         if (isGameSolved()) { showSuccess("Судоку уже решено!"); return; }
+         if (isLogicSolverRunning) { console.log("Solver already running."); return; }
+
+         isLogicSolverRunning = true;
+         logicSolveButton.disabled = true; // Отключаем кнопку на время работы
+         logicStepButton.disabled = true;
+         statusMessageElement.textContent = "Решаю..."; statusMessageElement.className = '';
+
+         let stepsMade = 0;
+         let foundInCycle;
+
+         function solverCycle() {
+             if (isGameSolved()) {
+                 showSuccess(`Решено за ${stepsMade} шаг(ов)!`);
+                 isLogicSolverRunning = false;
+                 updateLogicSolverButtonsState();
+                 saveGameState();
+                 return;
+             }
+
+             foundInCycle = findHiddenSingles();
+             if (foundInCycle) {
+                 applyFoundSingle(foundInCycle);
+                 stepsMade++;
+                 // Продолжаем со следующей итерацией через setTimeout для отзывчивости UI
+                 setTimeout(solverCycle, 50); // Небольшая задержка
+             } else {
+                 // Больше нет Hidden Singles
+                 showError(`Не найдено больше простых шагов после ${stepsMade} шагов.`);
+                 isLogicSolverRunning = false;
+                 updateLogicSolverButtonsState();
+                 saveGameState(); // Сохраняем финальное состояние
+             }
+         }
+         solverCycle(); // Запускаем первый цикл
+    }
+
+     /**
+      * Обновляет состояние кнопок логического решателя.
+      */
+     function updateLogicSolverButtonsState() {
+         const enabled = currentMode === 'classic' && !isGameSolved() && !isLogicSolverRunning;
+         if (logicStepButton) logicStepButton.disabled = !enabled;
+         if (logicSolveButton) logicSolveButton.disabled = !enabled;
+     }
+
+    // --- Вспомогательные для логического решателя ---
+    function getRowIndices(r) { const idx = []; for(let c=0; c<9; c++) idx.push([r, c]); return idx; }
+    function getColIndices(c) { const idx = []; for(let r=0; r<9; r++) idx.push([r, c]); return idx; }
+    function getBlockIndices(blockIndex) {
+        const startRow = Math.floor(blockIndex / 3) * 3;
+        const startCol = (blockIndex % 3) * 3;
+        const idx = [];
+        for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) idx.push([startRow + r, startCol + c]);
+        return idx;
+    }
+    // --- КОНЕЦ БЛОКА ЛОГИЧЕСКОГО РЕШАТЕЛЯ ---
 
 
     // --- Обработчики Событий ---
@@ -166,142 +325,16 @@ document.addEventListener('DOMContentLoaded', () => {
         difficultyButtonsContainer?.addEventListener('click', (event) => { const target = event.target.closest('button.difficulty-button'); if (target && !target.classList.contains('selected')) { difficultyButtonsContainer.querySelectorAll('.selected').forEach(btn => btn.classList.remove('selected')); target.classList.add('selected'); const selectedDifficulty = target.dataset.difficulty; const selectedMode = gameModeSelectionContainer?.querySelector('button.selected')?.dataset.mode || 'classic'; console.log(`DIFFICULTY selected: ${selectedDifficulty}. Starting with mode: ${selectedMode}`); initGame(selectedMode, selectedDifficulty); } });
         themeToggleCheckbox?.addEventListener('change', handleThemeToggle);
         backToInitialButton?.addEventListener('click', () => { console.log("Back btn"); showScreen(initialScreen); checkContinueButton(); });
-
-        boardElement?.addEventListener('click', (e)=>{ try { /*...*/ const target = e.target.closest('.cell'); if (!target || isShowingAd || isGameSolved()) return; const r = parseInt(target.dataset.row); const c = parseInt(target.dataset.col); if (isNaN(r) || isNaN(c)) return; if (target === selectedCell) { clearSelection(); } else { clearSelection(); selectedCell = target; selectedRow = r; selectedCol = c; if (!(currentMode === 'classic' && target.classList.contains('given'))) { selectedCell.classList.add('selected'); } highlightRelatedCells(r, c); } clearErrors(); } catch (error) { console.error("!!!! BOARD CLICK HANDLER ERROR !!!!", error); showError(`Ошибка клика: ${error.message}`); } });
-
-        // --- ИЗМЕНЕНО: Обработчик Numpad с логированием ---
-        numpad?.addEventListener('click', (e)=>{
-            const button = e.target.closest('button');
-            console.log("Numpad click, button:", button); // DEBUG
-            if (!button || isShowingAd || isGameSolved()) {
-                 console.log("Numpad click ignored.", {button, isShowingAd, isSolved: isGameSolved()}); // DEBUG
-                 return;
-            }
-
-            // --- ИЗМЕНЕНО: Добавлено логирование для кнопки заметок ---
-            if (button.id === 'note-toggle-button') {
-                console.log("Note toggle button CLICKED!"); // DEBUG
-                isNoteMode = !isNoteMode;
-                console.log("isNoteMode toggled to:", isNoteMode); // DEBUG
-                updateNoteToggleButtonState();
-                return; // Важно! Выйти после обработки кнопки заметок
-            }
-            // --- КОНЕЦ ИЗМЕНЕНИЯ ---
-
-
-            if (!selectedCell) {
-                 console.log("Numpad click ignored: no cell selected."); // DEBUG
-                 return; // Игнорируем, если ячейка не выбрана
-            }
-            if (currentMode === 'classic' && selectedCell.classList.contains('given')) {
-                 console.log("Numpad click ignored: classic given cell."); // DEBUG
-                 return; // Не меняем заданные в классике
-            }
-
-            clearErrors();
-            if (!userGrid[selectedRow]?.[selectedCol]) {
-                 console.error("Numpad click error: grid data missing for selected cell."); // DEBUG
-                 return;
-            }
-
-            const cellData = userGrid[selectedRow][selectedCol];
-            let needsRender = false;
-            let stateChanged = false;
-            let potentialChange = false;
-            let fullRenderNeeded = false;
-
-            // Определяем потенциальное изменение для undo
-            if (button.id === 'erase-button') { potentialChange = (cellData.value !== 0) || (cellData.notes?.size > 0); }
-            else if (button.dataset.num) { const num = parseInt(button.dataset.num); if (isNoteMode) { potentialChange = (cellData.value === 0); } else { potentialChange = (cellData.value !== num); } }
-
-            // Сохраняем состояние ДО изменения, если оно возможно
-            if (potentialChange) { pushHistoryState(); }
-
-            // Обработка кнопок
-            if (button.id === 'erase-button') {
-                console.log(`Erase button pressed for [${selectedRow}, ${selectedCol}]`); // DEBUG
-                if (cellData.value !== 0) { cellData.value = 0; needsRender = true; stateChanged = true; }
-                else if (cellData.notes?.size > 0) { cellData.notes.clear(); needsRender = true; stateChanged = true; fullRenderNeeded = (currentMode === 'killer'); }
-            } else if (button.dataset.num) {
-                const num = parseInt(button.dataset.num);
-                console.log(`Number button ${num} pressed. Note mode: ${isNoteMode}`); // DEBUG
-                if (isNoteMode) {
-                    if (cellData.value === 0) {
-                        if (!(cellData.notes instanceof Set)) cellData.notes = new Set();
-                        if (cellData.notes.has(num)) cellData.notes.delete(num); else cellData.notes.add(num);
-                        needsRender = true; stateChanged = true; fullRenderNeeded = (currentMode === 'killer');
-                        console.log(`Notes updated for [${selectedRow}, ${selectedCol}]:`, cellData.notes); // DEBUG
-                    } else { console.log("Cannot add note to cell with value."); }
-                } else { // Ввод значения
-                    if (cellData.value !== num) { cellData.value = num; if (cellData.notes) cellData.notes.clear(); needsRender = true; stateChanged = true; }
-                    else { cellData.value = 0; needsRender = true; stateChanged = true; } // Повторный клик стирает
-                    console.log(`Value set for [${selectedRow}, ${selectedCol}]: ${cellData.value}`); // DEBUG
-                }
-            }
-
-            // Перерисовка
-            if (needsRender) {
-                console.log(`Needs render. Full render needed: ${fullRenderNeeded}`); // DEBUG
-                if (fullRenderNeeded) {
-                    renderBoard();
-                     if (selectedRow !== -1 && selectedCol !== -1) {
-                         selectedCell = boardElement?.querySelector(`.cell[data-row='${selectedRow}'][data-col='${selectedCol}']`);
-                         if (selectedCell && !(currentMode === 'classic' && selectedCell.classList.contains('given'))) {
-                             selectedCell.classList.add('selected'); highlightRelatedCells(selectedRow, selectedCol);
-                         } else { selectedCell = null; selectedRow = -1; selectedCol = -1; }
-                     }
-                } else {
-                    renderCell(selectedRow, selectedCol);
-                }
-            }
-            // Сохранение
-            if (stateChanged) { saveGameState(); }
-        });
+        boardElement?.addEventListener('click', (e)=>{ try { const target = e.target.closest('.cell'); if (!target || isShowingAd || isGameSolved()) return; const r = parseInt(target.dataset.row); const c = parseInt(target.dataset.col); if (isNaN(r) || isNaN(c)) return; if (target === selectedCell) { clearSelection(); } else { clearSelection(); selectedCell = target; selectedRow = r; selectedCol = c; if (!(currentMode === 'classic' && target.classList.contains('given'))) { selectedCell.classList.add('selected'); } highlightRelatedCells(r, c); } clearErrors(); } catch (error) { console.error("!!!! BOARD CLICK HANDLER ERROR !!!!", error); showError(`Ошибка клика: ${error.message}`); } });
+        numpad?.addEventListener('click', (e)=>{ const b=e.target.closest('button'); if (!b || isShowingAd || isGameSolved() || !selectedCell) return; if (currentMode === 'classic' && selectedCell.classList.contains('given')) return; if (b.id === 'note-toggle-button') { console.log("Note toggle button CLICKED!"); isNoteMode = !isNoteMode; console.log("isNoteMode toggled to:", isNoteMode); updateNoteToggleButtonState(); return; } clearErrors(); if (!userGrid[selectedRow]?.[selectedCol]) return; const cd=userGrid[selectedRow][selectedCol]; let r=false,ch=false,p=false,fR=false; if (b.id === 'erase-button') { p=(cd.value!==0)||(cd.notes?.size>0); } else if (b.dataset.num) { const n=parseInt(b.dataset.num); if (isNoteMode) {p=(cd.value===0);} else {p=(cd.value!==n);} } if (p&&!isGameSolved()) { pushHistoryState(); } if (b.id === 'erase-button') { if (cd.value !== 0) { cd.value = 0; r = true; ch = true; } else if (cd.notes?.size > 0) { cd.notes.clear(); r = true; ch = true; fR = (currentMode === 'killer'); } } else if (b.dataset.num) { const n = parseInt(b.dataset.num); if (isNoteMode) { if (cd.value === 0) { if (!(cd.notes instanceof Set)) cd.notes = new Set(); if (cd.notes.has(n)) cd.notes.delete(n); else cd.notes.add(n); r = true; ch = true; fR = (currentMode === 'killer'); } } else { if (cd.value !== n) { cd.value = n; if (cd.notes) cd.notes.clear(); r = true; ch = true; } else { cd.value = 0; r = true; ch = true; } } } if (r) { if (fR) { console.log("Note changed, forcing full renderBoard."); renderBoard(); if (selectedRow !== -1 && selectedCol !== -1) { selectedCell = boardElement?.querySelector(`.cell[data-row='${selectedRow}'][data-col='${selectedCol}']`); if (selectedCell && !(currentMode === 'classic' && selectedCell.classList.contains('given'))) { selectedCell.classList.add('selected'); highlightRelatedCells(selectedRow, selectedCol); } else { selectedCell = null; selectedRow = -1; selectedCol = -1; } } } else { renderCell(selectedRow, selectedCol); } } if (ch && !isGameSolved()) saveGameState(); });
         checkButton?.addEventListener('click', checkGame);
         undoButton?.addEventListener('click', handleUndo);
         hintButton?.addEventListener('click', ()=>{if(isShowingAd||isGameSolved())return;if(currentMode==='classic'&&hintsRemaining>0)provideHintInternal();else if(currentMode==='classic')offerRewardedAdForHints();else showError("Подсказки недоступны");});
         exitGameButton?.addEventListener('click', ()=>{console.log("Exit btn");stopTimer();showScreen(initialScreen);checkContinueButton();});
-        document.addEventListener('keydown', (e)=>{
-            if(document.activeElement.tagName==='INPUT'||isShowingAd||!gameContainer?.classList.contains('visible')||isGameSolved())return;
-            // --- ИЗМЕНЕНО: Добавлено логирование для 'n' ---
-            if(e.key.toLowerCase()==='n'||e.key.toLowerCase()==='т'){
-                console.log("N/Т key pressed, toggling note mode"); // DEBUG
-                isNoteMode=!isNoteMode;
-                updateNoteToggleButtonState();
-                e.preventDefault();
-                return;
-            }
-            // --- КОНЕЦ ИЗМЕНЕНИЯ ---
-            if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){ if(!selectedCell){const sc=boardElement?.querySelector(`.cell[data-row='0'][data-col='0']`);if(sc)sc.click();else return;}let nr=selectedRow,nc=selectedCol;const mv=(cur,d,m)=>Math.min(m,Math.max(0,cur+d));if(e.key==='ArrowUp')nr=mv(selectedRow,-1,8);if(e.key==='ArrowDown')nr=mv(selectedRow,1,8);if(e.key==='ArrowLeft')nc=mv(selectedCol,-1,8);if(e.key==='ArrowRight')nc=mv(selectedCol,1,8);if(nr!==selectedRow||nc!==selectedCol){const nextEl=boardElement?.querySelector(`.cell[data-row='${nr}'][data-col='${nc}']`);if(nextEl)nextEl.click();}e.preventDefault();return; }
-            if(!selectedCell||(currentMode==='classic'&&selectedCell.classList.contains('given')))return;
-            if(!userGrid[selectedRow]?.[selectedCol])return;
-
-            const cd=userGrid[selectedRow][selectedCol];
-            let r=false,ch=false,p=false,fR=false;
-
-            if(e.key>='1'&&e.key<='9'){ const n=parseInt(e.key); if(isNoteMode){p=(cd.value===0);}else{p=(cd.value!==n);} }
-            else if(e.key==='Backspace'||e.key==='Delete'){ p=(cd.value!==0)||(cd.notes?.size>0); }
-
-            if(p&&!isGameSolved()){pushHistoryState();}
-
-            if(e.key>='1'&&e.key<='9'){
-                clearErrors();const n=parseInt(e.key);
-                if(isNoteMode){ if(cd.value===0){if(!(cd.notes instanceof Set))cd.notes=new Set();if(cd.notes.has(n))cd.notes.delete(n);else cd.notes.add(n);r=true;ch=true;fR=(currentMode==='killer');} }
-                else{ if(cd.value!==n){cd.value=n;if(cd.notes)cd.notes.clear();r=true;ch=true;}else{cd.value=0;r=true;ch=true;} }
-                e.preventDefault();
-            } else if(e.key==='Backspace'||e.key==='Delete'){
-                clearErrors();
-                if(cd.value!==0){cd.value=0;r=true;ch=true;}
-                else if(cd.notes?.size>0){cd.notes.clear();r=true;ch=true;fR=(currentMode==='killer');}
-                e.preventDefault();
-            }
-
-            if(r){
-                if(fR){ console.log("Note changed by key, forcing full renderBoard."); renderBoard(); if(selectedRow!==-1&&selectedCol!==-1){selectedCell=boardElement?.querySelector(`.cell[data-row='${selectedRow}'][data-col='${selectedCol}']`);if(selectedCell&&!(currentMode==='classic'&&selectedCell.classList.contains('given'))){selectedCell.classList.add('selected');highlightRelatedCells(selectedRow,selectedCol);}else{selectedCell=null;selectedRow=-1;selectedCol=-1;}}}
-                else{ renderCell(selectedRow,selectedCol); }
-            }
-            if(ch&&!isGameSolved()){saveGameState();}
-        });
+        document.addEventListener('keydown', (e)=>{if(document.activeElement.tagName==='INPUT'||isShowingAd||!gameContainer?.classList.contains('visible')||isGameSolved())return; if(e.key.toLowerCase()==='n'||e.key.toLowerCase()==='т'){ console.log("N/T key pressed"); isNoteMode=!isNoteMode; updateNoteToggleButtonState(); e.preventDefault(); return; } if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();handleUndo();return;} if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){ if(!selectedCell){const sc=boardElement?.querySelector(`.cell[data-row='0'][data-col='0']`);if(sc)sc.click();else return;}let nr=selectedRow,nc=selectedCol;const mv=(cur,d,m)=>Math.min(m,Math.max(0,cur+d));if(e.key==='ArrowUp')nr=mv(selectedRow,-1,8);if(e.key==='ArrowDown')nr=mv(selectedRow,1,8);if(e.key==='ArrowLeft')nc=mv(selectedCol,-1,8);if(e.key==='ArrowRight')nc=mv(selectedCol,1,8);if(nr!==selectedRow||nc!==selectedCol){const nextEl=boardElement?.querySelector(`.cell[data-row='${nr}'][data-col='${nc}']`);if(nextEl)nextEl.click();}e.preventDefault();return; } if(!selectedCell||(currentMode==='classic'&&selectedCell.classList.contains('given')))return; if(!userGrid[selectedRow]?.[selectedCol])return; const cd=userGrid[selectedRow][selectedCol]; let r=false,ch=false,p=false,fR=false; if(e.key>='1'&&e.key<='9'){ const n=parseInt(e.key); if(isNoteMode){p=(cd.value===0);}else{p=(cd.value!==n);} } else if(e.key==='Backspace'||e.key==='Delete'){ p=(cd.value!==0)||(cd.notes?.size>0); } if(p&&!isGameSolved()){pushHistoryState();} if(e.key>='1'&&e.key<='9'){ clearErrors();const n=parseInt(e.key); if(isNoteMode){ if(cd.value===0){if(!(cd.notes instanceof Set))cd.notes=new Set();if(cd.notes.has(n))cd.notes.delete(n);else cd.notes.add(n);r=true;ch=true;fR=(currentMode==='killer');} } else{ if(cd.value!==n){cd.value=n;if(cd.notes)cd.notes.clear();r=true;ch=true;}else{cd.value=0;r=true;ch=true;} } e.preventDefault(); } else if(e.key==='Backspace'||e.key==='Delete'){ clearErrors(); if(cd.value!==0){cd.value=0;r=true;ch=true;} else if(cd.notes?.size>0){cd.notes.clear();r=true;ch=true;fR=(currentMode==='killer');} e.preventDefault(); } if(r){ if(fR){ console.log("Note changed by key, forcing full renderBoard."); renderBoard(); if(selectedRow!==-1&&selectedCol!==-1){selectedCell=boardElement?.querySelector(`.cell[data-row='${selectedRow}'][data-col='${selectedCol}']`);if(selectedCell&&!(currentMode==='classic'&&selectedCell.classList.contains('given'))){selectedCell.classList.add('selected');highlightRelatedCells(selectedRow,selectedCol);}else{selectedCell=null;selectedRow=-1;selectedCol=-1;}}} else{ renderCell(selectedRow,selectedCol); } } if(ch&&!isGameSolved()){saveGameState();} });
+        // --- НОВОЕ: Обработчики для кнопок решателя ---
+        logicStepButton?.addEventListener('click', doLogicStep);
+        logicSolveButton?.addEventListener('click', runLogicSolver);
 
         console.log("Event listeners added.");
     }
