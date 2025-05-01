@@ -44,7 +44,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // === Placeholder Рекламы ===
     let isAdReady = false, isShowingAd = false; function initializeAds(){console.log("ADS Init...");setTimeout(()=>{preloadRewardedAd();},2000);} function preloadRewardedAd(){if(isAdReady||isShowingAd)return;console.log("ADS Load...");isAdReady=false;setTimeout(()=>{if(!isShowingAd){isAdReady=true;console.log("ADS Ready.");}else{console.log("ADS Load aborted (showing).");}},3000+Math.random()*2000);} function showRewardedAd(callbacks){if(!isAdReady||isShowingAd){console.log("ADS Not ready/Showing.");if(callbacks.onError)callbacks.onError("Реклама не готова.");preloadRewardedAd();return;}console.log("ADS Show...");isShowingAd=true;isAdReady=false;if(statusMessageElement){statusMessageElement.textContent="Показ рекламы...";statusMessageElement.className='';}document.body.style.pointerEvents='none';setTimeout(()=>{const success=Math.random()>0.2;document.body.style.pointerEvents='auto';if(statusMessageElement)statusMessageElement.textContent="";isShowingAd=false;console.log("ADS Show End.");if(success){console.log("ADS Success!");if(callbacks.onSuccess)callbacks.onSuccess();}else{console.log("ADS Error/Skip.");if(callbacks.onError)callbacks.onError("Реклама не загружена / пропущена.");}preloadRewardedAd();},5000);}
 
-
     // --- Функции Управления Экранами ---
     function showScreen(screenToShow) { [initialScreen, newGameOptionsScreen, gameContainer].forEach(s => s?.classList.remove('visible')); if(screenToShow) screenToShow.classList.add('visible'); else console.error("showScreen: null screen!"); }
 
@@ -64,8 +63,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function boardStringToObjectArray(boardString){if(!boardString||typeof boardString!=='string')return[];const g=[];for(let r=0;r<9;r++){g[r]=[];for(let c=0;c<9;c++){const i=r*9+c;const h=boardString[i]||'.';const v=(h==='.'||h==='0'||!"123456789".includes(h))?0:parseInt(h);g[r][c]={value:v,notes:new Set()};}}return g;}
     function clearSelection(){if(selectedCell)selectedCell.classList.remove('selected');if(boardElement)boardElement.querySelectorAll('.cell.highlighted').forEach(c=>c.classList.remove('highlighted'));selectedCell=null;selectedRow=-1;selectedCol=-1;}
     function updateNoteToggleButtonState(){if(noteToggleButton){noteToggleButton.classList.toggle('active',isNoteMode);noteToggleButton.title=`Заметки (${isNoteMode?'ВКЛ':'ВЫКЛ'})`;}}
-    function highlightRelatedCells(row, col) { /*console.log(`Highlighting for [${row}, ${col}], mode: ${currentMode}`);*/ if (!boardElement) return; boardElement.querySelectorAll('.cell.highlighted').forEach(el=>el.classList.remove('highlighted')); if (currentMode === 'killer' && currentSolverData && selectedCell) { const cellId = getCellId(row, col); if (!cellId) return; const cageIndex = currentSolverData.cellToCageMap[cellId]; if (cageIndex !== undefined) { const cage = currentSolverData.cageDataArray[cageIndex]; if (cage?.cells) { cage.cells.forEach(cId => { const coords = getCellCoords(cId); if(coords) boardElement.querySelector(`.cell[data-row='${coords.r}'][data-col='${coords.c}']`)?.classList.add('highlighted'); }); } } else { boardElement.querySelectorAll(`.cell[data-row='${row}'], .cell[data-col='${col}']`).forEach(el=>el.classList.add('highlighted')); } } else { boardElement.querySelectorAll(`.cell[data-row='${row}'], .cell[data-col='${col}']`).forEach(el=>el.classList.add('highlighted')); } const cellValue = userGrid[row]?.[col]?.value; if (cellValue && cellValue !== 0) { /*console.log(`Highlighting cells with value ${cellValue}`);*/ for (let r_=0;r_<9;r_++) { for (let c_=0;c_<9;c_++) { if (userGrid[r_]?.[c_]?.value === cellValue) { boardElement.querySelector(`.cell[data-row='${r_}'][data-col='${c_}']`)?.classList.add('highlighted'); }}}} }
-    function updateHintButtonState(){if(!hintButton)return;/*console.log(`Upd hints. Mode:${currentMode}, Left:${hintsRemaining}`);*/const s=isGameSolved();let canHint=false,title="";if(currentMode==='classic'){canHint=currentSolution&&!s;if(!currentSolution)title="Н/Д";else if(s)title="Решено";else if(hintsRemaining>0)title="Подсказка";else title=`+${MAX_HINTS}(Ad)`;}else{canHint=false;title="Н/Д(Killer)";}hintButton.disabled=!canHint;hintButton.title=title;hintButton.textContent=`💡 ${hintsRemaining}/${MAX_HINTS}`;if(currentMode==='killer')hintButton.disabled=true;else if(hintsRemaining<=0&&canHint)hintButton.disabled=false;/*console.log(`Hint btn: disabled=${hintButton.disabled}, title='${hintButton.title}'`);*/}
+    function highlightRelatedCells(row, col) { /* ... как раньше ... */ if (!boardElement) return; boardElement.querySelectorAll('.cell.highlighted').forEach(el=>el.classList.remove('highlighted')); if (currentMode === 'killer' && currentSolverData && selectedCell) { const cellId = getCellId(row, col); if (!cellId) return; const cageIndex = currentSolverData.cellToCageMap[cellId]; if (cageIndex !== undefined) { const cage = currentSolverData.cageDataArray[cageIndex]; if (cage?.cells) { cage.cells.forEach(cId => { const coords = getCellCoords(cId); if(coords) boardElement.querySelector(`.cell[data-row='${coords.r}'][data-col='${coords.c}']`)?.classList.add('highlighted'); }); } } else { boardElement.querySelectorAll(`.cell[data-row='${row}'], .cell[data-col='${col}']`).forEach(el=>el.classList.add('highlighted')); } } else { boardElement.querySelectorAll(`.cell[data-row='${row}'], .cell[data-col='${col}']`).forEach(el=>el.classList.add('highlighted')); } const cellValue = userGrid[row]?.[col]?.value; if (cellValue && cellValue !== 0) { for (let r_=0;r_<9;r_++) { for (let c_=0;c_<9;c_++) { if (userGrid[r_]?.[c_]?.value === cellValue) { boardElement.querySelector(`.cell[data-row='${r_}'][data-col='${c_}']`)?.classList.add('highlighted'); }}}} }
+    function updateHintButtonState(){if(!hintButton)return;const s=isGameSolved();let canHint=false,title="";if(currentMode==='classic'){canHint=currentSolution&&!s;if(!currentSolution)title="Н/Д";else if(s)title="Решено";else if(hintsRemaining>0)title="Подсказка";else title=`+${MAX_HINTS}(Ad)`;}else{canHint=false;title="Н/Д(Killer)";}hintButton.disabled=!canHint;hintButton.title=title;hintButton.textContent=`💡 ${hintsRemaining}/${MAX_HINTS}`;if(currentMode==='killer')hintButton.disabled=true;else if(hintsRemaining<=0&&canHint)hintButton.disabled=false;}
 
     // --- Инициализация ИГРЫ ---
     function initGame(mode = "classic", difficulty = "medium", restoreState = null) {
@@ -108,55 +107,18 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateTimerDisplay(){if(!timerElement)return;const m=Math.floor(secondsElapsed/60),s=secondsElapsed%60;timerElement.textContent=`Время: ${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;}
     function resumeTimerIfNeeded(){const s=isGameSolved(),v=gameContainer?.classList.contains('visible');if(v&&!s)startTimer();else stopTimer();}
 
-
     // --- Отрисовка ---
     function renderBoard() { console.log(`Render board start: mode=${currentMode}`); if (!boardElement) { console.error("Board element missing!"); return; } boardElement.innerHTML = ''; if (!userGrid || userGrid.length !== 9) { showError("Invalid grid data for rendering."); return; } const cellElementsMap = {}; for (let r = 0; r < 9; r++) { if (!userGrid[r] || userGrid[r].length !== 9) continue; for (let c = 0; c < 9; c++) { const cellId = getCellId(r, c); if (!cellId) continue; const cellElement = createCellElement(r, c); boardElement.appendChild(cellElement); cellElementsMap[cellId] = cellElement; } } if (currentMode === "killer" && currentSolverData?.cageDataArray) { /*console.log("Rendering Killer Cages...");*/ currentSolverData.cageDataArray.forEach((cage, cageIndex) => { if (!cage || !Array.isArray(cage.cells) || cage.cells.length === 0) { console.warn(`Skipping invalid cage data at index ${cageIndex}`); return; } const cageCellSet = new Set(cage.cells); let anchorCellId = null; let minRow = 9, minCol = 9; cage.cells.forEach(cellId => { const coords = getCellCoords(cellId); if (coords) { if (coords.r < minRow) { minRow = coords.r; minCol = coords.c; anchorCellId = cellId; } else if (coords.r === minRow && coords.c < minCol) { minCol = coords.c; anchorCellId = cellId; } } }); cage.cells.forEach(cellId => { const cellElement = cellElementsMap[cellId]; if (!cellElement) return; cellElement.classList.add('cage-cell'); if (cellId === anchorCellId) { cellElement.classList.add('cage-sum-anchor'); if (!cellElement.querySelector('.cage-sum')) { const sumSpan = document.createElement('span'); sumSpan.className = 'cage-sum'; sumSpan.textContent = cage.sum; cellElement.appendChild(sumSpan); } } const coords = getCellCoords(cellId); if (!coords) return; const { r, c } = coords; const neighbors = getNeighbors(r, c); if (r === 0 || !neighbors.top || !cageCellSet.has(neighbors.top)) { cellElement.classList.add('cage-inner-border-top'); } if (c === 0 || !neighbors.left || !cageCellSet.has(neighbors.left)) { cellElement.classList.add('cage-inner-border-left'); } if (r === 8 || !neighbors.bottom || !cageCellSet.has(neighbors.bottom)) { cellElement.classList.add('cage-inner-border-bottom'); } if (c === 8 || !neighbors.right || !cageCellSet.has(neighbors.right)) { cellElement.classList.add('cage-inner-border-right'); } }); }); /*console.log("Cage rendering finished.");*/ } console.log("Board rendering complete."); }
     function createCellElement(r, c) { const cell=document.createElement('div');cell.classList.add('cell'); cell.dataset.row=r;cell.dataset.col=c; const cd=userGrid[r]?.[c]; if(!cd){cell.textContent='?';console.warn(`Missing grid data for ${r},${c}`);return cell;} const vc=document.createElement('div');vc.classList.add('cell-value-container'); const nc=document.createElement('div');nc.classList.add('cell-notes-container'); if(cd.value!==0){ vc.textContent=cd.value;vc.style.display='flex';nc.style.display='none'; if(currentMode==='classic'&&currentPuzzle){ const i=r*9+c; if(currentPuzzle[i]&&currentPuzzle[i]!=='.')cell.classList.add('given'); } } else if(cd.notes instanceof Set&&cd.notes.size>0){ vc.style.display='none';nc.style.display='grid';nc.innerHTML=''; for(let n=1;n<=9;n++){const nd=document.createElement('div');nd.classList.add('note-digit');nd.textContent=cd.notes.has(n)?n:'';nc.appendChild(nd);} } else { vc.textContent='';vc.style.display='flex';nc.style.display='none'; } cell.appendChild(vc);cell.appendChild(nc); if((c+1)%3===0&&c<8)cell.classList.add('thick-border-right'); if((r+1)%3===0&&r<8)cell.classList.add('thick-border-bottom'); return cell; }
     function renderCell(r, c) { if (!boardElement) return; if (currentMode === 'killer' && userGrid[r]?.[c]?.value === 0) { console.log("Note changed in Killer mode, forcing full board render."); renderBoard(); if (selectedRow === r && selectedCol === c) { selectedCell = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`); if (selectedCell) { selectedCell.classList.add('selected'); highlightRelatedCells(r, c); } else { selectedCell = null; selectedRow = -1; selectedCol = -1; } } return; } const oldCell = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`); if (oldCell) { try { const newCell = createCellElement(r, c); oldCell.classList.forEach(cls => { if(cls!=='cell' && !cls.startsWith('thick-') && !cls.startsWith('cage-inner-')) newCell.classList.add(cls); }); ['cage-cell', 'cage-sum-anchor', 'cage-inner-border-top', 'cage-inner-border-bottom', 'cage-inner-border-left', 'cage-inner-border-right'].forEach(cls => { if (oldCell.classList.contains(cls)) newCell.classList.add(cls); }); const oldSum = oldCell.querySelector('.cage-sum'); if (oldSum) newCell.appendChild(oldSum.cloneNode(true)); if (selectedRow === r && selectedCol === c) selectedCell = newCell; oldCell.replaceWith(newCell); } catch (error) { console.error(`Error render cell [${r}, ${c}]:`, error); renderBoard(); } } else { console.warn(`renderCell: Cell [${r},${c}] not found? Render full.`); renderBoard(); } }
 
     // --- Логика подсказки ---
-    // Функция получения значения из решения (только для классики)
-    function getSolutionValue(row, col) {
-         if (currentMode !== 'classic' || !currentSolution) return null;
-         const index = row * 9 + col;
-         if (index >= currentSolution.length) return null;
-         const char = currentSolution[index];
-         return (char === '.' || char === '0') ? 0 : parseInt(char);
-     }
     function provideHintInternal(){if(currentMode!=='classic')return showError("Подсказки только в классике");if(!selectedCell)return showError("Выберите ячейку"); const r=selectedRow,c=selectedCol;if(r<0||c<0||!userGrid[r]?.[c])return showError("Ошибка данных ячейки"); if(userGrid[r][c].value!==0)return showError("Ячейка заполнена");if(selectedCell.classList.contains('given')) return showError("Начальная цифра");pushHistoryState();let hintUsed=false;try{const sv=getSolutionValue(r,c);if(sv===null)throw new Error("Решение недоступно");if(sv>0){console.log(`Hint [${r},${c}]: ${sv}`);userGrid[r][c].value=sv;if(userGrid[r][c].notes)userGrid[r][c].notes.clear();renderCell(r,c);const hEl=boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);if(hEl){hEl.classList.remove('selected');const hc=getComputedStyle(document.documentElement).getPropertyValue('--highlight-hint-flash').trim()||'#fffacd';hEl.style.transition='background-color 0.1s ease-out';hEl.style.backgroundColor=hc;setTimeout(()=>{if(hEl){hEl.style.backgroundColor='';hEl.style.transition='';}clearSelection();},500);}else{clearSelection();}hintsRemaining--;hintUsed=true;updateHintButtonState();clearErrors();saveGameState();if(isGameSolved()){checkGame();updateLogicSolverButtonsState();}}else throw new Error(`Err getting solution [${r},${c}]`);}catch(e){console.error("Hint Err:",e.message);showError(e.message);if(!hintUsed&&historyStack.length>0){historyStack.pop();updateUndoButtonState();}}}
     function offerRewardedAdForHints(){if(currentMode!=='classic'||isShowingAd)return;console.log("Offering ad...");if(confirm(`Подсказки зак-сь! Реклама за ${MAX_HINTS} подсказку?`)){if(!isAdReady){showError("Реклама грузится...");preloadRewardedAd();return;}showRewardedAd({onSuccess:()=>{hintsRemaining+=MAX_HINTS;updateHintButtonState();saveGameState();showSuccess(`+${MAX_HINTS} подсказка!`);},onError:(msg)=>{showError(`Ошибка: ${msg||'Реклама?'} Подсказка не добавлена.`);}});}}
 
     // --- Логика Проверки ---
     function checkGame(){console.log(`Check: ${currentMode}`);clearErrors();if(!userGrid||userGrid.length!==9)return;let isValid=false;let isComplete=!userGrid.flat().some(c=>!c||c.value===0);if(currentMode==="classic"){if(!currentSolution){showError("Нет решения!");return;}isValid=validateClassicSudoku();}else if(currentMode==="killer"){if(!currentSolverData){showError("Нет данных Killer!");return;}isValid=validateKillerSudoku();}if(isValid&&isComplete){showSuccess("Поздравляем! Решено верно!");stopTimer();clearSelection();updateHintButtonState();updateLogicSolverButtonsState();}else if(!isValid){showError("Найдены ошибки.");}else{if(statusMessageElement){statusMessageElement.textContent="Пока верно, но не закончено.";statusMessageElement.className='';}}}
-    // --- ИСПРАВЛЕНО: validateClassicSudoku ---
-    function validateClassicSudoku(){
-        let ok=true;
-        if(!currentSolution){console.error("Classic valid Err: no solution!");return false;}
-        for(let r=0;r<9;r++){
-            for(let c=0;c<9;c++){
-                const cd=userGrid[r]?.[c];
-                const el=boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
-                if(!cd||!el||cd.value===0||el.classList.contains('given'))continue;
-                // Используем прямой доступ к currentSolution
-                const index = r * 9 + c;
-                const solChar = currentSolution[index];
-                const sv = (solChar === '.' || solChar === '0') ? 0 : parseInt(solChar);
-
-                if(sv === 0){ // Если в решении пусто (не должно быть для классики)
-                    console.error(`Classic validation Error: Solution has empty value at ${r},${c}`);
-                    ok=false; break;
-                }
-                if(cd.value!==sv){
-                    el.classList.add('incorrect');
-                    ok=false;
-                    // Не прерываем, чтобы найти все ошибки
-                }
-            }
-            if(!ok) break; // Если уже нашли ошибку в строке, нет смысла идти дальше по ней
-        }
-        return ok;
-    }
-    // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+    function validateClassicSudoku(){let ok=true;if(!currentSolution){console.error("Classic valid Err: no solution!");return false;}for(let r=0;r<9;r++){for(let c=0;c<9;c++){const cd=userGrid[r]?.[c];const el=boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);if(!cd||!el||cd.value===0||el.classList.contains('given'))continue;const index=r*9+c;const solChar=currentSolution[index];const sv=(solChar==='.'||solChar==='0')?0:parseInt(solChar);if(sv===0){console.error(`Classic valid Err: Solution has 0 at ${r},${c}`);ok=false;break;}if(cd.value!==sv){el.classList.add('incorrect');ok=false;}}if(!ok)break;}return ok;}
     function validateKillerSudoku(){let ok=true;const grid=userGrid.map(r=>r.map(c=>c.value));for(let i=0;i<9;i++){if(!isUnitValid(getRow(grid,i))||!isUnitValid(getCol(grid,i))||!isUnitValid(getBlock(grid,i))){ok=false;break;}}if(!ok){showError("Нарушены правила Судоку.");return false;}if(!currentSolverData?.cageDataArray)return false;for(const cage of currentSolverData.cageDataArray){const vals=[];let sum=0;let complete=true;let els=[];for(const cid of cage.cells){const crds=getCellCoords(cid);if(!crds)continue;const v=grid[crds.r][crds.c];const el=boardElement?.querySelector(`.cell[data-row='${crds.r}'][data-col='${crds.c}']`);if(el)els.push(el);if(v===0){complete=false;}else{vals.push(v);sum+=v;}}if(new Set(vals).size!==vals.length){console.warn(`Cage ${cage.id} unique violation:`,vals);ok=false;els.forEach(e=>e.classList.add('incorrect'));}if(complete&&sum!==cage.sum){console.warn(`Cage ${cage.id} sum violation: got ${sum}, expected ${cage.sum}`);ok=false;els.forEach(e=>e.classList.add('incorrect'));}}return ok;}
     function isUnitValid(unit){const nums=unit.filter(n=>n!==0);return new Set(nums).size===nums.length;}
     function getRow(g,r){return g[r];} function getCol(g,c){return g.map(rw=>rw[c]);} function getBlock(g,b){const sr=Math.floor(b/3)*3,sc=(b%3)*3,bl=[];for(let r=0;r<3;r++)for(let c=0;c<3;c++)bl.push(g[sr+r][sc+c]);return bl;}
@@ -168,76 +130,117 @@ document.addEventListener('DOMContentLoaded', () => {
     function findHiddenSingle() { if(currentMode!=='classic')return null; const allCands={}; for(let r=0;r<9;r++){for(let c=0;c<9;c++){if(userGrid[r]?.[c]?.value===0){allCands[getCellId(r,c)]=calculateCandidates(r,c);}}} for(let i=0;i<9;i++){ const rowRes=findHiddenSingleInUnit(getRowIndices(i),allCands);if(rowRes)return rowRes; const colRes=findHiddenSingleInUnit(getColIndices(i),allCands);if(colRes)return colRes; const blkRes=findHiddenSingleInUnit(getBlockIndices(i),allCands);if(blkRes)return blkRes; } return null; }
     function findHiddenSingleInUnit(unitIndices, allCands) { for(let d=1;d<=9;d++){let places=[];let present=false;for(const[r,c] of unitIndices){const cell=userGrid[r]?.[c];if(!cell)continue;if(cell.value===d){present=true;break;}if(cell.value===0){const cands=allCands[getCellId(r,c)];if(cands?.has(d))places.push([r,c]);}}if(!present&&places.length===1){const[r,c]=places[0];console.log(`Hidden Single: ${d} at [${r},${c}]`);return{r,c,digit:d,technique:"Hidden Single"};}} return null; }
     function findNakedPair() { if(currentMode!=='classic')return null; const units=getAllUnitsIndices(); for(let i=0;i<units.length;i++){ const unit=units[i]; const cells2=[]; for(const[r,c] of unit){if(userGrid[r]?.[c]?.value===0){const cands=calculateCandidates(r,c);if(cands?.size===2)cells2.push({r,c,cands});}} if(cells2.length>=2){ for(let j=0;j<cells2.length;j++){for(let k=j+1;k<cells2.length;k++){const c1=cells2[j],c2=cells2[k];if(c1.cands.size===2&&c2.cands.size===2){let same=true;for(const d of c1.cands){if(!c2.cands.has(d)){same=false;break;}}if(same){const dArr=Array.from(c1.cands);const pCells=[getCellId(c1.r,c1.c),getCellId(c2.r,c2.c)];console.log(`Naked Pair found: ${dArr.join(',')} in ${pCells.join(',')}`);let elim=false;const unitSet=new Set(pCells);for(const[r_u,c_u]of unit){const id_u=getCellId(r_u,c_u);if(!unitSet.has(id_u)&&userGrid[r_u]?.[c_u]?.value===0){const notes=userGrid[r_u][c_u].notes??calculateCandidates(r_u,c_u);if(notes&&(notes.has(dArr[0])||notes.has(dArr[1]))){elim=true;break;}}}if(elim)return{unitType:getUnitType(i),unitIndex:i,cells:pCells,digits:dArr,technique:"Naked Pair"};else console.log("...no elims needed.");}}}}}} return null;}
-    function findNakedTriple() {
+    function findNakedTriple() { if (currentMode !== 'classic') return null; const units = getAllUnitsIndices(); for (let i = 0; i < units.length; i++) { const unitIndices = units[i]; const candidateCells = []; for (const [r, c] of unitIndices) { if (userGrid[r]?.[c]?.value === 0) { const candidates = calculateCandidates(r, c); if (candidates && (candidates.size === 2 || candidates.size === 3)) { candidateCells.push({ r, c, cands: candidates }); } } } if (candidateCells.length >= 3) { for (let j = 0; j < candidateCells.length; j++) { for (let k = j + 1; k < candidateCells.length; k++) { for (let l = k + 1; l < candidateCells.length; l++) { const c1 = candidateCells[j], c2 = candidateCells[k], c3 = candidateCells[l]; const combinedCands = new Set([...c1.cands, ...c2.cands, ...c3.cands]); if (combinedCands.size === 3) { const digits = Array.from(combinedCands); const tripleCells = [getCellId(c1.r, c1.c), getCellId(c2.r, c2.c), getCellId(c3.r, c3.c)]; console.log(`Naked Triple found: Digits ${digits.join(',')} in cells ${tripleCells.join(',')}`); let eliminationNeeded = false; const unitCellsSet = new Set(tripleCells); for (const [r_unit, c_unit] of unitIndices) { const cellId_unit = getCellId(r_unit, c_unit); if (!unitCellsSet.has(cellId_unit) && userGrid[r_unit]?.[c_unit]?.value === 0) { const notes = userGrid[r_unit][c_unit].notes ?? calculateCandidates(r_unit, c_unit); if (notes && (notes.has(digits[0]) || notes.has(digits[1]) || notes.has(digits[2]))) { eliminationNeeded = true; break; } } } if (eliminationNeeded) { return { unitType: getUnitType(i), unitIndex: i, cells: tripleCells, digits: digits, technique: "Naked Triple" }; } else { console.log("...but no eliminations possible from this triple."); } } } } } } } return null; }
+    function findPointingCandidates() { if (currentMode !== 'classic') return null; const allCands={}; for(let r=0;r<9;r++)for(let c=0;c<9;c++)if(userGrid[r]?.[c]?.value===0)allCands[getCellId(r,c)]=calculateCandidates(r,c); for (let bi = 0; bi < 9; bi++) { const bIdx = getBlockIndices(bi); const bCells = bIdx.map(([r,c])=>getCellId(r,c)); const bSet=new Set(bCells); for(let d=1;d<=9;d++){ const poss=bCells.filter(cid=>allCands[cid]?.has(d)); if(poss.length>=2&&poss.length<9){ const rows=new Set(),cols=new Set(); poss.forEach(cid=>{const crds=getCellCoords(cid);if(crds){rows.add(crds.r);cols.add(crds.c);}}); if(rows.size===1){const rIdx=rows.values().next().value;const elimInfo=tryEliminatePointing('Row',rIdx,bSet,d,allCands);if(elimInfo){console.log(`Pointing (Row): Digit ${d} in block ${bi} points @ row ${rIdx+1}`);return elimInfo;}} if(cols.size===1){const cIdx=cols.values().next().value;const elimInfo=tryEliminatePointing('Col',cIdx,bSet,d,allCands);if(elimInfo){console.log(`Pointing (Col): Digit ${d} in block ${bi} points @ col ${cIdx+1}`);return elimInfo;}}}} } return null;}
+    function tryEliminatePointing(unitType, unitIndex, blockCellIds, digit, allCandidatesMap) { const elims=[]; const unitIndices=unitType==='Row'?getRowIndices(unitIndex):getColIndices(unitIndex); for(const[r,c] of unitIndices){ const cellId=getCellId(r,c); if(!blockCellIds.has(cellId)){ if(userGrid[r]?.[c]?.value===0&&allCandidatesMap[cellId]?.has(digit)) elims.push(cellId); } } return elims.length>0?{type:'pointing',unitType,unitIndex,digit,eliminations:elims,technique:"Pointing Candidates"}:null;}
+    function findBoxLineReduction() {
         if (currentMode !== 'classic') return null;
-        const units = getAllUnitsIndices();
-        for (let i = 0; i < units.length; i++) {
-            const unitIndices = units[i];
-            const candidateCells = [];
-            for (const [r, c] of unitIndices) { if (userGrid[r]?.[c]?.value === 0) { const candidates = calculateCandidates(r, c); if (candidates && (candidates.size === 2 || candidates.size === 3)) { candidateCells.push({ r, c, cands: candidates }); } } }
-            if (candidateCells.length >= 3) {
-                for (let j = 0; j < candidateCells.length; j++) {
-                    for (let k = j + 1; k < candidateCells.length; k++) {
-                        for (let l = k + 1; l < candidateCells.length; l++) {
-                            const c1 = candidateCells[j], c2 = candidateCells[k], c3 = candidateCells[l];
-                            const combinedCands = new Set([...c1.cands, ...c2.cands, ...c3.cands]);
-                            if (combinedCands.size === 3) {
-                                const digits = Array.from(combinedCands);
-                                const tripleCells = [getCellId(c1.r, c1.c), getCellId(c2.r, c2.c), getCellId(c3.r, c3.c)];
-                                console.log(`Naked Triple found: Digits ${digits.join(',')} in cells ${tripleCells.join(',')}`);
-                                let eliminationNeeded = false;
-                                const unitCellsSet = new Set(tripleCells);
-                                for (const [r_unit, c_unit] of unitIndices) { const cellId_unit = getCellId(r_unit, c_unit); if (!unitCellsSet.has(cellId_unit) && userGrid[r_unit]?.[c_unit]?.value === 0) { const notes = userGrid[r_unit][c_unit].notes ?? calculateCandidates(r_unit, c_unit); if (notes && (notes.has(digits[0]) || notes.has(digits[1]) || notes.has(digits[2]))) { eliminationNeeded = true; break; } } }
-                                if (eliminationNeeded) { return { unitType: getUnitType(i), unitIndex: i, cells: tripleCells, digits: digits, technique: "Naked Triple" }; } else { console.log("...but no eliminations possible from this triple."); }
-                            }
-                        }
+        const allCands = {};
+        for (let r = 0; r < 9; r++) { for (let c = 0; c < 9; c++) { if (userGrid[r]?.[c]?.value === 0) allCands[getCellId(r, c)] = calculateCandidates(r, c); } }
+
+        // Check Rows first
+        for (let r = 0; r < 9; r++) {
+            const rowIndices = getRowIndices(r);
+            const result = checkReductionInLine('Row', r, rowIndices, allCands);
+            if (result) return result;
+        }
+        // Check Columns
+        for (let c = 0; c < 9; c++) {
+            const colIndices = getColIndices(c);
+            const result = checkReductionInLine('Col', c, colIndices, allCands);
+            if (result) return result;
+        }
+        return null;
+    }
+    function checkReductionInLine(lineType, lineIndex, lineIndices, allCandidatesMap) {
+        for (let d = 1; d <= 9; d++) {
+            const possibleCellsInLine = lineIndices.filter(([r, c]) => allCandidatesMap[getCellId(r, c)]?.has(d));
+            if (possibleCellsInLine.length >= 2 && possibleCellsInLine.length < 9) { // Need at least 2 for reduction
+                let targetBlockIndex = -1;
+                let confinedToBlock = true;
+                for (let i = 0; i < possibleCellsInLine.length; i++) {
+                    const [r, c] = possibleCellsInLine[i];
+                    const blockIndex = Math.floor(r / 3) * 3 + Math.floor(c / 3);
+                    if (i === 0) {
+                        targetBlockIndex = blockIndex;
+                    } else if (targetBlockIndex !== blockIndex) {
+                        confinedToBlock = false;
+                        break;
+                    }
+                }
+                if (confinedToBlock && targetBlockIndex !== -1) {
+                    const elimInfo = tryEliminateBoxLine(targetBlockIndex, lineType, lineIndex, d, allCandidatesMap);
+                    if (elimInfo) {
+                         console.log(`Box/Line Reduction: Digit ${d} in ${lineType} ${lineIndex+1} confined to block ${targetBlockIndex}`);
+                         return elimInfo;
                     }
                 }
             }
         }
         return null;
-    } // Конец findNakedTriple
-    function findPointingCandidates() { if (currentMode !== 'classic') return null; const allCands={}; for(let r=0;r<9;r++)for(let c=0;c<9;c++)if(userGrid[r]?.[c]?.value===0)allCands[getCellId(r,c)]=calculateCandidates(r,c); for (let bi = 0; bi < 9; bi++) { const bIdx = getBlockIndices(bi); const bCells = bIdx.map(([r,c])=>getCellId(r,c)); const bSet=new Set(bCells); for(let d=1;d<=9;d++){ const poss=bCells.filter(cid=>allCands[cid]?.has(d)); if(poss.length>=2&&poss.length<9){ const rows=new Set(),cols=new Set(); poss.forEach(cid=>{const crds=getCellCoords(cid);if(crds){rows.add(crds.r);cols.add(crds.c);}}); if(rows.size===1){const rIdx=rows.values().next().value;const elimInfo=tryEliminatePointing('Row',rIdx,bSet,d,allCands);if(elimInfo){console.log(`Pointing (Row): Digit ${d} in block ${bi} points @ row ${rIdx+1}`);return elimInfo;}} if(cols.size===1){const cIdx=cols.values().next().value;const elimInfo=tryEliminatePointing('Col',cIdx,bSet,d,allCands);if(elimInfo){console.log(`Pointing (Col): Digit ${d} in block ${bi} points @ col ${cIdx+1}`);return elimInfo;}}}} } return null;}
-    function tryEliminatePointing(unitType, unitIndex, blockCellIds, digit, allCandidatesMap) { const elims=[]; const unitIndices=unitType==='Row'?getRowIndices(unitIndex):getColIndices(unitIndex); for(const[r,c] of unitIndices){ const cellId=getCellId(r,c); if(!blockCellIds.has(cellId)){ if(userGrid[r]?.[c]?.value===0&&allCandidatesMap[cellId]?.has(digit)) elims.push(cellId); } } return elims.length>0?{type:'pointing',unitType,unitIndex,digit,eliminations:elims,technique:"Pointing Candidates"}:null;}
-
-    // --- ИСПРАВЛЕНО: Реализация applyFoundSingle добавлена ---
-    function applyFoundSingle(foundInfo) {
-        if (!foundInfo) return false;
-        const { r, c, digit } = foundInfo;
-        if (userGrid[r]?.[c]?.value === 0) {
-            console.log(`Apply Single: Setting [${r}, ${c}] = ${digit}`);
-            pushHistoryState(); // Сохраняем перед изменением
-            userGrid[r][c].value = digit;
-            if (userGrid[r][c].notes) userGrid[r][c].notes.clear(); // Очищаем заметки
-            renderCell(r, c); // Перерисовываем ячейку
-            // --- Подсветка найденной ячейки ---
-            const cellElement = boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
-            if(cellElement) {
-                clearSelection(); selectedCell = cellElement; selectedRow = r; selectedCol = c;
-                cellElement.classList.add('selected'); // Выделяем как выбранную
-                highlightRelatedCells(r, c); // Подсвечиваем соседей
-                const hintColor = getComputedStyle(document.documentElement).getPropertyValue('--highlight-hint-flash').trim() || '#fffacd';
-                cellElement.style.transition = 'background-color 0.1s ease-out';
-                cellElement.style.backgroundColor = hintColor;
-                setTimeout(() => {
-                    // Проверяем, что это все еще та самая выделенная ячейка
-                    if(selectedCell === cellElement) {
-                       cellElement.style.backgroundColor = ''; // Убираем фон
-                       cellElement.style.transition = '';
-                    }
-                }, 600);
-            }
-             // --- Конец подсветки ---
-            return true; // Успешно применили
-        } else {
-             console.warn(`Attempted to apply Single ${digit} to already filled/invalid cell [${r}, ${c}]`);
-             return false; // Не удалось применить
-        }
     }
-    // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+    function tryEliminateBoxLine(targetBlockIndex, lineType, lineIndex, digit, allCandidatesMap) {
+        const eliminations = [];
+        const blockIndices = getBlockIndices(targetBlockIndex);
+        for (const [r, c] of blockIndices) {
+            // Check if this cell is OUTSIDE the original line
+            const isOutsideLine = (lineType === 'Row' && r !== lineIndex) || (lineType === 'Col' && c !== lineIndex);
+            if (isOutsideLine) {
+                const cellId = getCellId(r, c);
+                if (userGrid[r]?.[c]?.value === 0 && allCandidatesMap[cellId]?.has(digit)) {
+                    eliminations.push(cellId);
+                }
+            }
+        }
+        return eliminations.length > 0 ? { type: 'boxLine', targetBlockIndex, lineType, lineIndex, digit, eliminations, technique: "Box/Line Reduction" } : null;
+    }
 
+    /** Применяет найденный Single */
+    function applyFoundSingle(foundInfo) { if (!foundInfo) return false; const { r, c, digit } = foundInfo; if (userGrid[r]?.[c]?.value === 0) { console.log(`Apply Single: [${r},${c}]=${digit}`); pushHistoryState(); userGrid[r][c].value = digit; if (userGrid[r][c].notes) userGrid[r][c].notes.clear(); renderCell(r, c); const el = boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`); if(el){ clearSelection(); selectedCell = el; selectedRow = r; selectedCol = c; el.classList.add('selected'); highlightRelatedCells(r, c); const hc=getComputedStyle(document.documentElement).getPropertyValue('--highlight-hint-flash').trim()||'#fffacd';el.style.transition='background-color 0.1s ease-out';el.style.backgroundColor=hc;setTimeout(()=>{if(selectedCell===el){el.style.backgroundColor='';el.style.transition='';}}, 600); } return true; } else { console.warn(`Tried apply Single ${digit} to filled [${r},${c}]`); return false; } }
+    /** Применяет исключение для Naked/Pointing Group */
     function applyNakedGroupElimination(elimInfo) { if (!elimInfo || !elimInfo.digits || !elimInfo.cells) return false; const { unitType, unitIndex, cells, digits, technique } = elimInfo; console.log(`Apply ${technique} Elim: Digits ${digits.join(',')} in ${unitType} ${getUnitIndexForDisplay(unitIndex)}`); const unitIndices = getUnitIndices(unitIndex); const groupCellsSet = new Set(cells); let eliminated = false; let changes = []; for (const [r, c] of unitIndices) { const cellId = getCellId(r, c); if (!groupCellsSet.has(cellId) && userGrid[r]?.[c]?.value === 0) { const cellData = userGrid[r][c]; if (!cellData.notes) cellData.notes = calculateCandidates(r, c) || new Set(); const origNotes = new Set(cellData.notes); let cellChanged = false; digits.forEach(digit => { if (cellData.notes.has(digit)) { /*console.log(`  - Remove ${digit} from ${cellId}`);*/ cellData.notes.delete(digit); eliminated = true; cellChanged = true; } }); if (cellChanged) { changes.push({r, c, notesBefore: origNotes, notesAfter: new Set(cellData.notes)}); renderCell(r, c); } } } if(eliminated){ pushHistoryState(); saveGameState(); updateLogicSolverButtonsState(); } return eliminated; }
-    function applyPointingElimination(elimInfo) { if (!elimInfo || !elimInfo.eliminations) return false; const { digit, eliminations, unitType, unitIndex } = elimInfo; console.log(`Apply Pointing Elim: Remove ${digit} from ${unitType} ${unitIndex+1} outside block`); let eliminated = false; let changes = []; eliminations.forEach(cellId => { const coords = getCellCoords(cellId); if(coords){ const {r,c}=coords; if(userGrid[r]?.[c]?.value === 0){ if(!userGrid[r][c].notes) userGrid[r][c].notes = calculateCandidates(r,c) || new Set(); if(userGrid[r][c].notes.has(digit)){ const orig = new Set(userGrid[r][c].notes); userGrid[r][c].notes.delete(digit); eliminated = true; changes.push({r,c, notesBefore: orig, notesAfter: new Set(userGrid[r][c].notes)}); renderCell(r,c); } } } }); if(eliminated){ pushHistoryState(); saveGameState(); updateLogicSolverButtonsState(); } return eliminated; }
+    /** Применяет исключение для Pointing/BoxLine */
+    function applyPointingBoxLineElimination(elimInfo) {
+        if (!elimInfo || !elimInfo.eliminations) return false;
+        const { digit, eliminations, technique, unitType, unitIndex, targetBlockIndex } = elimInfo;
+        if (technique === 'Pointing Candidates') {
+             console.log(`Apply Pointing Elim: Remove ${digit} from ${unitType} ${unitIndex+1} outside block`);
+        } else { // Box/Line
+             console.log(`Apply Box/Line Elim: Remove ${digit} from block ${targetBlockIndex} outside ${unitType} ${unitIndex+1}`);
+        }
+
+        let eliminated = false;
+        let changes = []; // For potential future undo refinement
+
+        eliminations.forEach(cellId => {
+            const coords = getCellCoords(cellId);
+            if(coords){
+                const {r,c}=coords;
+                if(userGrid[r]?.[c]?.value === 0){
+                    // Ensure notes are calculated if they don't exist
+                    if(!userGrid[r][c].notes) {
+                        userGrid[r][c].notes = calculateCandidates(r,c) || new Set();
+                    }
+                    // Remove the candidate if present
+                    if(userGrid[r][c].notes.has(digit)){
+                        const orig = new Set(userGrid[r][c].notes);
+                        userGrid[r][c].notes.delete(digit);
+                        eliminated = true;
+                        changes.push({r, c, notesBefore: orig, notesAfter: new Set(userGrid[r][c].notes)});
+                        console.log(`  - Removing candidate ${digit} from notes of ${cellId}`); // LOG
+                        renderCell(r,c); // Update UI
+                    }
+                }
+            }
+        });
+
+        if(eliminated){
+            pushHistoryState(); // Save state after eliminations
+            saveGameState();
+            updateLogicSolverButtonsState();
+        }
+        return eliminated;
+    }
 
     /** Выполняет ОДИН шаг логического решателя */
     function doLogicStep() {
@@ -246,44 +249,45 @@ document.addEventListener('DOMContentLoaded', () => {
          if (isGameSolved()) return showSuccess("Судоку уже решено!");
          clearErrors();
 
-         let appliedInfo = null; // Сохраняем инфо о примененной технике
+         let appliedInfo = null; // Store info about the applied technique
 
-         // Порядок проверки техник
-         appliedInfo = findNakedSingle();
-         if (appliedInfo && applyFoundSingle(appliedInfo)) { /* Успех */ }
-         else {
-             appliedInfo = findHiddenSingle();
-             if (appliedInfo && applyFoundSingle(appliedInfo)) { /* Успех */ }
-             else {
-                 appliedInfo = findPointingCandidates();
-                 if (appliedInfo && applyPointingElimination(appliedInfo)) { /* Успех */ }
-                 else {
-                     appliedInfo = findNakedPair();
-                     if (appliedInfo && applyNakedGroupElimination(appliedInfo)) { /* Успех */ }
-                     else {
-                         appliedInfo = findNakedTriple();
-                         if (appliedInfo && applyNakedGroupElimination(appliedInfo)) { /* Успех */ }
-                         else {
-                              appliedInfo = null; // Ничего не найдено
-                         }
-                     }
+         // Order of techniques to try
+         const techniques = [
+             { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle },
+             { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle },
+             { name: "Pointing Candidates", findFunc: findPointingCandidates, applyFunc: applyPointingBoxLineElimination },
+             { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyPointingBoxLineElimination },
+             { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination },
+             { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination },
+             // Add more techniques here in desired order
+         ];
+
+         for (const tech of techniques) {
+             console.log(`Searching ${tech.name}...`);
+             appliedInfo = tech.findFunc();
+             if (appliedInfo) {
+                 if (tech.applyFunc(appliedInfo)) { // Check if applyFunc actually did something
+                     let details = "";
+                     if (appliedInfo.digit && appliedInfo.r !== undefined) details = `${appliedInfo.digit} в [${getCellId(appliedInfo.r, appliedInfo.c)}]`;
+                     else if (appliedInfo.digits && appliedInfo.cells) details = `цифры ${appliedInfo.digits.join(',')} в ${appliedInfo.cells.join(',')}`;
+                     else if (appliedInfo.digit && appliedInfo.eliminations) details = `цифра ${appliedInfo.digit} (убраны кандидаты)`;
+                     showSuccess(`Применено ${appliedInfo.technique || tech.name}: ${details}`);
+                     break; // Exit loop after first successful application
+                 } else {
+                      // Found potential, but didn't eliminate anything, reset appliedInfo
+                      appliedInfo = null;
                  }
              }
-         }
+         } // End loop through techniques
 
-         // Отчет о результате шага
-         if (appliedInfo) {
-             const tech = appliedInfo.technique || "Elimination";
-             const details = appliedInfo.digit
-                 ? `${appliedInfo.digit} в [${getCellId(appliedInfo.r, appliedInfo.c)}]`
-                 : `цифры ${appliedInfo.digits?.join(',')} в ${appliedInfo.unitType} ${getUnitIndexForDisplay(appliedInfo.unitIndex)}`;
-             showSuccess(`Применено ${tech}: ${details}`);
-             saveGameState(); // Сохраняем после успешного шага
-         } else {
+         if (!appliedInfo) {
              showError("Не найдено следующих логических шагов.");
          }
-         updateLogicSolverButtonsState(); // Обновляем кнопки в любом случае
+
+         if (appliedInfo) saveGameState(); // Save if any technique was applied
+         updateLogicSolverButtonsState(); // Update buttons regardless
     }
+
 
     /** Запускает логический решатель до упора */
     function runLogicSolver() {
@@ -305,14 +309,26 @@ document.addEventListener('DOMContentLoaded', () => {
                  return;
              }
              actionFound = false; let appliedInfo = null;
-             appliedInfo = findNakedSingle(); if (appliedInfo && applyFoundSingle(appliedInfo)) { actionFound = true; }
-             if (!actionFound) { appliedInfo = findHiddenSingle(); if (appliedInfo && applyFoundSingle(appliedInfo)) { actionFound = true; } }
-             if (!actionFound) { appliedInfo = findPointingCandidates(); if (appliedInfo && applyPointingElimination(appliedInfo)) { actionFound = true; } }
-             if (!actionFound) { appliedInfo = findNakedPair(); if (appliedInfo && applyNakedGroupElimination(appliedInfo)) { actionFound = true; } }
-             if (!actionFound) { appliedInfo = findNakedTriple(); if (appliedInfo && applyNakedGroupElimination(appliedInfo)) { actionFound = true; } }
-             // TODO: Add more techniques here...
+             const techniques = [
+                 { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle },
+                 { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle },
+                 { name: "Pointing Candidates", findFunc: findPointingCandidates, applyFunc: applyPointingBoxLineElimination },
+                 { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyPointingBoxLineElimination },
+                 { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination },
+                 { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination },
+             ];
+             for (const tech of techniques) {
+                appliedInfo = tech.findFunc();
+                if (appliedInfo && tech.applyFunc(appliedInfo)) {
+                    actionFound = true;
+                    lastActionType = appliedInfo.technique || tech.name;
+                    break; // Apply only one technique per cycle
+                } else {
+                     appliedInfo = null; // Reset if applyFunc returned false
+                }
+             }
 
-             if (actionFound) { stepsMade++; lastActionType = appliedInfo.technique || 'Elimination'; console.log(`Solver Step ${stepsMade}: Applied ${lastActionType}`); setTimeout(solverCycle, 10); }
+             if (actionFound) { stepsMade++; console.log(`Solver Step ${stepsMade}: Applied ${lastActionType}`); setTimeout(solverCycle, 10); }
              else { showError(`Стоп после ${stepsMade} шагов. Последнее: ${lastActionType || 'N/A'}.`); isLogicSolverRunning = false; updateLogicSolverButtonsState(); saveGameState(); }
          }
          solverCycle(); // Start the first cycle
