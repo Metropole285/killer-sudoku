@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSolverData = null;
     let userGrid = [];
     let currentCandidatesMap = {}; // Карта кандидатов {cellId: Set<number>}
-    let classicPeersMapCache = null; // <<< Кэш для пиров
+    let classicPeersMapCache = null; // Кэш для пиров
     let historyStack = [];
     let selectedCell = null;
     let selectedRow = -1;
@@ -196,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
      }
 
      /**
-      * <<< ИЗМЕНЕНО >>> Получает Set ID всех пиров для ячейки (кэшируется).
+      * Получает Set ID всех пиров для ячейки (кэшируется).
       */
      function getClassicPeers(r, c) {
          const cellId = getCellId(r,c);
@@ -252,7 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
         statusMessageElement.textContent = 'Генерация...'; statusMessageElement.className = '';
         currentPuzzle = null; currentSolution = null; currentCageData = null; currentSolverData = null; userGrid = [];
         currentCandidatesMap = {}; // СБРОС КАРТЫ КАНДИДАТОВ
-        classicPeersMapCache = null; // <<< СБРОС КЭША ПИРОВ >>>
+        classicPeersMapCache = null; // СБРОС КЭША ПИРОВ
         isLogicSolverRunning = false;
 
         let success = false;
@@ -547,7 +547,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 for (const [r_unit, c_unit] of unit) {
                                     const unitCellId = getCellId(r_unit, c_unit);
                                     // Если ячейка не входит в пару и пустая
-                                    if (!pairCellsSet.has(unitCellId) && userGrid[r_unit]?.[c_unit]?.value === 0) {
+                                    if (unitCellId && !pairCellsSet.has(unitCellId) && userGrid[r_unit]?.[c_unit]?.value === 0) {
                                         const otherCands = currentCandidatesMap[unitCellId];
                                         // Проверяем, есть ли у нее кандидаты из найденной пары
                                         if (otherCands && (otherCands.has(pairDigits[0]) || otherCands.has(pairDigits[1]))) {
@@ -556,6 +556,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                         }
                                     }
                                 }
+
 
                                 if (eliminationNeeded) {
                                     console.log(`Naked Pair found: Digits ${pairDigits.join(',')} in cells ${pairCells.join(',')}`);
@@ -617,7 +618,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const tripleCellsSet = new Set(tripleCells);
                                 for (const [r_unit, c_unit] of unitIndices) {
                                     const cellId_unit = getCellId(r_unit, c_unit);
-                                    if (!tripleCellsSet.has(cellId_unit) && userGrid[r_unit]?.[c_unit]?.value === 0) {
+                                    if (cellId_unit && !tripleCellsSet.has(cellId_unit) && userGrid[r_unit]?.[c_unit]?.value === 0) {
                                         const notes = currentCandidatesMap[cellId_unit];
                                         if (notes && (notes.has(tripleDigits[0]) || notes.has(tripleDigits[1]) || notes.has(tripleDigits[2]))) {
                                             eliminationNeeded = true;
@@ -625,6 +626,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                         }
                                     }
                                 }
+
 
                                 if (eliminationNeeded) {
                                      console.log(`Naked Triple found: Digits ${tripleDigits.join(',')} in cells ${tripleCells.join(',')}`);
@@ -655,13 +657,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Используем currentCandidatesMap напрямую
         for (let bi = 0; bi < 9; bi++) { // Итерация по блокам
             const blockIndices = getBlockIndices(bi);
-            const blockCellIds = blockIndices.map(([r, c]) => getCellId(r, c));
+            const blockCellIds = blockIndices.map(([r, c]) => getCellId(r, c)).filter(id => id !== null); // Убираем null, если getCellId вернул null
             const blockCellIdsSet = new Set(blockCellIds);
+
 
             for (let d = 1; d <= 9; d++) { // Итерация по цифрам
                 // Находим все ячейки в блоке, где 'd' является кандидатом
-                const possibleCellsInBlock = blockCellIds.filter(cellId => cellId && currentCandidatesMap[cellId]?.has(d));
-
+                const possibleCellsInBlock = blockCellIds.filter(cellId => currentCandidatesMap[cellId]?.has(d));
 
                 if (possibleCellsInBlock.length >= 2) { // Нет смысла, если кандидат только в одной ячейке или его нет
                     const rowsInBlock = new Set();
@@ -954,7 +956,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * <<< НОВОЕ >>> Ищет XY-Wing, используя currentCandidatesMap.
+     * Ищет XY-Wing, используя currentCandidatesMap.
      */
     function findXYWing() {
         if (currentMode !== 'classic' || !currentCandidatesMap) return null;
@@ -972,7 +974,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Итерируем по каждой ячейке с 2 кандидатами как по потенциальному "пивоту"
         for (const pivot of bivalueCells) {
-            const [X, Y] = Array.from(pivot.cands); // Кандидаты пивота XY
+            const pivotCands = Array.from(pivot.cands);
+             if (pivotCands.length !== 2) continue; // На всякий случай
+            const [X, Y] = pivotCands; // Кандидаты пивота XY
             const pivotPeers = getClassicPeers(pivot.r, pivot.c);
 
             // Находим пиров пивота, которые тоже имеют 2 кандидата
@@ -980,51 +984,65 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Ищем пары пиров (клешни - pincers), которые образуют XY-Wing с пивотом
             for (let i = 0; i < bivaluePeers.length; i++) {
-                const pincer1 = bivaluePeers[i];
-                const pincer1Cands = Array.from(pincer1.cands); // Кандидаты первой клешни
+                const pincerA = bivaluePeers[i]; // Первая потенциальная клешня
+                const pincerACands = Array.from(pincerA.cands);
+                if (pincerACands.length !== 2) continue; // Пропускаем, если размер изменился (маловероятно)
 
-                // Проверяем, содержит ли первая клешня X или Y (и другую цифру Z)
-                let Z = -1;
-                let pincer1Type = ''; // 'XZ' или 'YZ'
-
-                if (pincer1Cands.includes(X) && !pincer1Cands.includes(Y)) { // Pincer1 = XZ ?
-                    Z = pincer1Cands.find(d => d !== X);
-                    if (Z === undefined) continue; // Не должно случиться при size === 2
-                    pincer1Type = 'XZ';
-                } else if (pincer1Cands.includes(Y) && !pincer1Cands.includes(X)) { // Pincer1 = YZ ?
-                    Z = pincer1Cands.find(d => d !== Y);
-                    if (Z === undefined) continue;
-                    pincer1Type = 'YZ';
+                // Определяем тип первой клешни (XZ или YZ) и находим Z
+                let Z_A = -1;
+                let pincerAType = '';
+                if (pincerACands.includes(X) && !pincerACands.includes(Y)) {
+                    Z_A = pincerACands.find(d => d !== X);
+                    pincerAType = 'XZ';
+                } else if (pincerACands.includes(Y) && !pincerACands.includes(X)) {
+                    Z_A = pincerACands.find(d => d !== Y);
+                    pincerAType = 'YZ';
                 } else {
-                    continue; // Не подходит (либо оба XY, либо ни одного)
+                    continue; // Не подходит (либо XY, либо не содержит X или Y)
                 }
+                if (Z_A === undefined || Z_A === -1) continue; // Не нашли Z
 
-                // Ищем вторую клешню
+                // Ищем вторую клешню (pincerB)
                 for (let j = i + 1; j < bivaluePeers.length; j++) {
-                    const pincer2 = bivaluePeers[j];
-                    const pincer2Cands = Array.from(pincer2.cands);
+                    const pincerB = bivaluePeers[j];
+                    const pincerBCands = Array.from(pincerB.cands);
+                     if (pincerBCands.length !== 2) continue;
 
-                    // Вторая клешня должна содержать Z и недостающую цифру пивота (Y или X)
-                    let validPincer2 = false;
-                    if (pincer1Type === 'XZ' && pincer2Cands.includes(Y) && pincer2Cands.includes(Z)) {
-                        validPincer2 = true; // Нашли Pivot(XY), Pincer1(XZ), Pincer2(YZ)
-                    } else if (pincer1Type === 'YZ' && pincer2Cands.includes(X) && pincer2Cands.includes(Z)) {
-                        validPincer2 = true; // Нашли Pivot(XY), Pincer1(YZ), Pincer2(XZ) - меняем Pincer1 и Pincer2 местами для унификации
-                        // Для консистентности, пусть pincer1 всегда будет XZ, а pincer2 YZ
-                        const temp = pincer1;
-                        pincer1 = pincer2;
-                        pincer2 = temp;
-                        // Тип не меняем, он теперь соответствует новому pincer1
+                    // Важно: вторая клешня НЕ ДОЛЖНА видеть первую клешню
+                    if (getClassicPeers(pincerA.r, pincerA.c).has(pincerB.id)) {
+                        continue;
                     }
 
-                    if (validPincer2) {
-                        // XY-Wing найден! Pivot(XY), Pincer1(XZ), Pincer2(YZ)
-                        // Ищем ячейки, которые видят обе клешни
-                        const pincer1Peers = getClassicPeers(pincer1.r, pincer1.c);
-                        const pincer2Peers = getClassicPeers(pincer2.r, pincer2.c);
+
+                    // Проверяем, соответствует ли вторая клешня (pincerB) ожидаемому типу и Z
+                    let pincerXZ, pincerYZ; // Стандартизированные переменные
+                    let Z = -1; // Общий Z для пары клешней
+
+                    if (pincerAType === 'XZ') { // Если pincerA = XZ
+                        // Ищем pincerB типа YZ (содержит Y и Z_A, но не X)
+                        if (pincerBCands.includes(Y) && pincerBCands.includes(Z_A) && !pincerBCands.includes(X)) {
+                             pincerXZ = pincerA;
+                             pincerYZ = pincerB;
+                             Z = Z_A;
+                        } else { continue; } // pincerB не подходит
+                    } else { // Если pincerAType === 'YZ'
+                         // Ищем pincerB типа XZ (содержит X и Z_A, но не Y)
+                         if (pincerBCands.includes(X) && pincerBCands.includes(Z_A) && !pincerBCands.includes(Y)) {
+                              pincerXZ = pincerB; // Назначем pincerB как XZ
+                              pincerYZ = pincerA; // Назначаем pincerA как YZ
+                              Z = Z_A;
+                         } else { continue; } // pincerB не подходит
+                    }
+
+                    // Если нашли подходящую пару клешней (pincerXZ и pincerYZ)
+                    if (pincerXZ && pincerYZ && Z !== -1) {
+                        // Нашли XY-Wing! Pivot(XY), PincerXZ(XZ), PincerYZ(YZ)
+                        // Ищем ячейки, которые видят обе клешни (pincerXZ и pincerYZ)
+                        const pincerXZ_Peers = getClassicPeers(pincerXZ.r, pincerXZ.c);
+                        const pincerYZ_Peers = getClassicPeers(pincerYZ.r, pincerYZ.c);
                         const commonPeers = [];
-                        pincer1Peers.forEach(peerId => {
-                            if (pincer2Peers.has(peerId)) {
+                        pincerXZ_Peers.forEach(peerId => {
+                            if (pincerYZ_Peers.has(peerId)) {
                                 commonPeers.push(peerId);
                             }
                         });
@@ -1041,12 +1059,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
 
                         if (eliminations.length > 0) {
-                            console.log(`XY-Wing found: Pivot ${pivot.id}(${X},${Y}), Pincer1 ${pincer1.id}(${X},${Z}), Pincer2 ${pincer2.id}(${Y},${Z}). Eliminating ${Z}.`);
+                            console.log(`XY-Wing found: Pivot ${pivot.id}(${X},${Y}), Pincer1 ${pincerXZ.id}(${X},${Z}), Pincer2 ${pincerYZ.id}(${Y},${Z}). Eliminating ${Z}.`);
                             return {
                                 technique: "XY-Wing",
                                 pivot: pivot.id,
-                                pincer1: pincer1.id,
-                                pincer2: pincer2.id,
+                                pincer1: pincerXZ.id, // Стандартизировано как XZ
+                                pincer2: pincerYZ.id, // Стандартизировано как YZ
                                 digitX: X,
                                 digitY: Y,
                                 digitZ: Z, // Кандидат для удаления
@@ -1054,9 +1072,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             };
                         }
                     }
-                }
-            }
-        }
+                } // конец цикла по pincerB (j)
+            } // конец цикла по pincerA (i)
+        } // конец цикла по pivot
 
         return null; // Ничего не найдено
     }
@@ -1313,7 +1331,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * <<< НОВОЕ >>> Применяет элиминацию для XY-Wing.
+     * Применяет элиминацию для XY-Wing.
      * Похожа на applyXWingElimination.
      */
      function applyXYWingElimination(elimInfo) {
@@ -1394,7 +1412,7 @@ document.addEventListener('DOMContentLoaded', () => {
              { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination },
              { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination },
              { name: "X-Wing", findFunc: findXWing, applyFunc: applyXWingElimination },
-             { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyXYWingElimination }, // <<< ДОБАВЛЕНО >>>
+             { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyXYWingElimination }, // ДОБАВЛЕНО
              // Сюда можно добавлять более сложные
          ];
 
@@ -1478,7 +1496,7 @@ document.addEventListener('DOMContentLoaded', () => {
             { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination },
             { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination },
             { name: "X-Wing", findFunc: findXWing, applyFunc: applyXWingElimination },
-            { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyXYWingElimination }, // <<< ДОБАВЛЕНО >>>
+            { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyXYWingElimination }, // ДОБАВЛЕНО
          ];
 
          function solverCycle() {
