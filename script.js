@@ -518,13 +518,49 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Классические Функции поиска техник (find...) ---
-    function findNakedSingle() { if (currentMode !== 'classic' || !currentCandidatesMap) return null; for (let r = 0; r < 9; r++) { for (let c = 0; c < 9; c++) { const cellId = getCellId(r, c); if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) { const cands = currentCandidatesMap[cellId]; if (cands.size === 1) { const digit = cands.values().next().value; console.log(`Classic Naked Single: ${digit} at [${r}, ${c}] (from map)`); return { r, c, digit, technique: "Naked Single" }; } } } } return null; }
-    function findHiddenSingle() { if (currentMode !== 'classic' || !currentCandidatesMap) return null; for (let i = 0; i < 9; i++) { const rowRes = findHiddenSingleInUnit(getRowIndices(i), currentCandidatesMap); if (rowRes) return rowRes; const colRes = findHiddenSingleInUnit(getColIndices(i), currentCandidatesMap); if (colRes) return colRes; const blkRes = findHiddenSingleInUnit(getBlockIndices(i), currentCandidatesMap); if (blkRes) return blkRes; } return null; }
-    function findHiddenSingleInUnit(unitIndices, candidatesMap) { for (let d = 1; d <= 9; d++) { let places = []; let presentInUnit = false; for (const [r, c] of unitIndices) { if (userGrid[r]?.[c]?.value === d) { presentInUnit = true; break; } if (userGrid[r]?.[c]?.value === 0) { const cellId = getCellId(r, c); if (candidatesMap[cellId]?.has(d)) { places.push([r, c]); } } } if (!presentInUnit && places.length === 1) { const [r, c] = places[0]; console.log(`Classic Hidden Single: ${d} at [${r}, ${c}] (from map)`); return { r, c, digit: d, technique: "Hidden Single" }; } } return null; }
-     function findNakedPair() { if (currentMode !== 'classic' || !currentCandidatesMap) return null; const units = getAllUnitsIndices(); for (let i = 0; i < units.length; i++) { const unit = units[i]; const cellsWith2Candidates = []; for (const [r, c] of unit) { const cellId = getCellId(r, c); if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) { const cands = currentCandidatesMap[cellId]; if (cands.size === 2) { cellsWith2Candidates.push({ r, c, cands, cellId }); } } } if (cellsWith2Candidates.length >= 2) { for (let j = 0; j < cellsWith2Candidates.length; j++) { for (let k = j + 1; k < cellsWith2Candidates.length; k++) { const c1 = cellsWith2Candidates[j]; const c2 = cellsWith2Candidates[k]; if (c1.cands.size === 2 && c2.cands.size === 2) { let sameCandidates = true; for (const digit of c1.cands) if (!c2.cands.has(digit)) { sameCandidates = false; break; } if (sameCandidates) for (const digit of c2.cands) if (!c1.cands.has(digit)) { sameCandidates = false; break; } if (sameCandidates) { const pairDigits = Array.from(c1.cands); const pairCells = [c1.cellId, c2.cellId]; let eliminationNeeded = false; const pairCellsSet = new Set(pairCells); for (const [r_unit, c_unit] of unit) { const unitCellId = getCellId(r_unit, c_unit); if (unitCellId && !pairCellsSet.has(unitCellId) && userGrid[r_unit]?.[c_unit]?.value === 0) { const otherCands = currentCandidatesMap[unitCellId]; if (otherCands && (otherCands.has(pairDigits[0]) || otherCands.has(pairDigits[1]))) { eliminationNeeded = true; break; } } } if (eliminationNeeded) { console.log(`Classic Naked Pair found: Digits ${pairDigits.join(',')} in cells ${pairCells.join(',')}`); return { unitType: getUnitType(i), unitIndex: i, cells: pairCells, digits: pairDigits, technique: "Naked Pair" }; } } } } } } } return null; }
-    function findHiddenPair() { if (currentMode !== 'classic' || !currentCandidatesMap) return null; const units = getAllUnitsIndices(); for (let i = 0; i < units.length; i++) { const unit = units[i]; const digitLocations = {}; for (const [r, c] of unit) { const cellId = getCellId(r, c); if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) { currentCandidatesMap[cellId].forEach(digit => { if (!digitLocations[digit]) digitLocations[digit] = []; digitLocations[digit].push(cellId); }); } } const digitsIn2Cells = Object.entries(digitLocations).filter(([d, locs]) => locs.length === 2).map(([d, locs]) => ({ digit: parseInt(d), locations: new Set(locs) })); if (digitsIn2Cells.length >= 2) { for (let j = 0; j < digitsIn2Cells.length; j++) { for (let k = j + 1; k < digitsIn2Cells.length; k++) { const d1Info = digitsIn2Cells[j]; const d2Info = digitsIn2Cells[k]; if (d1Info.locations.size === 2 && d1Info.locations.size === d2Info.locations.size) { const loc1Arr = Array.from(d1Info.locations); const loc2Arr = Array.from(d2Info.locations); if ((loc1Arr[0] === loc2Arr[0] && loc1Arr[1] === loc2Arr[1]) || (loc1Arr[0] === loc2Arr[1] && loc1Arr[1] === loc2Arr[0])) { const pairDigits = [d1Info.digit, d2Info.digit]; const pairCells = loc1Arr; let eliminationNeeded = false; for (const cellId of pairCells) { const cellCands = currentCandidatesMap[cellId]; if (cellCands) { for(const cand of cellCands) { if (cand !== pairDigits[0] && cand !== pairDigits[1]) { eliminationNeeded = true; break; } } } if (eliminationNeeded) break; } if (eliminationNeeded) { console.log(`Classic Hidden Pair found: Digits ${pairDigits.join(',')} in cells ${pairCells.join(',')}`); return { unitType: getUnitType(i), unitIndex: i, cells: pairCells, digits: pairDigits, technique: "Hidden Pair" }; } } } } } } } return null; }
-    function findNakedTriple() { if (currentMode !== 'classic' || !currentCandidatesMap) return null; const units = getAllUnitsIndices(); for (let i = 0; i < units.length; i++) { const unitIndices = units[i]; const candidateCells = []; for (const [r, c] of unitIndices) { const cellId = getCellId(r, c); if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) { const candidates = currentCandidatesMap[cellId]; if (candidates && (candidates.size === 2 || candidates.size === 3)) { candidateCells.push({ r, c, cands: candidates, cellId }); } } } if (candidateCells.length >= 3) { for (let j = 0; j < candidateCells.length; j++) { for (let k = j + 1; k < candidateCells.length; k++) { for (let l = k + 1; l < candidateCells.length; l++) { const c1 = candidateCells[j], c2 = candidateCells[k], c3 = candidateCells[l]; const combinedCands = new Set([...c1.cands, ...c2.cands, ...c3.cands]); if (combinedCands.size === 3) { const tripleDigits = Array.from(combinedCands); const tripleCells = [c1.cellId, c2.cellId, c3.cellId]; let eliminationNeeded = false; const tripleCellsSet = new Set(tripleCells); for (const [r_unit, c_unit] of unitIndices) { const cellId_unit = getCellId(r_unit, c_unit); if (cellId_unit && !tripleCellsSet.has(cellId_unit) && userGrid[r_unit]?.[c_unit]?.value === 0) { const notes = currentCandidatesMap[cellId_unit]; if (notes && (notes.has(tripleDigits[0]) || notes.has(tripleDigits[1]) || notes.has(tripleDigits[2]))) { eliminationNeeded = true; break; } } } if (eliminationNeeded) { console.log(`Classic Naked Triple found: Digits ${tripleDigits.join(',')} in cells ${tripleCells.join(',')}`); return { unitType: getUnitType(i), unitIndex: i, cells: tripleCells, digits: tripleDigits, technique: "Naked Triple" }; } } } } } } } return null; }
-    function findHiddenTriple() { if (currentMode !== 'classic' || !currentCandidatesMap) return null; const units = getAllUnitsIndices(); for (let i = 0; i < units.length; i++) { const unit = units[i]; const digitLocations = {}; for (const [r, c] of unit) { const cellId = getCellId(r, c); if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) { currentCandidatesMap[cellId].forEach(digit => { if (!digitLocations[digit]) digitLocations[digit] = []; digitLocations[digit].push(cellId); }); } } const potentialTripleDigits = Object.keys(digitLocations).map(d => parseInt(d)).filter(d => digitLocations[d].length === 2 || digitLocations[d].length === 3); if (potentialTripleDigits.length >= 3) { for (let j = 0; j < potentialTripleDigits.length; j++) { for (let k = j + 1; k < potentialTripleDigits.length; k++) { for (let l = k + 1; l < potentialTripleDigits.length; l++) { const d1 = potentialTripleDigits[j]; const d2 = potentialTripleDigits[k]; const d3 = potentialTripleDigits[l]; const tripleDigits = [d1, d2, d3]; const combinedCells = new Set([...digitLocations[d1], ...digitLocations[d2], ...digitLocations[d3]]); if (combinedCells.size === 3) { const tripleCells = Array.from(combinedCells); let eliminationNeeded = false; for (const cellId of tripleCells) { const cellCands = currentCandidatesMap[cellId]; if (cellCands) { for (const cand of cellCands) { if (!tripleDigits.includes(cand)) { eliminationNeeded = true; break; } } } if (eliminationNeeded) break; } if (eliminationNeeded) { console.log(`Classic Hidden Triple found: Digits ${tripleDigits.join(',')} in cells ${tripleCells.join(',')}`); return { unitType: getUnitType(i), unitIndex: i, cells: tripleCells, digits: tripleDigits, technique: "Hidden Triple" }; } } } } } } } return null; }
+    function findNakedSingle() {
+        if (currentMode !== 'classic' || !currentCandidatesMap) return null;
+        for (let r = 0; r < 9; r++) { for (let c = 0; c < 9; c++) { const cellId = getCellId(r, c); if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) { const cands = currentCandidatesMap[cellId]; if (cands.size === 1) { const digit = cands.values().next().value; console.log(`Classic Naked Single: ${digit} at [${r}, ${c}] (from map)`); return { r, c, digit, technique: "Naked Single" }; } } } } return null;
+    }
+    function findHiddenSingle() {
+        if (currentMode !== 'classic' || !currentCandidatesMap) return null;
+        for (let i = 0; i < 9; i++) { const rowRes = findHiddenSingleInUnit(getRowIndices(i), currentCandidatesMap); if (rowRes) return rowRes; const colRes = findHiddenSingleInUnit(getColIndices(i), currentCandidatesMap); if (colRes) return colRes; const blkRes = findHiddenSingleInUnit(getBlockIndices(i), currentCandidatesMap); if (blkRes) return blkRes; } return null;
+    }
+    function findHiddenSingleInUnit(unitIndices, candidatesMap) {
+        for (let d = 1; d <= 9; d++) { let places = []; let presentInUnit = false; for (const [r, c] of unitIndices) { if (userGrid[r]?.[c]?.value === d) { presentInUnit = true; break; } if (userGrid[r]?.[c]?.value === 0) { const cellId = getCellId(r, c); if (candidatesMap[cellId]?.has(d)) { places.push([r, c]); } } } if (!presentInUnit && places.length === 1) { const [r, c] = places[0]; console.log(`Classic Hidden Single: ${d} at [${r}, ${c}] (from map)`); return { r, c, digit: d, technique: "Hidden Single" }; } } return null;
+    }
+     function findNakedPair() {
+        if (currentMode !== 'classic' || !currentCandidatesMap) return null;
+        const units = getAllUnitsIndices();
+        for (let i = 0; i < units.length; i++) { const unit = units[i]; const cellsWith2Candidates = []; for (const [r, c] of unit) { const cellId = getCellId(r, c); if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) { const cands = currentCandidatesMap[cellId]; if (cands.size === 2) { cellsWith2Candidates.push({ r, c, cands, cellId }); } } }
+            if (cellsWith2Candidates.length >= 2) { for (let j = 0; j < cellsWith2Candidates.length; j++) { for (let k = j + 1; k < cellsWith2Candidates.length; k++) { const c1 = cellsWith2Candidates[j]; const c2 = cellsWith2Candidates[k]; if (c1.cands.size === 2 && c2.cands.size === 2) { let sameCandidates = true; for (const digit of c1.cands) if (!c2.cands.has(digit)) { sameCandidates = false; break; } if (sameCandidates) for (const digit of c2.cands) if (!c1.cands.has(digit)) { sameCandidates = false; break; } if (sameCandidates) { const pairDigits = Array.from(c1.cands); const pairCells = [c1.cellId, c2.cellId]; let eliminationNeeded = false; const pairCellsSet = new Set(pairCells); for (const [r_unit, c_unit] of unit) { const unitCellId = getCellId(r_unit, c_unit); if (unitCellId && !pairCellsSet.has(unitCellId) && userGrid[r_unit]?.[c_unit]?.value === 0) { const otherCands = currentCandidatesMap[unitCellId]; if (otherCands && (otherCands.has(pairDigits[0]) || otherCands.has(pairDigits[1]))) { eliminationNeeded = true; break; } } } if (eliminationNeeded) { console.log(`Classic Naked Pair found: Digits ${pairDigits.join(',')} in cells ${pairCells.join(',')}`); return { unitType: getUnitType(i), unitIndex: i, cells: pairCells, digits: pairDigits, technique: "Naked Pair" }; } } } } } }
+        }
+        return null;
+    }
+    function findHiddenPair() {
+         if (currentMode !== 'classic' || !currentCandidatesMap) return null;
+         const units = getAllUnitsIndices();
+         for (let i = 0; i < units.length; i++) { const unit = units[i]; const digitLocations = {}; for (const [r, c] of unit) { const cellId = getCellId(r, c); if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) { currentCandidatesMap[cellId].forEach(digit => { if (!digitLocations[digit]) digitLocations[digit] = []; digitLocations[digit].push(cellId); }); } } const digitsIn2Cells = Object.entries(digitLocations).filter(([d, locs]) => locs.length === 2).map(([d, locs]) => ({ digit: parseInt(d), locations: new Set(locs) }));
+             if (digitsIn2Cells.length >= 2) { for (let j = 0; j < digitsIn2Cells.length; j++) { for (let k = j + 1; k < digitsIn2Cells.length; k++) { const d1Info = digitsIn2Cells[j]; const d2Info = digitsIn2Cells[k]; if (d1Info.locations.size === 2 && d1Info.locations.size === d2Info.locations.size) { const loc1Arr = Array.from(d1Info.locations); const loc2Arr = Array.from(d2Info.locations); if ((loc1Arr[0] === loc2Arr[0] && loc1Arr[1] === loc2Arr[1]) || (loc1Arr[0] === loc2Arr[1] && loc1Arr[1] === loc2Arr[0])) { const pairDigits = [d1Info.digit, d2Info.digit]; const pairCells = loc1Arr; let eliminationNeeded = false; for (const cellId of pairCells) { const cellCands = currentCandidatesMap[cellId]; if (cellCands) { for(const cand of cellCands) { if (cand !== pairDigits[0] && cand !== pairDigits[1]) { eliminationNeeded = true; break; } } } if (eliminationNeeded) break; } if (eliminationNeeded) { console.log(`Classic Hidden Pair found: Digits ${pairDigits.join(',')} in cells ${pairCells.join(',')}`); return { unitType: getUnitType(i), unitIndex: i, cells: pairCells, digits: pairDigits, technique: "Hidden Pair" }; } } } } } }
+         }
+         return null;
+     }
+    function findNakedTriple() {
+        if (currentMode !== 'classic' || !currentCandidatesMap) return null;
+        const units = getAllUnitsIndices();
+        for (let i = 0; i < units.length; i++) { const unitIndices = units[i]; const candidateCells = []; for (const [r, c] of unitIndices) { const cellId = getCellId(r, c); if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) { const candidates = currentCandidatesMap[cellId]; if (candidates && (candidates.size === 2 || candidates.size === 3)) { candidateCells.push({ r, c, cands: candidates, cellId }); } } }
+            if (candidateCells.length >= 3) { for (let j = 0; j < candidateCells.length; j++) { for (let k = j + 1; k < candidateCells.length; k++) { for (let l = k + 1; l < candidateCells.length; l++) { const c1 = candidateCells[j], c2 = candidateCells[k], c3 = candidateCells[l]; const combinedCands = new Set([...c1.cands, ...c2.cands, ...c3.cands]); if (combinedCands.size === 3) { const tripleDigits = Array.from(combinedCands); const tripleCells = [c1.cellId, c2.cellId, c3.cellId]; let eliminationNeeded = false; const tripleCellsSet = new Set(tripleCells); for (const [r_unit, c_unit] of unitIndices) { const cellId_unit = getCellId(r_unit, c_unit); if (cellId_unit && !tripleCellsSet.has(cellId_unit) && userGrid[r_unit]?.[c_unit]?.value === 0) { const notes = currentCandidatesMap[cellId_unit]; if (notes && (notes.has(tripleDigits[0]) || notes.has(tripleDigits[1]) || notes.has(tripleDigits[2]))) { eliminationNeeded = true; break; } } } if (eliminationNeeded) { console.log(`Classic Naked Triple found: Digits ${tripleDigits.join(',')} in cells ${tripleCells.join(',')}`); return { unitType: getUnitType(i), unitIndex: i, cells: tripleCells, digits: tripleDigits, technique: "Naked Triple" }; } } } } } }
+        }
+        return null;
+    }
+     function findHiddenTriple() {
+        if (currentMode !== 'classic' || !currentCandidatesMap) return null;
+        const units = getAllUnitsIndices();
+        for (let i = 0; i < units.length; i++) { const unit = units[i]; const digitLocations = {}; for (const [r, c] of unit) { const cellId = getCellId(r, c); if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) { currentCandidatesMap[cellId].forEach(digit => { if (!digitLocations[digit]) digitLocations[digit] = []; digitLocations[digit].push(cellId); }); } } const potentialTripleDigits = Object.keys(digitLocations).map(d => parseInt(d)).filter(d => digitLocations[d].length === 2 || digitLocations[d].length === 3);
+            if (potentialTripleDigits.length >= 3) { for (let j = 0; j < potentialTripleDigits.length; j++) { for (let k = j + 1; k < potentialTripleDigits.length; k++) { for (let l = k + 1; l < potentialTripleDigits.length; l++) { const d1 = potentialTripleDigits[j]; const d2 = potentialTripleDigits[k]; const d3 = potentialTripleDigits[l]; const tripleDigits = [d1, d2, d3]; const combinedCells = new Set([...digitLocations[d1], ...digitLocations[d2], ...digitLocations[d3]]); if (combinedCells.size === 3) { const tripleCells = Array.from(combinedCells); let eliminationNeeded = false; for (const cellId of tripleCells) { const cellCands = currentCandidatesMap[cellId]; if (cellCands) { for (const cand of cellCands) { if (!tripleDigits.includes(cand)) { eliminationNeeded = true; break; } } } if (eliminationNeeded) break; } if (eliminationNeeded) { console.log(`Classic Hidden Triple found: Digits ${tripleDigits.join(',')} in cells ${tripleCells.join(',')}`); return { unitType: getUnitType(i), unitIndex: i, cells: tripleCells, digits: tripleDigits, technique: "Hidden Triple" }; } } } } } }
+        }
+        return null;
+    }
     function findPointingCandidates() { if (currentMode !== 'classic' || !currentCandidatesMap) return null; for (let bi = 0; bi < 9; bi++) { const blockIndices = getBlockIndices(bi); const blockCellIds = blockIndices.map(([r, c]) => getCellId(r, c)).filter(id => id !== null); const blockCellIdsSet = new Set(blockCellIds); for (let d = 1; d <= 9; d++) { const possibleCellsInBlock = blockCellIds.filter(cellId => currentCandidatesMap[cellId]?.has(d)); if (possibleCellsInBlock.length >= 2) { const rowsInBlock = new Set(); const colsInBlock = new Set(); possibleCellsInBlock.forEach(cellId => { const coords = getCellCoords(cellId); if (coords) { rowsInBlock.add(coords.r); colsInBlock.add(coords.c); } }); if (rowsInBlock.size === 1) { const targetRowIndex = rowsInBlock.values().next().value; const elimInfo = tryEliminatePointing('Row', targetRowIndex, blockCellIdsSet, d, currentCandidatesMap); if (elimInfo) { console.log(`Classic Pointing (Row): Digit ${d} in block ${bi} points @ row ${targetRowIndex + 1}`); return elimInfo; } } if (colsInBlock.size === 1) { const targetColIndex = colsInBlock.values().next().value; const elimInfo = tryEliminatePointing('Col', targetColIndex, blockCellIdsSet, d, currentCandidatesMap); if (elimInfo) { console.log(`Classic Pointing (Col): Digit ${d} in block ${bi} points @ col ${targetColIndex + 1}`); return elimInfo; } } } } } return null; }
     function tryEliminatePointing(unitType, unitIndex, blockCellIdsSet, digit, candidatesMap) { const eliminations = []; const unitIndices = unitType === 'Row' ? getRowIndices(unitIndex) : getColIndices(unitIndex); for (const [r, c] of unitIndices) { const cellId = getCellId(r, c); if (cellId && !blockCellIdsSet.has(cellId) && userGrid[r]?.[c]?.value === 0 && candidatesMap[cellId]?.has(digit)) { eliminations.push(cellId); } } return eliminations.length > 0 ? { type: 'pointing', unitType, unitIndex, digit, eliminations, technique: "Pointing Candidates" } : null; }
     function findBoxLineReduction() { if (currentMode !== 'classic' || !currentCandidatesMap) return null; for (let i = 0; i < 9; i++) { const rowRes = checkReductionInLine('Row', i, getRowIndices(i), currentCandidatesMap); if (rowRes) return rowRes; const colRes = checkReductionInLine('Col', i, getColIndices(i), currentCandidatesMap); if (colRes) return colRes; } return null; }
@@ -551,9 +587,9 @@ document.addEventListener('DOMContentLoaded', () => {
                  const hc=getComputedStyle(document.documentElement).getPropertyValue('--highlight-hint-flash').trim()||'#fffacd'; el.style.transition = 'background-color 0.1s ease-out'; el.style.backgroundColor = hc;
                  setTimeout(() => { if (selectedCell === el) {el.style.backgroundColor = ''; el.style.transition = '';} }, 600);
             }
-            return true;
+            return true; // <<< Успех
         }
-        return false;
+        return false; // <<< Неудача
     }
 
     /** Применяет элиминацию для Naked Pair/Triple (Classic). Возвращает true, если что-то удалено. */
@@ -563,7 +599,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const unitIndices = getUnitIndices(unitIndex);
         if (!unitIndices) return false;
         const groupCellsSet = new Set(cells);
-        let eliminatedSomething = false;
+        let eliminatedSomething = false; // <<< Флаг
         for (const [r, c] of unitIndices) {
             const cellId = getCellId(r, c);
             if (cellId && !groupCellsSet.has(cellId) && userGrid[r]?.[c]?.value === 0) {
@@ -572,11 +608,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 let cellChanged = false;
                 if (!cellData.notes) cellData.notes = new Set();
                 digits.forEach(digit => {
-                    let removedFromNotes = cellData.notes.delete(digit);
-                    let removedFromMap = candidatesInMap?.delete(digit) || false;
+                    let removedFromNotes = cellData.notes.delete(digit); // <<< Результат delete
+                    let removedFromMap = candidatesInMap?.delete(digit) || false; // <<< Результат delete
                     if (removedFromNotes || removedFromMap) {
-                        eliminatedSomething = true;
+                        eliminatedSomething = true; // <<< Отмечаем
                         cellChanged = true;
+                        // console.log(`  - Removed candidate ${digit} from ${cellId} (Classic Naked Group)`);
                     }
                 });
                 if (cellChanged) renderCell(r, c);
@@ -584,14 +621,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (eliminatedSomething) console.log(`Classic ${technique}: Eliminated ${digits.join(',')} from peers of ${cells.join(',')}.`);
         else console.log(`No *new* eliminations were made for Classic ${technique}.`);
-        return eliminatedSomething;
+        return eliminatedSomething; // <<< Возвращаем флаг
     }
 
      /** Применяет элиминацию для Hidden Pair/Triple (Classic). Возвращает true, если что-то удалено. */
      function applyHiddenGroupElimination(elimInfo) {
          if (!elimInfo || !elimInfo.digits || !elimInfo.cells) return false;
          const { cells, digits, technique } = elimInfo;
-         let eliminatedSomething = false;
+         let eliminatedSomething = false; // <<< Флаг
          const digitsToKeep = new Set(digits);
          for (const cellId of cells) {
              const coords = getCellCoords(cellId);
@@ -604,19 +641,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
                  cellData.notes.forEach(noteDigit => {
                      if (!digitsToKeep.has(noteDigit)) {
-                         if(cellData.notes.delete(noteDigit)) { cellChanged = true; eliminatedSomething = true; console.log(`  - Removed candidate ${noteDigit} from notes of ${cellId} (Classic Hidden Group)`);}
+                         if(cellData.notes.delete(noteDigit)) { // <<< Результат delete
+                            cellChanged = true;
+                            eliminatedSomething = true; // <<< Отмечаем
+                            console.log(`  - Removed candidate ${noteDigit} from notes of ${cellId} (Classic Hidden Group)`);
+                         }
                      }
                  });
                  if (candidatesInMap) {
                      candidatesInMap.forEach(candDigit => {
-                         if (!digitsToKeep.has(candDigit)) { if(candidatesInMap.delete(candDigit)) { cellChanged = true; eliminatedSomething = true; if (!notesBefore.has(candDigit)) { console.log(`  - Removed candidate ${candDigit} from map of ${cellId} (Classic Hidden Group)`); } } }
+                         if (!digitsToKeep.has(candDigit)) {
+                             if(candidatesInMap.delete(candDigit)) { // <<< Результат delete
+                                cellChanged = true;
+                                eliminatedSomething = true; // <<< Отмечаем
+                                if (!notesBefore.has(candDigit)) {
+                                    console.log(`  - Removed candidate ${candDigit} from map of ${cellId} (Classic Hidden Group)`);
+                                }
+                             }
+                         }
                      });
                  }
                  if (cellChanged) renderCell(coords.r, coords.c);
              }
          }
          if (!eliminatedSomething) console.log(`No *new* eliminations were made for Classic ${technique}.`);
-         return eliminatedSomething;
+         return eliminatedSomething; // <<< Возвращаем флаг
      }
 
 
@@ -626,8 +675,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const { eliminations, technique } = elimInfo;
         const digit = elimInfo.digit || elimInfo.digitZ;
         if (!digit) return false;
-        let eliminatedSomething = false;
-        eliminations.forEach(cellId => {
+        let eliminatedSomething = false; // <<< Флаг
+        eliminations.forEach(elimDataOrCellId => { // Обрабатываем оба формата eliminations
+            let cellId = elimDataOrCellId;
+            let elimDigit = digit;
+            // Если это объект {cellId, digit} (из Cage Combination Check)
+            if (typeof elimDataOrCellId === 'object' && elimDataOrCellId.cellId && elimDataOrCellId.digit) {
+                cellId = elimDataOrCellId.cellId;
+                elimDigit = elimDataOrCellId.digit;
+            }
+
             const coords = getCellCoords(cellId);
             if (coords && userGrid[coords.r]?.[coords.c]?.value === 0) {
                 const cellData = userGrid[coords.r][coords.c];
@@ -635,14 +692,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 let cellChanged = false;
                 if (!cellData.notes) cellData.notes = new Set();
                 let removedFromNotes = false; let removedFromMap = false;
-                if (cellData.notes.has(digit)) { if(cellData.notes.delete(digit)) { removedFromNotes = true; cellChanged = true; eliminatedSomething = true; } }
-                if (candidatesInMap?.has(digit)) { if (candidatesInMap.delete(digit)) { removedFromMap = true; cellChanged = true; eliminatedSomething = true; } }
-                if (removedFromNotes || removedFromMap) { console.log(`  - Removed candidate ${digit} from ${cellId} (Classic ${technique})`); }
+                if (cellData.notes.has(elimDigit)) { if(cellData.notes.delete(elimDigit)) { removedFromNotes = true; cellChanged = true; eliminatedSomething = true; } }
+                if (candidatesInMap?.has(elimDigit)) { if (candidatesInMap.delete(elimDigit)) { removedFromMap = true; cellChanged = true; eliminatedSomething = true; } }
+                if (removedFromNotes || removedFromMap) { console.log(`  - Removed candidate ${elimDigit} from ${cellId} (Classic ${technique})`); }
                 if (cellChanged) renderCell(coords.r, coords.c);
             }
         });
         if (!eliminatedSomething) console.log(`No *new* eliminations were made for Classic ${technique}.`);
-        return eliminatedSomething;
+        return eliminatedSomething; // <<< Возвращаем флаг
     }
 
 
@@ -656,7 +713,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearErrors();
 
         let appliedInfo = null;
-        let appliedSuccessfully = false; // <<< Флаг УСПЕШНОГО ПРИМЕНЕНИЯ шага
+        let appliedSuccessfully = false;
         pushHistoryState();
         let historyKept = true;
 
@@ -671,9 +728,10 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (currentMode === 'killer') {
                 if (!killerSolverLogic || !currentSolverData) { throw new Error("Killer solver logic or data not available."); }
                  appliedInfo = killerSolverLogic.doKillerLogicStep( userGrid, currentCandidatesMap, currentSolverData, (r, c, digit) => updateCandidatesOnSet(r, c, digit, userGrid), renderCell );
-                 appliedSuccessfully = !!appliedInfo; // <<< Устанавливаем флаг, если шаг был применен
+                 appliedSuccessfully = !!appliedInfo; // <<< Успех, если шаг был применен
                  if (!appliedSuccessfully) { historyKept = false; }
-                 // <<< Убрали пересчет и рендер отсюда >>>
+                 // <<< УБРАЛИ пересчет кандидатов отсюда >>>
+                 // Он будет сделан в runLogicSolver, если нужно, или не нужен для одиночного шага
 
             } else {
                  throw new Error("Unsupported game mode for logic solver.");
@@ -727,8 +785,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Определяем функцию для выполнения одного шага
         let stepFunction;
-        // <<< Флаг для пересчета КАНДИДАТОВ в Killer (НЕ рендера) >>>
-        let recalculateKillerCandidatesInCycle = false;
 
         if (currentMode === 'classic') {
             stepFunction = () => {
@@ -739,19 +795,19 @@ document.addEventListener('DOMContentLoaded', () => {
                  if (!appliedInfo) { for(const tech of elimTechs) { const found = tech.findFunc(); if(found) { if(tech.applyFunc(found)) { appliedInfo = found; appliedSuccessfully = true; break; } } } }
                  return { appliedInfo, appliedSuccessfully };
              };
-             recalculateKillerCandidatesInCycle = false; // Не пересчитываем для Classic
         } else if (currentMode === 'killer') {
             if (!killerSolverLogic || !currentSolverData) { showError("Ошибка: Логика или данные Killer Sudoku недоступны."); isLogicSolverRunning = false; updateLogicSolverButtonsState(); return; }
             stepFunction = () => {
                 const appliedInfo = killerSolverLogic.doKillerLogicStep( userGrid, currentCandidatesMap, currentSolverData, updateCandidatesOnSet, renderCell );
-                return { appliedInfo, appliedSuccessfully: !!appliedInfo };
+                return { appliedInfo, appliedSuccessfully: !!appliedInfo }; // <<< Возвращаем объект
             };
-            recalculateKillerCandidatesInCycle = true; // <<< Пересчитываем для Killer
         } else {
-            showError("Неподдерживаемый режим для решателя."); isLogicSolverRunning = false; updateLogicSolverButtonsState(); return;
+            showError("Неподдерживаемый режим для решателя.");
+            isLogicSolverRunning = false; updateLogicSolverButtonsState(); return;
         }
 
         function solverCycle() {
+            // <<< Проверяем флаг УСПЕШНОГО ПРИМЕНЕНИЯ из предыдущего цикла >>>
             if (errorOccurred || isGameSolved() || !actionAppliedInLastCycle) {
                 isLogicSolverRunning = false;
                 updateLogicSolverButtonsState();
@@ -760,18 +816,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (isGameSolved()) showSuccess(`(${currentMode}) Решено за ${stepsMade} шаг(ов)!`);
                     else showError(`(${currentMode}) Стоп после ${stepsMade} шагов. ${lastActionType ? ('Последнее: ' + lastActionType + '.') : 'Не найдено следующих действий.'}`);
                 }
-                 // Финальный рендер доски
+                 // <<< Финальный рендер доски >>>
                  renderBoard();
                 return;
             }
 
             let appliedInfo = null;
-            let appliedSuccessfully = false; // Флаг успеха для ТЕКУЩЕГО цикла
+            let appliedSuccessfully = false; // <<< Флаг успеха для ТЕКУЩЕГО цикла
             pushHistoryState();
             let historyKept = true;
 
             try {
-                const result = stepFunction(); // Выполняем один шаг
+                const result = stepFunction(); // <<< Выполняем один шаг
                 appliedInfo = result.appliedInfo;
                 appliedSuccessfully = result.appliedSuccessfully; // <<< Получаем флаг успеха
 
@@ -780,15 +836,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     lastActionType = appliedInfo.technique || 'Unknown';
                     stepsMade++;
                     console.log(`(${currentMode}) Solver Step ${stepsMade}: Applied ${lastActionType}`);
-                     // <<< Пересчет кандидатов/заметок ПОСЛЕ успешного шага Killer >>>
-                     if (recalculateKillerCandidatesInCycle) {
-                          console.log("Recalculating killer candidates/notes during full solve...");
-                          calculateAllCandidates(); // Обновит currentCandidatesMap и userGrid.notes
-                          // <<< Рендер доски Killer после успешного шага (чтобы видеть обновленные заметки) >>>
-                          renderBoard();
-                     } else {
-                          // Для Classic достаточно отрисовки отдельных ячеек, которая делается в apply-функциях
-                     }
+                     // <<< УБРАЛИ Пересчет кандидатов Killer ОТСЮДА >>>
                 } else {
                     actionAppliedInLastCycle = false; // <<< Действий НЕ было
                     historyKept = false;
@@ -798,13 +846,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 showError(`Ошибка решателя: ${error.message}`);
                 errorOccurred = true;
                 historyKept = false;
-                actionAppliedInLastCycle = false; // Останавливаем цикл при ошибке
+                actionAppliedInLastCycle = false; // <<< Останавливаем цикл при ошибке
             } finally {
                  if (!historyKept && historyStack.length > 0) {
                      historyStack.pop();
                  }
                  updateUndoButtonState();
                  if (!errorOccurred) {
+                     // <<< Рендерим доску после КАЖДОГО успешного шага, чтобы видеть изменения >>>
+                     if (appliedSuccessfully) {
+                         renderBoard();
+                     }
                      setTimeout(solverCycle, 5); // Планируем следующий шаг
                  } else {
                       isLogicSolverRunning = false;
