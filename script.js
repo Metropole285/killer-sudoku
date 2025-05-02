@@ -258,7 +258,40 @@ document.addEventListener('DOMContentLoaded', () => {
         let success = false;
         try {
             if (restoreState) { console.log("Restoring state..."); currentMode=restoreState.mode||"classic";currentDifficulty=restoreState.difficulty||'medium';secondsElapsed=restoreState.time||0;hintsRemaining=restoreState.hints??MAX_HINTS;isNoteMode=restoreState.isNoteMode||false;userGrid=restoreState.grid.map(r=>r.map(c=>({value:c.value,notes:new Set(c.notesArray||[])})));if(currentMode==="classic"){currentPuzzle=restoreState.puzzle;currentSolution=restoreState.solution;if(!currentPuzzle||!currentSolution)throw new Error("Inv classic save.");}else if(currentMode==="killer"){currentCageData=restoreState.cageData;if(!currentCageData?.cages)throw new Error("Inv killer save (cages).");console.log("Re-init solver data...");currentSolverData=killerSudoku._initializeSolverData(currentCageData.cages);if(!currentSolverData)throw new Error("Fail re-init solver data.");console.log("Solver data re-init OK.");}else throw new Error("Unk save mode:"+currentMode);console.log("Restore OK.");success=true;
-            } else { secondsElapsed = 0; hintsRemaining = MAX_HINTS; clearSavedGameState(); if (currentMode === "classic") { console.log(`Gen CLASSIC: ${currentDifficulty}...`); currentPuzzle = sudoku.generate(currentDifficulty); if (!currentPuzzle) throw new Error("Classic gen failed."); currentSolution = sudoku.solve(currentPuzzle); if (!currentSolution) throw new Error("Classic solve failed."); userGrid = boardStringToObjectArray(currentPuzzle); console.log("New classic OK."); success = true; } else if (currentMode === "killer") { console.log(`Gen KILLER: ${currentDifficulty}...`); console.log("Call killer.generate..."); const puzzle = killerSudoku.generate(currentDifficulty); console.log("Killer gen result:", puzzle); if (!puzzle?.cages) throw new Error("Killer gen failed (no cages)."); currentCageData = puzzle; console.log("Init solver data..."); currentSolverData = killerSudoku._initializeSolverData(currentCageData.cages); console.log("Solver init result:", currentSolverData); if (!currentSolverData) throw new Error("Cage validation/init failed."); userGrid = boardStringToObjectArray(killerSudoku.BLANK_BOARD); console.log("New killer OK."); success = true; } }
+            } else { // Если не restoreState
+                secondsElapsed = 0; hintsRemaining = MAX_HINTS; clearSavedGameState();
+                if (currentMode === "classic") {
+                    console.log(`Gen CLASSIC: ${currentDifficulty}...`);
+                    // --- ЗАМЕНИТЬ СТРОКУ НИЖЕ НА ВАШУ ТЕСТОВУЮ ГОЛОВОЛОМКУ ПРИ НЕОБХОДИМОСТИ ---
+                    // currentPuzzle = "3.4.97586.95....1368..5..29.5....23116..3.845.325.1967..6.7...4.7.42...8.4..13.72";
+                    // console.log("Using TEST puzzle string.");
+                    currentPuzzle = sudoku.generate(currentDifficulty); // Стандартная генерация
+                    console.log(`Generated puzzle: ${currentPuzzle}`);
+                    // --------------------------------------------------------------------
+                    if (!currentPuzzle) throw new Error("Classic gen failed.");
+                    currentSolution = sudoku.solve(currentPuzzle);
+                    if (!currentSolution) {
+                         console.warn("Solver failed for generated puzzle. It might be invalid or too hard for the basic solver.");
+                         // Можно попробовать сгенерировать заново или выдать ошибку
+                         // throw new Error("Classic solve failed for generated puzzle.");
+                    }
+                    userGrid = boardStringToObjectArray(currentPuzzle);
+                    console.log("New classic OK."); success = true;
+                } else if (currentMode === "killer") {
+                    console.log(`Gen KILLER: ${currentDifficulty}...`);
+                    console.log("Call killer.generate...");
+                    const puzzle = killerSudoku.generate(currentDifficulty);
+                    console.log("Killer gen result:", puzzle);
+                    if (!puzzle?.cages) throw new Error("Killer gen failed (no cages).");
+                    currentCageData = puzzle;
+                    console.log("Init solver data...");
+                    currentSolverData = killerSudoku._initializeSolverData(currentCageData.cages);
+                    console.log("Solver init result:", currentSolverData);
+                    if (!currentSolverData) throw new Error("Cage validation/init failed.");
+                    userGrid = boardStringToObjectArray(killerSudoku.BLANK_BOARD);
+                    console.log("New killer OK."); success = true;
+                }
+            }
         } catch (error) { console.error("INIT DATA ERR:", error); showError(`Ошибка init (${mode}): ${error.message}`); showScreen(initialScreen); checkContinueButton(); return; }
 
         if (success) {
@@ -1000,7 +1033,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     continue; // Не подходит (либо XY, либо не содержит X или Y)
                 }
-                if (Z_A === undefined || Z_A === -1) continue; // Не нашли Z
+                 // Проверяем, что Z было найдено (Z не может быть undefined при size === 2)
+                if (Z_A === undefined || Z_A === -1) continue;
 
                 // Ищем вторую клешню (pincerB)
                 for (let j = i + 1; j < bivaluePeers.length; j++) {
@@ -1013,10 +1047,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         continue;
                     }
 
-
-                    // Проверяем, соответствует ли вторая клешня (pincerB) ожидаемому типу и Z
-                    let pincerXZ, pincerYZ; // Стандартизированные переменные
-                    let Z = -1; // Общий Z для пары клешней
+                    // Определяем pincerXZ, pincerYZ и общего кандидата Z
+                    let pincerXZ = null, pincerYZ = null;
+                    let Z = -1;
 
                     if (pincerAType === 'XZ') { // Если pincerA = XZ
                         // Ищем pincerB типа YZ (содержит Y и Z_A, но не X)
@@ -1024,14 +1057,14 @@ document.addEventListener('DOMContentLoaded', () => {
                              pincerXZ = pincerA;
                              pincerYZ = pincerB;
                              Z = Z_A;
-                        } else { continue; } // pincerB не подходит
+                        }
                     } else { // Если pincerAType === 'YZ'
                          // Ищем pincerB типа XZ (содержит X и Z_A, но не Y)
                          if (pincerBCands.includes(X) && pincerBCands.includes(Z_A) && !pincerBCands.includes(Y)) {
-                              pincerXZ = pincerB; // Назначем pincerB как XZ
+                              pincerXZ = pincerB; // Назначаем pincerB как XZ
                               pincerYZ = pincerA; // Назначаем pincerA как YZ
                               Z = Z_A;
-                         } else { continue; } // pincerB не подходит
+                         }
                     }
 
                     // Если нашли подходящую пару клешней (pincerXZ и pincerYZ)
@@ -1052,8 +1085,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         for (const commonPeerId of commonPeers) {
                              const coords = getCellCoords(commonPeerId);
                              if (!coords) continue;
-                             // Удаляем только из пустых ячеек, не являющихся пивотом
-                             if (commonPeerId !== pivot.id && userGrid[coords.r][coords.c].value === 0 && currentCandidatesMap[commonPeerId]?.has(Z)) {
+                             // Удаляем только из пустых ячеек, не являющихся пивотом или клешнями
+                             if (commonPeerId !== pivot.id && commonPeerId !== pincerXZ.id && commonPeerId !== pincerYZ.id &&
+                                 userGrid[coords.r][coords.c].value === 0 &&
+                                 currentCandidatesMap[commonPeerId]?.has(Z)) {
                                 eliminations.push(commonPeerId);
                             }
                         }
@@ -1478,62 +1513,66 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /** Запускает логический решатель до упора */
     function runLogicSolver() {
-         console.log("%c--- Running Logic Solver ---", "color: green; font-weight: bold;");
-         if (currentMode !== 'classic') { showError("Логика только для классики."); return; }
-         if (isGameSolved()) { showSuccess("Судоку уже решено!"); return; }
-         if (isLogicSolverRunning) { console.log("Solver already running."); return; }
+        console.log("%c--- Running Logic Solver ---", "color: green; font-weight: bold;");
+        if (currentMode !== 'classic') { showError("Логика только для классики."); return; }
+        if (isGameSolved()) { showSuccess("Судоку уже решено!"); return; }
+        if (isLogicSolverRunning) { console.log("Solver already running."); return; }
 
-         isLogicSolverRunning = true; updateLogicSolverButtonsState();
-         statusMessageElement.textContent = "Решаю..."; statusMessageElement.className = '';
-         let stepsMade = 0; let actionFoundInCycle = true; let lastActionType = '';
+        isLogicSolverRunning = true; updateLogicSolverButtonsState();
+        statusMessageElement.textContent = "Решаю..."; statusMessageElement.className = '';
+        let stepsMade = 0;
+        let actionFoundInLastCycle = true; // <<< ИЗМЕНЕНО: Флаг для управления циклом
+        let lastActionType = '';
 
         // Объединяем техники в один массив для цикла
-         const techniques = [
-            { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle },
-            { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle },
-            { name: "Pointing Candidates", findFunc: findPointingCandidates, applyFunc: applyPointingBoxLineElimination },
-            { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyPointingBoxLineElimination },
-            { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination },
-            { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination },
-            { name: "X-Wing", findFunc: findXWing, applyFunc: applyXWingElimination },
-            { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyXYWingElimination }, // ДОБАВЛЕНО
-         ];
+        const techniques = [
+           { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle },
+           { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle },
+           { name: "Pointing Candidates", findFunc: findPointingCandidates, applyFunc: applyPointingBoxLineElimination },
+           { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyPointingBoxLineElimination },
+           { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination },
+           { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination },
+           { name: "X-Wing", findFunc: findXWing, applyFunc: applyXWingElimination },
+           { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyXYWingElimination }, // ДОБАВЛЕНО
+        ];
 
-         function solverCycle() {
-             if (isGameSolved() || !actionFoundInCycle) {
-                 isLogicSolverRunning = false; updateLogicSolverButtonsState(); saveGameState();
-                 if (isGameSolved()) showSuccess(`Решено за ${stepsMade} шаг(ов)!`);
-                 else showError(`Стоп после ${stepsMade} шагов. Не найдено следующих действий.`);
-                 return;
-             }
+        function solverCycle() {
+            // <<< ИЗМЕНЕНО: Условие остановки
+            if (isGameSolved() || !actionFoundInLastCycle) {
+                isLogicSolverRunning = false; updateLogicSolverButtonsState(); saveGameState();
+                if (isGameSolved()) showSuccess(`Решено за ${stepsMade} шаг(ов)!`);
+                 // <<< ИЗМЕНЕНО: Сообщение при остановке
+                else showError(`Стоп после ${stepsMade} шагов. ${lastActionType ? ('Последнее: ' + lastActionType + '.') : 'Не найдено следующих действий.'}`);
+                return;
+            }
 
-             actionFoundInCycle = false; // Сбрасываем флаг для текущего цикла
-             let foundInfo = null;
+            let actionFoundInCurrentCycle = false; // <<< ИЗМЕНЕНО: Флаг для текущего цикла
+            let foundInfo = null;
 
-             for (const tech of techniques) {
-                  // console.log(`Solver cycle: Searching ${tech.name}...`); // Можно добавить для дебага
-                  foundInfo = tech.findFunc();
-                  if (foundInfo) {
-                       if (tech.applyFunc(foundInfo)) {
-                            actionFoundInCycle = true; // Нашли и применили действие в этом цикле
-                            lastActionType = foundInfo.technique || tech.name;
-                            stepsMade++;
-                            console.log(`Solver Step ${stepsMade}: Applied ${lastActionType}`);
-                            break; // Переходим к следующей итерации цикла solverCycle
-                       } else {
-                            // Нашли, но не применили (например, Naked Pair без элиминаций)
-                            // Не считаем это за действие и продолжаем искать другие техники
-                            foundInfo = null;
-                       }
-                  }
-             }
+            for (const tech of techniques) {
+                 // console.log(`Solver cycle: Searching ${tech.name}...`);
+                 foundInfo = tech.findFunc();
+                 if (foundInfo) {
+                      if (tech.applyFunc(foundInfo)) {
+                           actionFoundInCurrentCycle = true; // Нашли и применили действие в этом цикле
+                           lastActionType = foundInfo.technique || tech.name;
+                           stepsMade++;
+                           console.log(`Solver Step ${stepsMade}: Applied ${lastActionType}`);
+                           break; // Выходим из цикла по техникам (вернули break)
+                      } else {
+                           foundInfo = null;
+                      }
+                 }
+            }
 
-             // Планируем следующий шаг цикла (даже если ничего не нашли, чтобы проверить isGameSolved)
-             // Небольшая задержка для отзывчивости интерфейса
-             setTimeout(solverCycle, 10);
-         }
-         solverCycle(); // Start the cycle
-    }
+            actionFoundInLastCycle = actionFoundInCurrentCycle; // <<< ИЗМЕНЕНО: Обновляем флаг для следующей итерации
+
+            // Планируем следующий шаг цикла
+            setTimeout(solverCycle, 10);
+        }
+        solverCycle(); // Start the cycle
+   }
+
 
      /** Обновляет состояние кнопок решателя */
      function updateLogicSolverButtonsState() {
