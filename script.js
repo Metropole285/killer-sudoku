@@ -342,7 +342,7 @@ document.addEventListener('DOMContentLoaded', () => {
      function pushHistoryState(){if(isGameSolved()) return; const s=createHistoryState();if(s){historyStack.push(s);updateUndoButtonState();}else{console.warn("Inv hist push");}}
      function handleUndo(){if(historyStack.length===0||isShowingAd)return;stopTimer();const ps=historyStack.pop();console.log("Undo...");try{userGrid=ps.grid;hintsRemaining=ps.hints;
          console.log("Recalculating candidates map and notes after undo...");
-         calculateAllCandidates(); // Обновляет currentCandidatesMap и userGrid.notes
+         calculateAllCandidates();
          renderBoard();clearSelection();clearErrors();updateHintButtonState();updateUndoButtonState();updateLogicSolverButtonsState(); saveGameState();console.log("Undo OK.");}catch(e){console.error("Undo Err:",e);showError("Ошибка отмены");historyStack=[];updateUndoButtonState();updateLogicSolverButtonsState();}finally{resumeTimerIfNeeded();}}
      function updateUndoButtonState(){if(undoButton)undoButton.disabled=historyStack.length===0;}
 
@@ -357,12 +357,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Отрисовка ---
      function renderBoard() { console.log(`Render board start: mode=${currentMode}`); if (!boardElement) { console.error("Board element missing!"); return; } boardElement.innerHTML = ''; if (!userGrid || userGrid.length !== 9) { showError("Invalid grid data for rendering."); return; } const cellElementsMap = {}; for (let r = 0; r < 9; r++) { if (!userGrid[r] || userGrid[r].length !== 9) continue; for (let c = 0; c < 9; c++) { const cellId = getCellId(r, c); if (!cellId) continue; const cellElement = createCellElement(r, c); boardElement.appendChild(cellElement); cellElementsMap[cellId] = cellElement; } } if (currentMode === "killer" && currentSolverData?.cageDataArray) { currentSolverData.cageDataArray.forEach((cage, cageIndex) => { if (!cage || !Array.isArray(cage.cells) || cage.cells.length === 0) { console.warn(`Skipping invalid cage data at index ${cageIndex}`); return; } const cageCellSet = new Set(cage.cells); let anchorCellId = null; let minRow = 9, minCol = 9; cage.cells.forEach(cellId => { const coords = getCellCoords(cellId); if (coords) { if (coords.r < minRow) { minRow = coords.r; minCol = coords.c; anchorCellId = cellId; } else if (coords.r === minRow && coords.c < minCol) { minCol = coords.c; anchorCellId = cellId; } } }); cage.cells.forEach(cellId => { const cellElement = cellElementsMap[cellId]; if (!cellElement) return; cellElement.classList.add('cage-cell'); if (cellId === anchorCellId) { cellElement.classList.add('cage-sum-anchor'); if (!cellElement.querySelector('.cage-sum')) { const sumSpan = document.createElement('span'); sumSpan.className = 'cage-sum'; sumSpan.textContent = cage.sum; cellElement.appendChild(sumSpan); } } const coords = getCellCoords(cellId); if (!coords) return; const { r, c } = coords; const neighbors = getNeighbors(r, c); if (r === 0 || !neighbors.top || !cageCellSet.has(neighbors.top)) { cellElement.classList.add('cage-inner-border-top'); } if (c === 0 || !neighbors.left || !cageCellSet.has(neighbors.left)) { cellElement.classList.add('cage-inner-border-left'); } if (r === 8 || !neighbors.bottom || !cageCellSet.has(neighbors.bottom)) { cellElement.classList.add('cage-inner-border-bottom'); } if (c === 8 || !neighbors.right || !cageCellSet.has(neighbors.right)) { cellElement.classList.add('cage-inner-border-right'); } }); }); } console.log("Board rendering complete."); }
      function createCellElement(r, c) { const cell=document.createElement('div');cell.classList.add('cell'); cell.dataset.row=r;cell.dataset.col=c; const cd=userGrid[r]?.[c]; if(!cd){cell.textContent='?';console.warn(`Missing grid data for ${r},${c}`);return cell;} const vc=document.createElement('div');vc.classList.add('cell-value-container'); const nc=document.createElement('div');nc.classList.add('cell-notes-container'); if(cd.value!==0){ vc.textContent=cd.value;vc.style.display='flex';nc.style.display='none'; if(currentMode==='classic'&&currentPuzzle){ const i=r*9+c; if(currentPuzzle[i]&&currentPuzzle[i]!=='.')cell.classList.add('given'); } } else if(cd.notes instanceof Set&&cd.notes.size>0){ vc.style.display='none';nc.style.display='grid';nc.innerHTML=''; for(let n=1;n<=9;n++){const nd=document.createElement('div');nd.classList.add('note-digit');nd.textContent=cd.notes.has(n)?n:'';nc.appendChild(nd);} } else { vc.textContent='';vc.style.display='flex';nc.style.display='none'; } cell.appendChild(vc);cell.appendChild(nc); if((c+1)%3===0&&c<8)cell.classList.add('thick-border-right'); if((r+1)%3===0&&r<8)cell.classList.add('thick-border-bottom'); return cell; }
-     function renderCell(r, c) { if (!boardElement) return; /* Убрали принудительный renderBoard для Killer */ const oldCell = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`); if (oldCell) { try { const newCell = createCellElement(r, c); oldCell.classList.forEach(cls => { if(cls!=='cell' && !cls.startsWith('thick-') && !cls.startsWith('cage-inner-')) newCell.classList.add(cls); }); ['cage-cell', 'cage-sum-anchor', 'cage-inner-border-top', 'cage-inner-border-bottom', 'cage-inner-border-left', 'cage-inner-border-right'].forEach(cls => { if (oldCell.classList.contains(cls)) newCell.classList.add(cls); }); const oldSum = oldCell.querySelector('.cage-sum'); if (oldSum) newCell.appendChild(oldSum.cloneNode(true)); if (selectedRow === r && selectedCol === c) selectedCell = newCell; oldCell.replaceWith(newCell); } catch (error) { console.error(`Error render cell [${r}, ${c}]:`, error); renderBoard(); } } else { console.warn(`renderCell: Cell [${r},${c}] not found? Render full.`); renderBoard(); } }
+     function renderCell(r, c) { if (!boardElement) return; const oldCell = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`); if (oldCell) { try { const newCell = createCellElement(r, c); oldCell.classList.forEach(cls => { if(cls!=='cell' && !cls.startsWith('thick-') && !cls.startsWith('cage-inner-')) newCell.classList.add(cls); }); ['cage-cell', 'cage-sum-anchor', 'cage-inner-border-top', 'cage-inner-border-bottom', 'cage-inner-border-left', 'cage-inner-border-right'].forEach(cls => { if (oldCell.classList.contains(cls)) newCell.classList.add(cls); }); const oldSum = oldCell.querySelector('.cage-sum'); if (oldSum) newCell.appendChild(oldSum.cloneNode(true)); if (selectedRow === r && selectedCol === c) selectedCell = newCell; oldCell.replaceWith(newCell); } catch (error) { console.error(`Error render cell [${r}, ${c}]:`, error); renderBoard(); } } else { console.warn(`renderCell: Cell [${r},${c}] not found? Render full.`); renderBoard(); } }
 
 
     // --- Логика подсказки ---
      function provideHintInternal(){if(currentMode!=='classic')return showError("Подсказки только в классике");if(!selectedCell)return showError("Выберите ячейку"); const r=selectedRow,c=selectedCol;if(r<0||c<0||!userGrid[r]?.[c])return showError("Ошибка данных ячейки"); if(userGrid[r][c].value!==0)return showError("Ячейка заполнена");if(selectedCell.classList.contains('given')) return showError("Начальная цифра");pushHistoryState();let hintUsed=false;try{const sv=getSolutionValue(r,c);if(sv===null)throw new Error("Решение недоступно");if(sv>0){console.log(`Hint [${r},${c}]: ${sv}`);userGrid[r][c].value=sv;if(userGrid[r][c].notes)userGrid[r][c].notes.clear();
-         updateCandidatesOnSet(r, c, sv, userGrid); // <<< Передаем userGrid
+         updateCandidatesOnSet(r, c, sv, userGrid);
          renderCell(r,c);const hEl=boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);if(hEl){hEl.classList.remove('selected');const hc=getComputedStyle(document.documentElement).getPropertyValue('--highlight-hint-flash').trim()||'#fffacd';hEl.style.transition='background-color 0.1s ease-out';hEl.style.backgroundColor=hc;setTimeout(()=>{if(hEl&&hEl.style.backgroundColor!==''){hEl.style.backgroundColor='';hEl.style.transition='';}clearSelection();},500);}else{clearSelection();}hintsRemaining--;hintUsed=true;updateHintButtonState();clearErrors();saveGameState();if(isGameSolved()){checkGame();updateLogicSolverButtonsState();}}else throw new Error(`Некорректное значение решения [${r},${c}]: ${sv}`);}catch(e){console.error("Hint Err:",e.message);showError(e.message);if(!hintUsed&&historyStack.length>0){historyStack.pop();updateUndoButtonState();}}}
      function offerRewardedAdForHints(){if(currentMode!=='classic'||isShowingAd)return;console.log("Offering ad...");if(confirm(`Подсказки зак-сь! Реклама за ${MAX_HINTS} подсказку?`)){if(!isAdReady){showError("Реклама грузится...");preloadRewardedAd();return;}showRewardedAd({onSuccess:()=>{hintsRemaining+=MAX_HINTS;updateHintButtonState();saveGameState();showSuccess(`+${MAX_HINTS} подсказка!`);},onError:(msg)=>{showError(`Ошибка: ${msg||'Реклама?'} Подсказка не добавлена.`);}});}}
 
@@ -514,8 +514,6 @@ document.addEventListener('DOMContentLoaded', () => {
                      }
                  }
              }
-             // ВАЖНО: Полный пересчет может быть нужен для точности Killer
-             // calculateAllCandidates(); // Раскомментировать для макс. точности
         }
         console.log(`Candidates & Notes updated (basic peer/cage check) after setting ${digit} at ${cellId}`);
     }
@@ -531,21 +529,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Классические Функции поиска техник (find...) ---
-    // Они остаются здесь и используются только для классического режима
-    function findNakedSingle() { /* ... как в пред. версии ... */ }
-    function findHiddenSingle() { /* ... как в пред. версии ... */ }
-    function findHiddenSingleInUnit(unitIndices, candidatesMap) { /* ... как в пред. версии ... */ }
-    function findNakedPair() { /* ... как в пред. версии ... */ }
-    function findHiddenPair() { /* ... как в пред. версии ... */ }
-    function findNakedTriple() { /* ... как в пред. версии ... */ }
-    function findHiddenTriple() { /* ... как в пред. версии ... */ }
-    function findPointingCandidates() { /* ... как в пред. версии ... */ }
-    function tryEliminatePointing(unitType, unitIndex, blockCellIdsSet, digit, candidatesMap) { /* ... как в пред. версии ... */ }
-    function findBoxLineReduction() { /* ... как в пред. версии ... */ }
-    function checkReductionInLine(lineType, lineIndex, lineIndices, candidatesMap) { /* ... как в пред. версии ... */ }
-    function tryEliminateBoxLine(targetBlockIndex, lineType, lineIndex, digit, candidatesMap) { /* ... как в пред. версии ... */ }
-    function findXWing() { /* ... как в пред. версии ... */ }
-    function findXYWing() { /* ... как в пред. версии ... */ }
+    // ОСТАЮТСЯ ЗДЕСЬ для Classic Mode
+    function findNakedSingle() { /* ... */ }
+    function findHiddenSingle() { /* ... */ }
+    function findHiddenSingleInUnit(unitIndices, candidatesMap) { /* ... */ }
+    function findNakedPair() { /* ... */ }
+    function findHiddenPair() { /* ... */ }
+    function findNakedTriple() { /* ... */ }
+    function findHiddenTriple() { /* ... */ }
+    function findPointingCandidates() { /* ... */ }
+    function tryEliminatePointing(unitType, unitIndex, blockCellIdsSet, digit, candidatesMap) { /* ... */ }
+    function findBoxLineReduction() { /* ... */ }
+    function checkReductionInLine(lineType, lineIndex, lineIndices, candidatesMap) { /* ... */ }
+    function tryEliminateBoxLine(targetBlockIndex, lineType, lineIndex, digit, candidatesMap) { /* ... */ }
+    function findXWing() { /* ... */ }
+    function findXYWing() { /* ... */ }
 
 
     // --- Классические Функции применения техник (apply...) ---
@@ -694,6 +692,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (currentMode === 'classic') {
                  const singleTechniques = [ { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle }, { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle } ];
                  const eliminationTechniques = [ { name: "Pointing Candidates", findFunc: findPointingCandidates, applyFunc: applyElimination }, { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyElimination }, { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination }, { name: "Hidden Pair", findFunc: findHiddenPair, applyFunc: applyHiddenGroupElimination }, { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination }, { name: "Hidden Triple", findFunc: findHiddenTriple, applyFunc: applyHiddenGroupElimination }, { name: "X-Wing", findFunc: findXWing, applyFunc: applyElimination }, { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyElimination } ];
+                 // Поиск
                  for (const tech of singleTechniques) { console.log(`Classic Searching ${tech.name}...`); const found = tech.findFunc(); if (found) { if (tech.applyFunc(found)) { appliedInfo = found; break; } else { historyKept = false; appliedInfo = null; } } }
                  if (!appliedInfo) { for (const tech of eliminationTechniques) { console.log(`Classic Searching ${tech.name}...`); const found = tech.findFunc(); if (found) { if (tech.applyFunc(found)) { appliedInfo = found; break; } else { historyKept = false; appliedInfo = null; } } } }
 
@@ -701,17 +700,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!killerSolverLogic || !currentSolverData) { throw new Error("Killer solver logic or data not available."); }
                  appliedInfo = killerSolverLogic.doKillerLogicStep(
                      userGrid, currentCandidatesMap, currentSolverData,
-                     // <<< Передаем общую функцию updateCandidatesOnSet >>>
                      (r, c, digit) => updateCandidatesOnSet(r, c, digit, userGrid),
                      renderCell
                  );
                  if (!appliedInfo) {
                      historyKept = false;
                  } else {
-                      // <<< Пересчитываем кандидаты/заметки ПОСЛЕ шага Killer >>>
-                      console.log("Recalculating killer candidates/notes after step application...");
-                      calculateAllCandidates();
-                      renderBoard(); // Перерисовываем доску для обновления всех заметок
+                      console.log("Recalculating killer candidates/notes after step...");
+                      calculateAllCandidates(); // Обновит currentCandidatesMap и userGrid.notes
+                      renderBoard(); // Перерисовываем доску
                  }
 
             } else {
@@ -748,7 +745,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    /** Запускает логический решатель до упора */
+    /** Запускает логический решатель до упора (ИСПРАВЛЕНО) */
     function runLogicSolver() {
         console.log(`%c--- Running Full Solver (${currentMode}) ---`, "color: green; font-weight: bold;");
         if (isGameSolved()) { showSuccess("Судоку уже решено!"); return; }
@@ -759,31 +756,40 @@ document.addEventListener('DOMContentLoaded', () => {
         statusMessageElement.textContent = "Решаю..."; statusMessageElement.className = '';
 
         let stepsMade = 0;
-        let actionFoundInLastCycle = true;
+        let actionFoundInLastCycle = true; // Начинаем с true
         let lastActionType = '';
         let errorOccurred = false;
 
-        // Определяем функцию для выполнения одного шага
-        let stepFunction;
-
+        // Определяем техники для текущего режима
+        let techniques;
         if (currentMode === 'classic') {
-            stepFunction = () => {
-                 let applied = null;
-                 const singleTechs = [ { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle }, { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle } ];
-                 const elimTechs = [ { name: "Pointing Candidates", findFunc: findPointingCandidates, applyFunc: applyElimination }, { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyElimination }, { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination }, { name: "Hidden Pair", findFunc: findHiddenPair, applyFunc: applyHiddenGroupElimination }, { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination }, { name: "Hidden Triple", findFunc: findHiddenTriple, applyFunc: applyHiddenGroupElimination }, { name: "X-Wing", findFunc: findXWing, applyFunc: applyElimination }, { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyElimination } ];
-                 for(const tech of singleTechs) { const f = tech.findFunc(); if(f) { if(tech.applyFunc(f)) { applied = f; break; } else { applied = null; } } }
-                 if (!applied) { for(const tech of elimTechs) { const f = tech.findFunc(); if(f) { if(tech.applyFunc(f)) { applied = f; break; } else { applied = null; } } } }
-                 return applied;
-             };
+            techniques = [
+                { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle },
+                { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle },
+                { name: "Pointing Candidates", findFunc: findPointingCandidates, applyFunc: applyElimination },
+                { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyElimination },
+                { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination },
+                { name: "Hidden Pair", findFunc: findHiddenPair, applyFunc: applyHiddenGroupElimination },
+                { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination },
+                { name: "Hidden Triple", findFunc: findHiddenTriple, applyFunc: applyHiddenGroupElimination },
+                { name: "X-Wing", findFunc: findXWing, applyFunc: applyElimination },
+                { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyElimination },
+            ];
         } else if (currentMode === 'killer') {
             if (!killerSolverLogic || !currentSolverData) {
                 showError("Ошибка: Логика или данные Killer Sudoku недоступны.");
                 isLogicSolverRunning = false; updateLogicSolverButtonsState(); return;
             }
-            stepFunction = () => killerSolverLogic.doKillerLogicStep(
-                 userGrid, currentCandidatesMap, currentSolverData,
-                 updateCandidatesOnSet, renderCell
-            );
+            techniques = [
+                // killerSolverLogic.doKillerLogicStep уже содержит внутренний порядок
+                // Поэтому здесь достаточно вызвать его один раз за цикл
+                { name: "Killer Step", findAndApplyFunc: () => killerSolverLogic.doKillerLogicStep(
+                    userGrid, currentCandidatesMap, currentSolverData,
+                    (r, c, digit) => updateCandidatesOnSet(r, c, digit, userGrid),
+                    renderCell
+                   )
+                }
+            ];
         } else {
             showError("Неподдерживаемый режим для решателя.");
             isLogicSolverRunning = false; updateLogicSolverButtonsState(); return;
@@ -791,11 +797,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function solverCycle() {
             if (errorOccurred || isGameSolved() || !actionFoundInLastCycle) {
-                 // <<< Финальный пересчет и рендер для Killer >>>
                  if (currentMode === 'killer' && !errorOccurred) {
                     console.log("Final recalculation and render for Killer solver cycle.");
-                    calculateAllCandidates(); // Финальный пересчет/синхронизация
-                    renderBoard(); // Финальный рендер
+                    calculateAllCandidates();
+                    renderBoard();
                  }
                 isLogicSolverRunning = false;
                 updateLogicSolverButtonsState();
@@ -807,41 +812,66 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            let appliedInfo = null;
+            let appliedSuccessfully = false; // <<< Флаг успешного *применения* шага
+            let foundInfo = null;
             pushHistoryState();
             let historyKept = true;
 
             try {
-                appliedInfo = stepFunction(); // Выполняем один шаг
-
-                if (appliedInfo) {
-                    actionFoundInLastCycle = true;
-                    lastActionType = appliedInfo.technique || 'Unknown';
-                    stepsMade++;
-                    console.log(`(${currentMode}) Solver Step ${stepsMade}: Applied ${lastActionType}`);
-                     // <<< ПЕРЕСЧЕТ КАНДИДАТОВ В KILLER ПОСЛЕ КАЖДОГО ШАГА >>>
-                     if (currentMode === 'killer') {
-                          console.log("Recalculating killer candidates/notes during full solve...");
-                          calculateAllCandidates(); // Обновит currentCandidatesMap и userGrid.notes
-                          // renderBoard(); // Не рендерим всю доску на каждом шаге, только измененные ячейки
-                     }
-                } else {
-                    actionFoundInLastCycle = false;
-                    historyKept = false; // Шаг не применен, откатываем историю
+                if(currentMode === 'classic') {
+                    for (const tech of techniques) {
+                        // console.log(`Solver cycle: Searching ${tech.name}...`);
+                        foundInfo = tech.findFunc();
+                        if (foundInfo) {
+                            if (tech.applyFunc(foundInfo)) {
+                                appliedSuccessfully = true; // Успешно применили
+                                lastActionType = foundInfo.technique || tech.name;
+                                stepsMade++;
+                                console.log(`(${currentMode}) Solver Step ${stepsMade}: Applied ${lastActionType}`);
+                                break; // Переходим к следующей итерации solverCycle
+                            } else {
+                                // Нашли, но не применили
+                                foundInfo = null; // Сбрасываем, но не останавливаем поиск других техник
+                            }
+                        }
+                    }
+                } else { // Killer Mode
+                    // Вызываем общую функцию шага из killerSolverLogic
+                    foundInfo = techniques[0].findAndApplyFunc();
+                    if(foundInfo) {
+                        appliedSuccessfully = true; // doKillerLogicStep возвращает info только если применил
+                        lastActionType = foundInfo.technique || 'Killer Step';
+                        stepsMade++;
+                        console.log(`(${currentMode}) Solver Step ${stepsMade}: Applied ${lastActionType}`);
+                        // <<< Пересчет кандидатов/заметок после шага Killer >>>
+                        console.log("Recalculating killer candidates/notes during full solve...");
+                        calculateAllCandidates();
+                    }
                 }
+
+                if (!appliedSuccessfully) {
+                    actionFoundInLastCycle = false; // Ничего не применили в этом цикле
+                    historyKept = false;
+                } else {
+                    actionFoundInLastCycle = true; // Что-то применили, продолжаем
+                }
+
             } catch (error) {
                 console.error("Error during solver cycle:", error);
                 showError(`Ошибка решателя: ${error.message}`);
                 errorOccurred = true;
-                historyKept = false; // Откатываем историю при ошибке
+                historyKept = false;
             } finally {
                  if (!historyKept && historyStack.length > 0) {
                      historyStack.pop();
                  }
                  updateUndoButtonState();
-                 // Планируем следующий шаг, только если не было ошибки
                  if (!errorOccurred) {
-                    setTimeout(solverCycle, 5);
+                    // Render board only if Killer made a change (to show updated notes)
+                    if (currentMode === 'killer' && appliedSuccessfully) {
+                        renderBoard();
+                    }
+                    setTimeout(solverCycle, 5); // Планируем следующий шаг
                  } else {
                       isLogicSolverRunning = false;
                       updateLogicSolverButtonsState();
@@ -908,7 +938,7 @@ document.addEventListener('DOMContentLoaded', () => {
         themeToggleCheckbox?.addEventListener('change', handleThemeToggle);
         backToInitialButton?.addEventListener('click', () => { console.log("Back btn"); showScreen(initialScreen); checkContinueButton(); });
         boardElement?.addEventListener('click', (e)=>{ try { const target = e.target.closest('.cell'); if (!target || isShowingAd || isGameSolved()) return; const r = parseInt(target.dataset.row); const c = parseInt(target.dataset.col); if (isNaN(r) || isNaN(c)) return; if (target === selectedCell) { clearSelection(); } else { clearSelection(); selectedCell = target; selectedRow = r; selectedCol = c; if (!(currentMode === 'classic' && target.classList.contains('given'))) { selectedCell.classList.add('selected'); } highlightRelatedCells(r, c); } clearErrors(); } catch (error) { console.error("!!!! BOARD CLICK HANDLER ERROR !!!!", error); showError(`Ошибка клика: ${error.message}`); } });
-        // NUMPAD Handler (с обновлением кандидатов)
+        // NUMPAD Handler
         numpad?.addEventListener('click', (e)=>{
             const b=e.target.closest('button');
             if (!b || isShowingAd || isGameSolved() || !selectedCell) return;
@@ -922,74 +952,36 @@ document.addEventListener('DOMContentLoaded', () => {
             let rerenderNeeded = false;
             let candidatesChanged = false;
             let pushHistoryNeeded = false;
-            //let forceFullRender = false; // Больше не нужно, renderCell справится
 
             // Определяем, нужно ли сохранять историю ДО действия
-            if (b.id === 'erase-button') {
-                pushHistoryNeeded = (cd.value !== 0) || (cd.notes?.size > 0);
-            } else if (b.dataset.num) {
-                const n = parseInt(b.dataset.num);
-                if (!isNoteMode) { pushHistoryNeeded = (cd.value !== n); }
-                else { pushHistoryNeeded = (cd.value === 0); }
-            }
+            if (b.id === 'erase-button') { pushHistoryNeeded = (cd.value !== 0) || (cd.notes?.size > 0); }
+            else if (b.dataset.num) { const n = parseInt(b.dataset.num); if (!isNoteMode) { pushHistoryNeeded = (cd.value !== n); } else { pushHistoryNeeded = (cd.value === 0); } }
 
             if (pushHistoryNeeded && !isGameSolved()) { pushHistoryState(); }
 
             // Выполняем действие
             if (b.id === 'erase-button') {
-                if (cd.value !== 0) {
-                    cd.value = 0;
-                    rerenderNeeded = true;
-                    candidatesChanged = true;
-                    updateCandidatesOnErase(selectedRow, selectedCol);
-                } else if (cd.notes?.size > 0) {
-                    cd.notes.clear();
-                    rerenderNeeded = true;
-                }
+                if (cd.value !== 0) { cd.value = 0; rerenderNeeded = true; candidatesChanged = true; updateCandidatesOnErase(selectedRow, selectedCol); }
+                else if (cd.notes?.size > 0) { cd.notes.clear(); rerenderNeeded = true; /* Карта не меняется от стирания заметок */ }
             } else if (b.dataset.num) {
                 const n = parseInt(b.dataset.num);
                 if (isNoteMode) {
-                    if (cd.value === 0) {
-                        if (!(cd.notes instanceof Set)) cd.notes = new Set();
-                        if (cd.notes.has(n)) cd.notes.delete(n);
-                        else cd.notes.add(n);
-                        rerenderNeeded = true;
-                    }
+                    if (cd.value === 0) { if (!(cd.notes instanceof Set)) cd.notes = new Set(); if (cd.notes.has(n)) cd.notes.delete(n); else cd.notes.add(n); rerenderNeeded = true; }
                 } else {
-                    if (cd.value !== n) {
-                        cd.value = n;
-                        if (cd.notes) cd.notes.clear();
-                        rerenderNeeded = true;
-                        candidatesChanged = true;
-                        updateCandidatesOnSet(selectedRow, selectedCol, n, userGrid);
-                    } else {
-                        cd.value = 0;
-                        rerenderNeeded = true;
-                        candidatesChanged = true;
-                        updateCandidatesOnErase(selectedRow, selectedCol);
-                    }
+                    if (cd.value !== n) { cd.value = n; if (cd.notes) cd.notes.clear(); rerenderNeeded = true; candidatesChanged = true; updateCandidatesOnSet(selectedRow, selectedCol, n, userGrid); }
+                    else { cd.value = 0; rerenderNeeded = true; candidatesChanged = true; updateCandidatesOnErase(selectedRow, selectedCol); }
                 }
             }
 
             // Перерисовка и сохранение
             if (rerenderNeeded) {
-                 renderCell(selectedRow, selectedCol); // Обновляем только одну ячейку
-                 // <<< Добавим полный рендер после ручного изменения заметки в Killer, т.к. карта не обновляется >>>
+                renderCell(selectedRow, selectedCol);
                  if(isNoteMode && currentMode === 'killer') {
-                     renderBoard(); // Перерисовываем всю доску, чтобы показать изменения заметок везде
-                     // Восстанавливаем выделение
-                    if (selectedRow !== -1 && selectedCol !== -1) {
-                        selectedCell = boardElement?.querySelector(`.cell[data-row='${selectedRow}'][data-col='${selectedCol}']`);
-                        if (selectedCell) { selectedCell.classList.add('selected'); highlightRelatedCells(selectedRow, selectedCol); }
-                        else { clearSelection(); }
-                    }
+                     renderBoard(); // Полный рендер для Killer заметок
+                     if(selectedRow!==-1 && selectedCol!==-1){ selectedCell = boardElement?.querySelector(`.cell[data-row='${selectedRow}'][data-col='${selectedCol}']`); if(selectedCell){ selectedCell.classList.add('selected'); highlightRelatedCells(selectedRow, selectedCol); } else { clearSelection(); } }
                  }
             }
-
-            if ((rerenderNeeded || candidatesChanged) && !isGameSolved()){
-                saveGameState();
-                updateLogicSolverButtonsState();
-            }
+            if ((rerenderNeeded || candidatesChanged) && !isGameSolved()){ saveGameState(); updateLogicSolverButtonsState(); }
         });
         checkButton?.addEventListener('click', checkGame);
         undoButton?.addEventListener('click', handleUndo);
@@ -1016,7 +1008,6 @@ document.addEventListener('DOMContentLoaded', () => {
             let rerenderNeeded = false;
             let candidatesChanged = false;
             let pushHistoryNeeded = false;
-            // let forceFullRender = false; // Не нужно
 
             if (e.key >= '1' && e.key <= '9') { const n = parseInt(e.key); if (!isNoteMode) pushHistoryNeeded = (cd.value !== n); else pushHistoryNeeded = (cd.value === 0); }
             else if (e.key === 'Backspace' || e.key === 'Delete') { pushHistoryNeeded = (cd.value !== 0) || (cd.notes?.size > 0); }
@@ -1026,20 +1017,20 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.key >= '1' && e.key <= '9') {
                 clearErrors(); const n = parseInt(e.key);
                 if (isNoteMode) { if (cd.value === 0) { if (!(cd.notes instanceof Set)) cd.notes = new Set(); if (cd.notes.has(n)) cd.notes.delete(n); else cd.notes.add(n); rerenderNeeded = true; } }
-                else { if (cd.value !== n) { cd.value = n; if (cd.notes) cd.notes.clear(); rerenderNeeded = true; candidatesChanged = true; updateCandidatesOnSet(selectedRow, selectedCol, n, userGrid); } else { const erasedDigit = cd.value; cd.value = 0; rerenderNeeded = true; candidatesChanged = true; updateCandidatesOnErase(selectedRow, selectedCol); } }
+                else { if (cd.value !== n) { cd.value = n; if (cd.notes) cd.notes.clear(); rerenderNeeded = true; candidatesChanged = true; updateCandidatesOnSet(selectedRow, selectedCol, n, userGrid); } else { cd.value = 0; rerenderNeeded = true; candidatesChanged = true; updateCandidatesOnErase(selectedRow, selectedCol); } }
                 e.preventDefault();
             }
             else if (e.key === 'Backspace' || e.key === 'Delete') {
                 clearErrors();
-                if (cd.value !== 0) { const erasedDigit = cd.value; cd.value = 0; rerenderNeeded = true; candidatesChanged = true; updateCandidatesOnErase(selectedRow, selectedCol); }
+                if (cd.value !== 0) { cd.value = 0; rerenderNeeded = true; candidatesChanged = true; updateCandidatesOnErase(selectedRow, selectedCol); }
                 else if (cd.notes?.size > 0) { cd.notes.clear(); rerenderNeeded = true; }
                 e.preventDefault();
             }
 
             if (rerenderNeeded) {
-                renderCell(selectedRow, selectedCol);
+                 renderCell(selectedRow, selectedCol);
                  if(isNoteMode && currentMode === 'killer') {
-                     renderBoard(); // Полный рендер для Killer заметок
+                     renderBoard();
                      if(selectedRow!==-1 && selectedCol!==-1){ selectedCell = boardElement?.querySelector(`.cell[data-row='${selectedRow}'][data-col='${selectedCol}']`); if(selectedCell){ selectedCell.classList.add('selected'); highlightRelatedCells(selectedRow, selectedCol); } else { clearSelection(); } }
                  }
             }
