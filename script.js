@@ -48,6 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSolverData = null;
     let userGrid = [];
     let currentCandidatesMap = {}; // Карта кандидатов {cellId: Set<number>}
+    let classicPeersMapCache = null; // <<< Кэш для пиров
     let historyStack = [];
     let selectedCell = null;
     let selectedRow = -1;
@@ -193,30 +194,48 @@ document.addEventListener('DOMContentLoaded', () => {
          }
          return parseInt(char);
      }
+
      /**
-      * Получает список ID всех пиров (в строке, столбце, блоке) для ячейки.
+      * <<< ИЗМЕНЕНО >>> Получает Set ID всех пиров для ячейки (кэшируется).
       */
      function getClassicPeers(r, c) {
-        const peers = new Set();
-        //const cellId = getCellId(r,c); // Не нужен сам ID
-        // Row peers
-        for (let ci = 0; ci < 9; ci++) if (ci !== c) { const id = getCellId(r, ci); if(id) peers.add(id); }
-        // Col peers
-        for (let ri = 0; ri < 9; ri++) if (ri !== r) { const id = getCellId(ri, c); if(id) peers.add(id); }
-        // Block peers
-        const startRow = Math.floor(r / 3) * 3;
-        const startCol = Math.floor(c / 3) * 3;
-        for (let i = 0; i < 3; i++) {
-            for (let j = 0; j < 3; j++) {
-                const peerR = startRow + i;
-                const peerC = startCol + j;
-                if (peerR !== r || peerC !== c) {
-                    const id = getCellId(peerR, peerC);
-                    if(id) peers.add(id);
-                }
-            }
-        }
-        return peers;
+         const cellId = getCellId(r,c);
+         if (!cellId) return new Set(); // Возвращаем пустой Set, если ID некорректен
+
+         // Инициализация кэша при первом вызове
+         if (classicPeersMapCache === null) {
+             console.log("Initializing classic peers cache...");
+             classicPeersMapCache = {};
+             for (let r_cache = 0; r_cache < 9; r_cache++) {
+                 for (let c_cache = 0; c_cache < 9; c_cache++) {
+                     const id_cache = getCellId(r_cache, c_cache);
+                     if (id_cache) {
+                         const peers = new Set();
+                         // Row peers
+                         for (let ci = 0; ci < 9; ci++) if (ci !== c_cache) { const pid = getCellId(r_cache, ci); if(pid) peers.add(pid); }
+                         // Col peers
+                         for (let ri = 0; ri < 9; ri++) if (ri !== r_cache) { const pid = getCellId(ri, c_cache); if(pid) peers.add(pid); }
+                         // Block peers
+                         const startRow = Math.floor(r_cache / 3) * 3;
+                         const startCol = Math.floor(c_cache / 3) * 3;
+                         for (let i = 0; i < 3; i++) {
+                             for (let j = 0; j < 3; j++) {
+                                 const peerR = startRow + i;
+                                 const peerC = startCol + j;
+                                 if (peerR !== r_cache || peerC !== c_cache) {
+                                     const pid = getCellId(peerR, peerC);
+                                     if(pid) peers.add(pid);
+                                 }
+                             }
+                         }
+                         classicPeersMapCache[id_cache] = peers;
+                     }
+                 }
+             }
+             console.log("Classic peers cache initialized.");
+         }
+         // Возвращаем из кэша (или пустой Set, если ID нет в кэше - не должно случиться)
+         return classicPeersMapCache[cellId] || new Set();
     }
 
 
@@ -233,6 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
         statusMessageElement.textContent = 'Генерация...'; statusMessageElement.className = '';
         currentPuzzle = null; currentSolution = null; currentCageData = null; currentSolverData = null; userGrid = [];
         currentCandidatesMap = {}; // СБРОС КАРТЫ КАНДИДАТОВ
+        classicPeersMapCache = null; // <<< СБРОС КЭША ПИРОВ >>>
         isLogicSolverRunning = false;
 
         let success = false;
@@ -640,7 +660,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             for (let d = 1; d <= 9; d++) { // Итерация по цифрам
                 // Находим все ячейки в блоке, где 'd' является кандидатом
-                const possibleCellsInBlock = blockCellIds.filter(cellId => currentCandidatesMap[cellId]?.has(d));
+                const possibleCellsInBlock = blockCellIds.filter(cellId => cellId && currentCandidatesMap[cellId]?.has(d));
+
 
                 if (possibleCellsInBlock.length >= 2) { // Нет смысла, если кандидат только в одной ячейке или его нет
                     const rowsInBlock = new Set();
@@ -690,10 +711,11 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const [r, c] of unitIndices) {
             const cellId = getCellId(r, c);
             // Если ячейка не в текущем блоке, пустая и содержит кандидата 'd'
-            if (!blockCellIdsSet.has(cellId) && userGrid[r]?.[c]?.value === 0 && candidatesMap[cellId]?.has(digit)) {
+            if (cellId && !blockCellIdsSet.has(cellId) && userGrid[r]?.[c]?.value === 0 && candidatesMap[cellId]?.has(digit)) {
                 eliminations.push(cellId);
             }
         }
+
 
         // Возвращаем информацию, если есть что элиминировать
         return eliminations.length > 0 ? {
@@ -730,7 +752,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function checkReductionInLine(lineType, lineIndex, lineIndices, candidatesMap) {
         for (let d = 1; d <= 9; d++) { // Итерация по цифрам
             // Находим все ячейки в линии, где 'd' является кандидатом
-            const possibleCellsInLine = lineIndices.filter(([r, c]) => candidatesMap[getCellId(r, c)]?.has(d));
+            const possibleCellsInLine = lineIndices.filter(([r, c]) => {
+                const cellId = getCellId(r,c);
+                return cellId && candidatesMap[cellId]?.has(d);
+            });
 
             if (possibleCellsInLine.length >= 2) { // Интересно только если 2 или больше мест
                 let targetBlockIndex = -1;
@@ -776,11 +801,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isOutsideLine) {
                 const cellId = getCellId(r, c);
                 // Если ячейка пустая и содержит кандидата 'd'
-                if (userGrid[r]?.[c]?.value === 0 && candidatesMap[cellId]?.has(digit)) {
+                if (cellId && userGrid[r]?.[c]?.value === 0 && candidatesMap[cellId]?.has(digit)) {
                     eliminations.push(cellId);
                 }
             }
         }
+
 
         // Возвращаем информацию, если есть что элиминировать
         return eliminations.length > 0 ? {
@@ -795,7 +821,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * <<< НОВОЕ >>> Ищет X-Wing, используя currentCandidatesMap.
+     * Ищет X-Wing, используя currentCandidatesMap.
      */
     function findXWing() {
         if (currentMode !== 'classic' || !currentCandidatesMap) return null;
@@ -806,7 +832,8 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let r = 0; r < 9; r++) {
                 rowCandidates[r] = [];
                 for (let c = 0; c < 9; c++) {
-                    if (currentCandidatesMap[getCellId(r, c)]?.has(d)) {
+                     const cellId = getCellId(r, c);
+                    if (cellId && currentCandidatesMap[cellId]?.has(d)) {
                         rowCandidates[r].push(c);
                     }
                 }
@@ -840,12 +867,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                 for (let r_elim = 0; r_elim < 9; r_elim++) {
                                     if (r_elim !== r1 && r_elim !== r2) {
                                         const cellId = getCellId(r_elim, c);
-                                        if (currentCandidatesMap[cellId]?.has(d)) {
+                                        if (cellId && currentCandidatesMap[cellId]?.has(d)) {
                                             eliminations.push(cellId);
                                         }
                                     }
                                 }
                             }
+
 
                             if (eliminations.length > 0) {
                                 console.log(`X-Wing (Rows) found: Digit ${d} in rows ${r1 + 1}, ${r2 + 1} and cols ${targetCols[0] + 1}, ${targetCols[1] + 1}`);
@@ -867,7 +895,8 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let c = 0; c < 9; c++) {
                 colCandidates[c] = [];
                 for (let r = 0; r < 9; r++) {
-                    if (currentCandidatesMap[getCellId(r, c)]?.has(d)) {
+                     const cellId = getCellId(r, c);
+                    if (cellId && currentCandidatesMap[cellId]?.has(d)) {
                         colCandidates[c].push(r);
                     }
                 }
@@ -897,12 +926,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                 for (let c_elim = 0; c_elim < 9; c_elim++) {
                                     if (c_elim !== c1 && c_elim !== c2) {
                                         const cellId = getCellId(r, c_elim);
-                                        if (currentCandidatesMap[cellId]?.has(d)) {
+                                        if (cellId && currentCandidatesMap[cellId]?.has(d)) {
                                             eliminations.push(cellId);
                                         }
                                     }
                                 }
                             }
+
 
                             if (eliminations.length > 0) {
                                 console.log(`X-Wing (Cols) found: Digit ${d} in cols ${c1 + 1}, ${c2 + 1} and rows ${targetRows[0] + 1}, ${targetRows[1] + 1}`);
@@ -919,6 +949,114 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         } // end for digit d
+
+        return null; // Ничего не найдено
+    }
+
+    /**
+     * <<< НОВОЕ >>> Ищет XY-Wing, используя currentCandidatesMap.
+     */
+    function findXYWing() {
+        if (currentMode !== 'classic' || !currentCandidatesMap) return null;
+
+        // Собираем все ячейки с двумя кандидатами
+        const bivalueCells = [];
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                const cellId = getCellId(r, c);
+                if (cellId && userGrid[r][c].value === 0 && currentCandidatesMap[cellId]?.size === 2) {
+                    bivalueCells.push({ id: cellId, r, c, cands: currentCandidatesMap[cellId] });
+                }
+            }
+        }
+
+        // Итерируем по каждой ячейке с 2 кандидатами как по потенциальному "пивоту"
+        for (const pivot of bivalueCells) {
+            const [X, Y] = Array.from(pivot.cands); // Кандидаты пивота XY
+            const pivotPeers = getClassicPeers(pivot.r, pivot.c);
+
+            // Находим пиров пивота, которые тоже имеют 2 кандидата
+            const bivaluePeers = bivalueCells.filter(cell => pivotPeers.has(cell.id));
+
+            // Ищем пары пиров (клешни - pincers), которые образуют XY-Wing с пивотом
+            for (let i = 0; i < bivaluePeers.length; i++) {
+                const pincer1 = bivaluePeers[i];
+                const pincer1Cands = Array.from(pincer1.cands); // Кандидаты первой клешни
+
+                // Проверяем, содержит ли первая клешня X или Y (и другую цифру Z)
+                let Z = -1;
+                let pincer1Type = ''; // 'XZ' или 'YZ'
+
+                if (pincer1Cands.includes(X) && !pincer1Cands.includes(Y)) { // Pincer1 = XZ ?
+                    Z = pincer1Cands.find(d => d !== X);
+                    if (Z === undefined) continue; // Не должно случиться при size === 2
+                    pincer1Type = 'XZ';
+                } else if (pincer1Cands.includes(Y) && !pincer1Cands.includes(X)) { // Pincer1 = YZ ?
+                    Z = pincer1Cands.find(d => d !== Y);
+                    if (Z === undefined) continue;
+                    pincer1Type = 'YZ';
+                } else {
+                    continue; // Не подходит (либо оба XY, либо ни одного)
+                }
+
+                // Ищем вторую клешню
+                for (let j = i + 1; j < bivaluePeers.length; j++) {
+                    const pincer2 = bivaluePeers[j];
+                    const pincer2Cands = Array.from(pincer2.cands);
+
+                    // Вторая клешня должна содержать Z и недостающую цифру пивота (Y или X)
+                    let validPincer2 = false;
+                    if (pincer1Type === 'XZ' && pincer2Cands.includes(Y) && pincer2Cands.includes(Z)) {
+                        validPincer2 = true; // Нашли Pivot(XY), Pincer1(XZ), Pincer2(YZ)
+                    } else if (pincer1Type === 'YZ' && pincer2Cands.includes(X) && pincer2Cands.includes(Z)) {
+                        validPincer2 = true; // Нашли Pivot(XY), Pincer1(YZ), Pincer2(XZ) - меняем Pincer1 и Pincer2 местами для унификации
+                        // Для консистентности, пусть pincer1 всегда будет XZ, а pincer2 YZ
+                        const temp = pincer1;
+                        pincer1 = pincer2;
+                        pincer2 = temp;
+                        // Тип не меняем, он теперь соответствует новому pincer1
+                    }
+
+                    if (validPincer2) {
+                        // XY-Wing найден! Pivot(XY), Pincer1(XZ), Pincer2(YZ)
+                        // Ищем ячейки, которые видят обе клешни
+                        const pincer1Peers = getClassicPeers(pincer1.r, pincer1.c);
+                        const pincer2Peers = getClassicPeers(pincer2.r, pincer2.c);
+                        const commonPeers = [];
+                        pincer1Peers.forEach(peerId => {
+                            if (pincer2Peers.has(peerId)) {
+                                commonPeers.push(peerId);
+                            }
+                        });
+
+                        const eliminations = [];
+                        // Проверяем, можно ли удалить Z из общих пиров
+                        for (const commonPeerId of commonPeers) {
+                             const coords = getCellCoords(commonPeerId);
+                             if (!coords) continue;
+                             // Удаляем только из пустых ячеек, не являющихся пивотом
+                             if (commonPeerId !== pivot.id && userGrid[coords.r][coords.c].value === 0 && currentCandidatesMap[commonPeerId]?.has(Z)) {
+                                eliminations.push(commonPeerId);
+                            }
+                        }
+
+                        if (eliminations.length > 0) {
+                            console.log(`XY-Wing found: Pivot ${pivot.id}(${X},${Y}), Pincer1 ${pincer1.id}(${X},${Z}), Pincer2 ${pincer2.id}(${Y},${Z}). Eliminating ${Z}.`);
+                            return {
+                                technique: "XY-Wing",
+                                pivot: pivot.id,
+                                pincer1: pincer1.id,
+                                pincer2: pincer2.id,
+                                digitX: X,
+                                digitY: Y,
+                                digitZ: Z, // Кандидат для удаления
+                                eliminations: eliminations
+                            };
+                        }
+                    }
+                }
+            }
+        }
 
         return null; // Ничего не найдено
     }
@@ -992,7 +1130,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const [r, c] of unitIndices) {
             const cellId = getCellId(r, c);
             // Если ячейка не входит в группу и пустая
-            if (!groupCellsSet.has(cellId) && userGrid[r]?.[c]?.value === 0) {
+            if (cellId && !groupCellsSet.has(cellId) && userGrid[r]?.[c]?.value === 0) {
                 const cellData = userGrid[r][c];
                 const candidatesInMap = currentCandidatesMap[cellId]; // Кандидаты из карты
                 let cellChanged = false;
@@ -1115,7 +1253,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * <<< НОВОЕ >>> Применяет элиминацию для X-Wing.
+     * Применяет элиминацию для X-Wing.
      * Обновляет userGrid.notes И currentCandidatesMap.
      */
      function applyXWingElimination(elimInfo) {
@@ -1174,6 +1312,66 @@ document.addEventListener('DOMContentLoaded', () => {
         return eliminatedSomething;
     }
 
+    /**
+     * <<< НОВОЕ >>> Применяет элиминацию для XY-Wing.
+     * Похожа на applyXWingElimination.
+     */
+     function applyXYWingElimination(elimInfo) {
+        if (!elimInfo || !elimInfo.eliminations || !elimInfo.digitZ) return false;
+        const { digitZ, eliminations, technique, pivot, pincer1, pincer2 } = elimInfo;
+        console.log(`Apply ${technique} Elim: Remove candidate ${digitZ} from ${eliminations.length} cells based on pivot ${pivot}, pincers ${pincer1}, ${pincer2}`);
+
+        let eliminatedSomething = false;
+        pushHistoryState(); // Сохраняем состояние ДО изменений
+
+        eliminations.forEach(cellId => {
+            const coords = getCellCoords(cellId);
+            if (coords) {
+                const { r, c } = coords;
+                if (userGrid[r]?.[c]?.value === 0) { // Убедимся, что ячейка пустая
+                    const cellData = userGrid[r][c];
+                    const candidatesInMap = currentCandidatesMap[cellId];
+                    let cellChanged = false;
+                    let removedFromNotes = false;
+                    let removedFromMap = false;
+
+                    if (!cellData.notes) cellData.notes = new Set();
+
+                    // Удаляем из заметок userGrid
+                    if (cellData.notes.has(digitZ)) {
+                        cellData.notes.delete(digitZ);
+                        removedFromNotes = true;
+                        cellChanged = true;
+                    }
+                    // Удаляем из карты кандидатов
+                    if (candidatesInMap?.has(digitZ)) {
+                        candidatesInMap.delete(digitZ);
+                        removedFromMap = true;
+                        cellChanged = true;
+                    }
+
+                    if (removedFromNotes || removedFromMap) {
+                        eliminatedSomething = true;
+                        console.log(`  - Removed candidate ${digitZ} from ${cellId}`);
+                    }
+
+                    if (cellChanged) {
+                        renderCell(r, c);
+                    }
+                }
+            }
+        });
+
+        if (eliminatedSomething) {
+            updateLogicSolverButtonsState();
+            console.log(`${technique} applied successfully.`);
+        } else {
+            if(historyStack.length > 0) historyStack.pop(); // Откатываем
+            console.log(`No eliminations were made for ${technique}.`);
+        }
+        return eliminatedSomething;
+    }
+
 
     /** Выполняет ОДИН шаг логического решателя */
     function doLogicStep() {
@@ -1195,8 +1393,9 @@ document.addEventListener('DOMContentLoaded', () => {
              { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyPointingBoxLineElimination },
              { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination },
              { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination },
-             { name: "X-Wing", findFunc: findXWing, applyFunc: applyXWingElimination }, // <<< ДОБАВЛЕНО >>>
-             // Сюда можно добавлять более сложные Swordfish и т.д.
+             { name: "X-Wing", findFunc: findXWing, applyFunc: applyXWingElimination },
+             { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyXYWingElimination }, // <<< ДОБАВЛЕНО >>>
+             // Сюда можно добавлять более сложные
          ];
 
          // Сначала ищем техники, которые ставят цифру
@@ -1238,15 +1437,18 @@ document.addEventListener('DOMContentLoaded', () => {
          if (appliedInfo) {
              const tech = appliedInfo.technique || "Unknown";
              let details = "Неизвестное действие";
-             if (appliedInfo.digit && appliedInfo.r !== undefined && appliedInfo.c !== undefined) {
+              if (appliedInfo.digit && appliedInfo.r !== undefined && appliedInfo.c !== undefined) { // Singles
                  details = `цифра ${appliedInfo.digit} в [${getCellId(appliedInfo.r, appliedInfo.c)}]`;
-             } else if (appliedInfo.digits && appliedInfo.cells) { // Naked Pair/Triple
+             } else if (appliedInfo.digits && appliedInfo.cells) { // Naked Groups
                  const unitType = getUnitType(appliedInfo.unitIndex);
                  const displayIndex = getUnitIndexForDisplay(appliedInfo.unitIndex);
                  details = `цифры ${appliedInfo.digits.join(',')} в ${unitType} ${displayIndex}`;
-             } else if (appliedInfo.digit && appliedInfo.eliminations) { // Pointing/Box-Line/X-Wing
+             } else if (appliedInfo.digit && appliedInfo.eliminations) { // Pointing, Box/Line, X-Wing
                  details = `цифра ${appliedInfo.digit} (убраны кандидаты из ${appliedInfo.eliminations.length} ячеек)`;
+             } else if (appliedInfo.digitZ && appliedInfo.eliminations) { // XY-Wing
+                  details = `цифра ${appliedInfo.digitZ} (убраны кандидаты из ${appliedInfo.eliminations.length} ячеек)`;
              }
+
              showSuccess(`Применено ${tech}: ${details}`);
              saveGameState(); // Сохраняем после успешного шага
          }
@@ -1275,7 +1477,8 @@ document.addEventListener('DOMContentLoaded', () => {
             { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyPointingBoxLineElimination },
             { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination },
             { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination },
-            { name: "X-Wing", findFunc: findXWing, applyFunc: applyXWingElimination }, // <<< ДОБАВЛЕНО >>>
+            { name: "X-Wing", findFunc: findXWing, applyFunc: applyXWingElimination },
+            { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyXYWingElimination }, // <<< ДОБАВЛЕНО >>>
          ];
 
          function solverCycle() {
