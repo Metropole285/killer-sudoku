@@ -1,4 +1,4 @@
-// Убедитесь, что sudoku.js И killerSudoku.js (с ПОЛНОЙ реализацией) подключены ДО script.js
+// Убедитесь, что sudoku.js, killerSudoku.js, И killerSolverLogic.js подключены ДО script.js
 document.addEventListener('DOMContentLoaded', () => {
     console.log("DOM ready.");
 
@@ -158,7 +158,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function clearSelection(){if(selectedCell)selectedCell.classList.remove('selected');if(boardElement)boardElement.querySelectorAll('.cell.highlighted').forEach(c=>c.classList.remove('highlighted'));selectedCell=null;selectedRow=-1;selectedCol=-1;}
     function updateNoteToggleButtonState(){if(noteToggleButton){noteToggleButton.classList.toggle('active',isNoteMode);noteToggleButton.title=`Заметки (${isNoteMode?'ВКЛ':'ВЫКЛ'})`;}}
     function highlightRelatedCells(row, col) {
-         // console.log(`Highlighting for [${row}, ${col}], mode: ${currentMode}`);
          if (!boardElement) return;
          boardElement.querySelectorAll('.cell.highlighted').forEach(el=>el.classList.remove('highlighted'));
          if (currentMode === 'killer' && currentSolverData && selectedCell) {
@@ -242,38 +241,57 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Инициализация ИГРЫ ---
     function initGame(mode = "classic", difficulty = "medium", restoreState = null) {
         console.log(`%cInitGame START: mode=${mode}, difficulty=${difficulty}, restore=${!!restoreState}`, "color: blue; font-weight: bold;");
-        if (mode === "classic") { if (typeof sudoku === 'undefined') return showError("Ошибка: sudoku.js не найден."); }
-        else if (mode === "killer") { if (typeof killerSudoku === 'undefined') return showError("Ошибка: killerSudoku.js не найден."); if (typeof killerSudoku._initializeSolverData !== 'function') return showError("Ошибка: killerSudoku.js неполный (_initializeSolverData)."); if (typeof killerSudoku.generate !== 'function') return showError("Ошибка: killerSudoku.js неполный (generate)."); }
-        else return showError("Ошибка: Неизвестный режим: " + mode);
+        // Проверка наличия библиотек
+        if (mode === "classic") {
+            if (typeof sudoku === 'undefined') return showError("Ошибка: sudoku.js не найден.");
+        } else if (mode === "killer") {
+            if (typeof killerSudoku === 'undefined') return showError("Ошибка: killerSudoku.js не найден.");
+            if (typeof killerSolverLogic === 'undefined') return showError("Ошибка: killerSolverLogic.js не найден."); // ПРОВЕРКА НОВОГО ФАЙЛА
+            if (typeof killerSudoku._initializeSolverData !== 'function') return showError("Ошибка: killerSudoku.js неполный (_initializeSolverData).");
+            if (typeof killerSudoku.generate !== 'function') return showError("Ошибка: killerSudoku.js неполный (generate).");
+        } else {
+             return showError("Ошибка: Неизвестный режим: " + mode);
+        }
         console.log(`${mode} library OK.`);
 
         currentMode = mode; currentDifficulty = difficulty;
         stopTimer(); historyStack = []; updateUndoButtonState(); isNoteMode = false; updateNoteToggleButtonState(); clearSelection(); clearErrors();
         statusMessageElement.textContent = 'Генерация...'; statusMessageElement.className = '';
         currentPuzzle = null; currentSolution = null; currentCageData = null; currentSolverData = null; userGrid = [];
-        currentCandidatesMap = {}; // СБРОС КАРТЫ КАНДИДАТОВ
-        classicPeersMapCache = null; // СБРОС КЭША ПИРОВ
+        currentCandidatesMap = {};
+        classicPeersMapCache = null;
         isLogicSolverRunning = false;
 
         let success = false;
         try {
-            if (restoreState) { console.log("Restoring state..."); currentMode=restoreState.mode||"classic";currentDifficulty=restoreState.difficulty||'medium';secondsElapsed=restoreState.time||0;hintsRemaining=restoreState.hints??MAX_HINTS;isNoteMode=restoreState.isNoteMode||false;userGrid=restoreState.grid.map(r=>r.map(c=>({value:c.value,notes:new Set(c.notesArray||[])})));if(currentMode==="classic"){currentPuzzle=restoreState.puzzle;currentSolution=restoreState.solution;if(!currentPuzzle||!currentSolution)throw new Error("Inv classic save.");}else if(currentMode==="killer"){currentCageData=restoreState.cageData;if(!currentCageData?.cages)throw new Error("Inv killer save (cages).");console.log("Re-init solver data...");currentSolverData=killerSudoku._initializeSolverData(currentCageData.cages);if(!currentSolverData)throw new Error("Fail re-init solver data.");console.log("Solver data re-init OK.");}else throw new Error("Unk save mode:"+currentMode);console.log("Restore OK.");success=true;
-            } else { // Если не restoreState
+            if (restoreState) {
+                console.log("Restoring state...");
+                currentMode=restoreState.mode||"classic";currentDifficulty=restoreState.difficulty||'medium';secondsElapsed=restoreState.time||0;hintsRemaining=restoreState.hints??MAX_HINTS;isNoteMode=restoreState.isNoteMode||false;userGrid=restoreState.grid.map(r=>r.map(c=>({value:c.value,notes:new Set(c.notesArray||[])})));
+                if(currentMode==="classic"){
+                    currentPuzzle=restoreState.puzzle;currentSolution=restoreState.solution;
+                    if(!currentPuzzle||!currentSolution) throw new Error("Inv classic save.");
+                } else if(currentMode==="killer"){
+                    currentCageData=restoreState.cageData;
+                    if(!currentCageData?.cages) throw new Error("Inv killer save (cages).");
+                    console.log("Re-init solver data...");
+                    currentSolverData = killerSudoku._initializeSolverData(currentCageData.cages); // ИНИЦИАЛИЗАЦИЯ ДАННЫХ ДЛЯ KILLER
+                    if(!currentSolverData) throw new Error("Fail re-init solver data.");
+                    console.log("Solver data re-init OK.");
+                 } else {
+                     throw new Error("Unk save mode:"+currentMode);
+                 }
+                console.log("Restore OK.");
+                success=true;
+            } else { // Новая игра
                 secondsElapsed = 0; hintsRemaining = MAX_HINTS; clearSavedGameState();
                 if (currentMode === "classic") {
                     console.log(`Gen CLASSIC: ${currentDifficulty}...`);
-                    // --- ЗАМЕНИТЬ СТРОКУ НИЖЕ НА ВАШУ ТЕСТОВУЮ ГОЛОВОЛОМКУ ПРИ НЕОБХОДИМОСТИ ---
-                    // currentPuzzle = "3.4.97586.95....1368..5..29.5....23116..3.845.325.1967..6.7...4.7.42...8.4..13.72";
-                    // console.log("Using TEST puzzle string.");
                     currentPuzzle = sudoku.generate(currentDifficulty); // Стандартная генерация
                     console.log(`Generated puzzle: ${currentPuzzle}`);
-                    // --------------------------------------------------------------------
                     if (!currentPuzzle) throw new Error("Classic gen failed.");
                     currentSolution = sudoku.solve(currentPuzzle);
                     if (!currentSolution) {
-                         console.warn("Solver failed for generated puzzle. It might be invalid or too hard for the basic solver.");
-                         // Можно попробовать сгенерировать заново или выдать ошибку
-                         // throw new Error("Classic solve failed for generated puzzle.");
+                         console.warn("Solver failed for generated classic puzzle.");
                     }
                     userGrid = boardStringToObjectArray(currentPuzzle);
                     console.log("New classic OK."); success = true;
@@ -285,10 +303,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!puzzle?.cages) throw new Error("Killer gen failed (no cages).");
                     currentCageData = puzzle;
                     console.log("Init solver data...");
-                    currentSolverData = killerSudoku._initializeSolverData(currentCageData.cages);
+                    currentSolverData = killerSudoku._initializeSolverData(currentCageData.cages); // ИНИЦИАЛИЗАЦИЯ ДАННЫХ ДЛЯ KILLER
                     console.log("Solver init result:", currentSolverData);
                     if (!currentSolverData) throw new Error("Cage validation/init failed.");
-                    userGrid = boardStringToObjectArray(killerSudoku.BLANK_BOARD);
+                    userGrid = boardStringToObjectArray(killerSudoku.BLANK_BOARD); // Killer начинается с пустой доски
                     console.log("New killer OK."); success = true;
                 }
             }
@@ -297,7 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (success) {
              statusMessageElement.textContent = '';
              console.log("Calculating initial candidates map...");
-             calculateAllCandidates(); // ИНИЦИАЛИЗАЦИЯ КАРТЫ КАНДИДАТОВ
+             calculateAllCandidates(); // Обновлено: вызывает нужную функцию в зависимости от режима
              console.log("Rendering...");
              updateNoteToggleButtonState(); renderBoard(); updateHintButtonState(); updateUndoButtonState(); updateLogicSolverButtonsState(); updateTimerDisplay(); console.log(`Game initialized. Is solved? ${isGameSolved()}`); showScreen(gameContainer); console.log("Schedule timer..."); setTimeout(() => { console.log("setTimeout: start timer."); startTimer(); }, 50); console.log("InitGame COMPLETE.");
         } else {
@@ -306,94 +324,102 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Функции сохранения/загрузки состояния ---
-    function saveGameState(){if(!userGrid||userGrid.length!==9)return;try{const g=userGrid.map(r=>r.map(c=>({value:c.value,notesArray:Array.from(c.notes||[])})));const s={mode:currentMode,difficulty:currentDifficulty,grid:g,time:secondsElapsed,hints:hintsRemaining,timestamp:Date.now(),isNoteMode: isNoteMode, puzzle:currentMode==='classic'?currentPuzzle:null,solution:currentMode==='classic'?currentSolution:null,cageData:currentMode==='killer'?currentCageData:null};localStorage.setItem(SAVE_KEY,JSON.stringify(s));}catch(e){console.error("SaveErr:",e);showError("Ошибка сохр.");}}
-    function loadGameState(){const d=localStorage.getItem(SAVE_KEY);if(!d)return null;try{const s=JSON.parse(d);if(s?.mode&&s?.difficulty&&Array.isArray(s.grid)&&typeof s.timestamp==='number'&&(s.mode==='classic'?!(!s.puzzle||!s.solution):true)&&(s.mode==='killer'?!(!s.cageData||!s.cageData.cages):true)){console.log("Save found:",new Date(s.timestamp).toLocaleString(),`M:${s.mode}`,`D:${s.difficulty}`);return s;}else{console.warn("Inv save. Clearing.",s);clearSavedGameState();return null;}}catch(e){console.error("ParseSaveErr:",e);clearSavedGameState();return null;}}
-    function clearSavedGameState(){try{localStorage.removeItem(SAVE_KEY);console.log("Save cleared.");checkContinueButton();}catch(e){console.error("Err clr save:",e);}}
+     function saveGameState(){if(!userGrid||userGrid.length!==9)return;try{const g=userGrid.map(r=>r.map(c=>({value:c.value,notesArray:Array.from(c.notes||[])})));const s={mode:currentMode,difficulty:currentDifficulty,grid:g,time:secondsElapsed,hints:hintsRemaining,timestamp:Date.now(),isNoteMode: isNoteMode, puzzle:currentMode==='classic'?currentPuzzle:null,solution:currentMode==='classic'?currentSolution:null,cageData:currentMode==='killer'?currentCageData:null};localStorage.setItem(SAVE_KEY,JSON.stringify(s));}catch(e){console.error("SaveErr:",e);showError("Ошибка сохр.");}}
+     function loadGameState(){const d=localStorage.getItem(SAVE_KEY);if(!d)return null;try{const s=JSON.parse(d);if(s?.mode&&s?.difficulty&&Array.isArray(s.grid)&&typeof s.timestamp==='number'&&(s.mode==='classic'?!(!s.puzzle||!s.solution):true)&&(s.mode==='killer'?!(!s.cageData||!s.cageData.cages):true)){console.log("Save found:",new Date(s.timestamp).toLocaleString(),`M:${s.mode}`,`D:${s.difficulty}`);return s;}else{console.warn("Inv save. Clearing.",s);clearSavedGameState();return null;}}catch(e){console.error("ParseSaveErr:",e);clearSavedGameState();return null;}}
+     function clearSavedGameState(){try{localStorage.removeItem(SAVE_KEY);console.log("Save cleared.");checkContinueButton();}catch(e){console.error("Err clr save:",e);}}
+
 
     // --- Функции для Undo ---
-    function createHistoryState(){if(!userGrid||userGrid.length!==9)return null;const g=userGrid.map(r=>r.map(c=>({value:c.value,notes:new Set(c.notes||[])})));return{grid:g,hints:hintsRemaining};}
-    function pushHistoryState(){if(isGameSolved()) return; const s=createHistoryState();if(s){historyStack.push(s);updateUndoButtonState();}else{console.warn("Inv hist push");}}
-    function handleUndo(){if(historyStack.length===0||isShowingAd)return;stopTimer();const ps=historyStack.pop();console.log("Undo...");try{userGrid=ps.grid;hintsRemaining=ps.hints;
-        console.log("Recalculating candidates map after undo...");
-        calculateAllCandidates(); // ПЕРЕСЧЕТ КАРТЫ КАНДИДАТОВ ПОСЛЕ ОТМЕНЫ
-        renderBoard();clearSelection();clearErrors();updateHintButtonState();updateUndoButtonState();updateLogicSolverButtonsState(); saveGameState();console.log("Undo OK.");}catch(e){console.error("Undo Err:",e);showError("Ошибка отмены");historyStack=[];updateUndoButtonState();updateLogicSolverButtonsState();}finally{resumeTimerIfNeeded();}}
-    function updateUndoButtonState(){if(undoButton)undoButton.disabled=historyStack.length===0;}
+     function createHistoryState(){if(!userGrid||userGrid.length!==9)return null;const g=userGrid.map(r=>r.map(c=>({value:c.value,notes:new Set(c.notes||[])})));return{grid:g,hints:hintsRemaining};}
+     function pushHistoryState(){if(isGameSolved()) return; const s=createHistoryState();if(s){historyStack.push(s);updateUndoButtonState();}else{console.warn("Inv hist push");}}
+     function handleUndo(){if(historyStack.length===0||isShowingAd)return;stopTimer();const ps=historyStack.pop();console.log("Undo...");try{userGrid=ps.grid;hintsRemaining=ps.hints;
+         console.log("Recalculating candidates map after undo...");
+         calculateAllCandidates(); // Обновлено: вызывает нужную функцию
+         renderBoard();clearSelection();clearErrors();updateHintButtonState();updateUndoButtonState();updateLogicSolverButtonsState(); saveGameState();console.log("Undo OK.");}catch(e){console.error("Undo Err:",e);showError("Ошибка отмены");historyStack=[];updateUndoButtonState();updateLogicSolverButtonsState();}finally{resumeTimerIfNeeded();}}
+     function updateUndoButtonState(){if(undoButton)undoButton.disabled=historyStack.length===0;}
+
 
     // --- Функции для таймера ---
-    function startTimer(){const v=gameContainer?.classList.contains('visible');if(timerInterval||!v)return;console.log("Timer start...");updateTimerDisplay();timerInterval=setInterval(()=>{secondsElapsed++;updateTimerDisplay();if(secondsElapsed%10===0)saveGameState();},1000);console.log("Timer started:",timerInterval);}
-    function stopTimer(){if(timerInterval){clearInterval(timerInterval);const o=timerInterval;timerInterval=null;console.log(`Timer stop (${o}).Save.`);saveGameState();}}
-    function updateTimerDisplay(){if(!timerElement)return;const m=Math.floor(secondsElapsed/60),s=secondsElapsed%60;timerElement.textContent=`Время: ${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;}
-    function resumeTimerIfNeeded(){const s=isGameSolved(),v=gameContainer?.classList.contains('visible');if(v&&!s)startTimer();else stopTimer();}
+     function startTimer(){const v=gameContainer?.classList.contains('visible');if(timerInterval||!v)return;console.log("Timer start...");updateTimerDisplay();timerInterval=setInterval(()=>{secondsElapsed++;updateTimerDisplay();if(secondsElapsed%10===0)saveGameState();},1000);console.log("Timer started:",timerInterval);}
+     function stopTimer(){if(timerInterval){clearInterval(timerInterval);const o=timerInterval;timerInterval=null;console.log(`Timer stop (${o}).Save.`);saveGameState();}}
+     function updateTimerDisplay(){if(!timerElement)return;const m=Math.floor(secondsElapsed/60),s=secondsElapsed%60;timerElement.textContent=`Время: ${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;}
+     function resumeTimerIfNeeded(){const s=isGameSolved(),v=gameContainer?.classList.contains('visible');if(v&&!s)startTimer();else stopTimer();}
 
 
     // --- Отрисовка ---
-    function renderBoard() { console.log(`Render board start: mode=${currentMode}`); if (!boardElement) { console.error("Board element missing!"); return; } boardElement.innerHTML = ''; if (!userGrid || userGrid.length !== 9) { showError("Invalid grid data for rendering."); return; } const cellElementsMap = {}; for (let r = 0; r < 9; r++) { if (!userGrid[r] || userGrid[r].length !== 9) continue; for (let c = 0; c < 9; c++) { const cellId = getCellId(r, c); if (!cellId) continue; const cellElement = createCellElement(r, c); boardElement.appendChild(cellElement); cellElementsMap[cellId] = cellElement; } } if (currentMode === "killer" && currentSolverData?.cageDataArray) { /*console.log("Rendering Killer Cages...");*/ currentSolverData.cageDataArray.forEach((cage, cageIndex) => { if (!cage || !Array.isArray(cage.cells) || cage.cells.length === 0) { console.warn(`Skipping invalid cage data at index ${cageIndex}`); return; } const cageCellSet = new Set(cage.cells); let anchorCellId = null; let minRow = 9, minCol = 9; cage.cells.forEach(cellId => { const coords = getCellCoords(cellId); if (coords) { if (coords.r < minRow) { minRow = coords.r; minCol = coords.c; anchorCellId = cellId; } else if (coords.r === minRow && coords.c < minCol) { minCol = coords.c; anchorCellId = cellId; } } }); cage.cells.forEach(cellId => { const cellElement = cellElementsMap[cellId]; if (!cellElement) return; cellElement.classList.add('cage-cell'); if (cellId === anchorCellId) { cellElement.classList.add('cage-sum-anchor'); if (!cellElement.querySelector('.cage-sum')) { const sumSpan = document.createElement('span'); sumSpan.className = 'cage-sum'; sumSpan.textContent = cage.sum; cellElement.appendChild(sumSpan); } } const coords = getCellCoords(cellId); if (!coords) return; const { r, c } = coords; const neighbors = getNeighbors(r, c); if (r === 0 || !neighbors.top || !cageCellSet.has(neighbors.top)) { cellElement.classList.add('cage-inner-border-top'); } if (c === 0 || !neighbors.left || !cageCellSet.has(neighbors.left)) { cellElement.classList.add('cage-inner-border-left'); } if (r === 8 || !neighbors.bottom || !cageCellSet.has(neighbors.bottom)) { cellElement.classList.add('cage-inner-border-bottom'); } if (c === 8 || !neighbors.right || !cageCellSet.has(neighbors.right)) { cellElement.classList.add('cage-inner-border-right'); } }); }); /*console.log("Cage rendering finished.");*/ } console.log("Board rendering complete."); }
-    function createCellElement(r, c) { const cell=document.createElement('div');cell.classList.add('cell'); cell.dataset.row=r;cell.dataset.col=c; const cd=userGrid[r]?.[c]; if(!cd){cell.textContent='?';console.warn(`Missing grid data for ${r},${c}`);return cell;} const vc=document.createElement('div');vc.classList.add('cell-value-container'); const nc=document.createElement('div');nc.classList.add('cell-notes-container'); if(cd.value!==0){ vc.textContent=cd.value;vc.style.display='flex';nc.style.display='none'; if(currentMode==='classic'&&currentPuzzle){ const i=r*9+c; if(currentPuzzle[i]&&currentPuzzle[i]!=='.')cell.classList.add('given'); } } else if(cd.notes instanceof Set&&cd.notes.size>0){ vc.style.display='none';nc.style.display='grid';nc.innerHTML=''; for(let n=1;n<=9;n++){const nd=document.createElement('div');nd.classList.add('note-digit');nd.textContent=cd.notes.has(n)?n:'';nc.appendChild(nd);} } else { vc.textContent='';vc.style.display='flex';nc.style.display='none'; } cell.appendChild(vc);cell.appendChild(nc); if((c+1)%3===0&&c<8)cell.classList.add('thick-border-right'); if((r+1)%3===0&&r<8)cell.classList.add('thick-border-bottom'); return cell; }
-    function renderCell(r, c) { if (!boardElement) return; if (currentMode === 'killer' && userGrid[r]?.[c]?.value === 0) { console.log("Note changed in Killer mode, forcing full board render."); renderBoard(); if (selectedRow === r && selectedCol === c) { selectedCell = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`); if (selectedCell) { selectedCell.classList.add('selected'); highlightRelatedCells(r, c); } else { selectedCell = null; selectedRow = -1; selectedCol = -1; } } return; } const oldCell = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`); if (oldCell) { try { const newCell = createCellElement(r, c); oldCell.classList.forEach(cls => { if(cls!=='cell' && !cls.startsWith('thick-') && !cls.startsWith('cage-inner-')) newCell.classList.add(cls); }); ['cage-cell', 'cage-sum-anchor', 'cage-inner-border-top', 'cage-inner-border-bottom', 'cage-inner-border-left', 'cage-inner-border-right'].forEach(cls => { if (oldCell.classList.contains(cls)) newCell.classList.add(cls); }); const oldSum = oldCell.querySelector('.cage-sum'); if (oldSum) newCell.appendChild(oldSum.cloneNode(true)); if (selectedRow === r && selectedCol === c) selectedCell = newCell; oldCell.replaceWith(newCell); } catch (error) { console.error(`Error render cell [${r}, ${c}]:`, error); renderBoard(); } } else { console.warn(`renderCell: Cell [${r},${c}] not found? Render full.`); renderBoard(); } }
+     function renderBoard() { console.log(`Render board start: mode=${currentMode}`); if (!boardElement) { console.error("Board element missing!"); return; } boardElement.innerHTML = ''; if (!userGrid || userGrid.length !== 9) { showError("Invalid grid data for rendering."); return; } const cellElementsMap = {}; for (let r = 0; r < 9; r++) { if (!userGrid[r] || userGrid[r].length !== 9) continue; for (let c = 0; c < 9; c++) { const cellId = getCellId(r, c); if (!cellId) continue; const cellElement = createCellElement(r, c); boardElement.appendChild(cellElement); cellElementsMap[cellId] = cellElement; } } if (currentMode === "killer" && currentSolverData?.cageDataArray) { currentSolverData.cageDataArray.forEach((cage, cageIndex) => { if (!cage || !Array.isArray(cage.cells) || cage.cells.length === 0) { console.warn(`Skipping invalid cage data at index ${cageIndex}`); return; } const cageCellSet = new Set(cage.cells); let anchorCellId = null; let minRow = 9, minCol = 9; cage.cells.forEach(cellId => { const coords = getCellCoords(cellId); if (coords) { if (coords.r < minRow) { minRow = coords.r; minCol = coords.c; anchorCellId = cellId; } else if (coords.r === minRow && coords.c < minCol) { minCol = coords.c; anchorCellId = cellId; } } }); cage.cells.forEach(cellId => { const cellElement = cellElementsMap[cellId]; if (!cellElement) return; cellElement.classList.add('cage-cell'); if (cellId === anchorCellId) { cellElement.classList.add('cage-sum-anchor'); if (!cellElement.querySelector('.cage-sum')) { const sumSpan = document.createElement('span'); sumSpan.className = 'cage-sum'; sumSpan.textContent = cage.sum; cellElement.appendChild(sumSpan); } } const coords = getCellCoords(cellId); if (!coords) return; const { r, c } = coords; const neighbors = getNeighbors(r, c); if (r === 0 || !neighbors.top || !cageCellSet.has(neighbors.top)) { cellElement.classList.add('cage-inner-border-top'); } if (c === 0 || !neighbors.left || !cageCellSet.has(neighbors.left)) { cellElement.classList.add('cage-inner-border-left'); } if (r === 8 || !neighbors.bottom || !cageCellSet.has(neighbors.bottom)) { cellElement.classList.add('cage-inner-border-bottom'); } if (c === 8 || !neighbors.right || !cageCellSet.has(neighbors.right)) { cellElement.classList.add('cage-inner-border-right'); } }); }); } console.log("Board rendering complete."); }
+     function createCellElement(r, c) { const cell=document.createElement('div');cell.classList.add('cell'); cell.dataset.row=r;cell.dataset.col=c; const cd=userGrid[r]?.[c]; if(!cd){cell.textContent='?';console.warn(`Missing grid data for ${r},${c}`);return cell;} const vc=document.createElement('div');vc.classList.add('cell-value-container'); const nc=document.createElement('div');nc.classList.add('cell-notes-container'); if(cd.value!==0){ vc.textContent=cd.value;vc.style.display='flex';nc.style.display='none'; if(currentMode==='classic'&&currentPuzzle){ const i=r*9+c; if(currentPuzzle[i]&&currentPuzzle[i]!=='.')cell.classList.add('given'); } } else if(cd.notes instanceof Set&&cd.notes.size>0){ vc.style.display='none';nc.style.display='grid';nc.innerHTML=''; for(let n=1;n<=9;n++){const nd=document.createElement('div');nd.classList.add('note-digit');nd.textContent=cd.notes.has(n)?n:'';nc.appendChild(nd);} } else { vc.textContent='';vc.style.display='flex';nc.style.display='none'; } cell.appendChild(vc);cell.appendChild(nc); if((c+1)%3===0&&c<8)cell.classList.add('thick-border-right'); if((r+1)%3===0&&r<8)cell.classList.add('thick-border-bottom'); return cell; }
+     function renderCell(r, c) { if (!boardElement) return; if (currentMode === 'killer' && userGrid[r]?.[c]?.value === 0) { console.log("Note changed in Killer mode, forcing full board render."); renderBoard(); if (selectedRow === r && selectedCol === c) { selectedCell = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`); if (selectedCell) { selectedCell.classList.add('selected'); highlightRelatedCells(r, c); } else { selectedCell = null; selectedRow = -1; selectedCol = -1; } } return; } const oldCell = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`); if (oldCell) { try { const newCell = createCellElement(r, c); oldCell.classList.forEach(cls => { if(cls!=='cell' && !cls.startsWith('thick-') && !cls.startsWith('cage-inner-')) newCell.classList.add(cls); }); ['cage-cell', 'cage-sum-anchor', 'cage-inner-border-top', 'cage-inner-border-bottom', 'cage-inner-border-left', 'cage-inner-border-right'].forEach(cls => { if (oldCell.classList.contains(cls)) newCell.classList.add(cls); }); const oldSum = oldCell.querySelector('.cage-sum'); if (oldSum) newCell.appendChild(oldSum.cloneNode(true)); if (selectedRow === r && selectedCol === c) selectedCell = newCell; oldCell.replaceWith(newCell); } catch (error) { console.error(`Error render cell [${r}, ${c}]:`, error); renderBoard(); } } else { console.warn(`renderCell: Cell [${r},${c}] not found? Render full.`); renderBoard(); } }
+
 
     // --- Логика подсказки ---
-    function provideHintInternal(){if(currentMode!=='classic')return showError("Подсказки только в классике");if(!selectedCell)return showError("Выберите ячейку"); const r=selectedRow,c=selectedCol;if(r<0||c<0||!userGrid[r]?.[c])return showError("Ошибка данных ячейки"); if(userGrid[r][c].value!==0)return showError("Ячейка заполнена");if(selectedCell.classList.contains('given')) return showError("Начальная цифра");pushHistoryState();let hintUsed=false;try{const sv=getSolutionValue(r,c);if(sv===null)throw new Error("Решение недоступно");if(sv>0){console.log(`Hint [${r},${c}]: ${sv}`);userGrid[r][c].value=sv;if(userGrid[r][c].notes)userGrid[r][c].notes.clear();
-        updateCandidatesOnSet(r, c, sv); // ОБНОВЛЕНИЕ КАНДИДАТОВ ПОСЛЕ ПОДСКАЗКИ
-        renderCell(r,c);const hEl=boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);if(hEl){hEl.classList.remove('selected');const hc=getComputedStyle(document.documentElement).getPropertyValue('--highlight-hint-flash').trim()||'#fffacd';hEl.style.transition='background-color 0.1s ease-out';hEl.style.backgroundColor=hc;setTimeout(()=>{if(hEl&&hEl.style.backgroundColor!==''){hEl.style.backgroundColor='';hEl.style.transition='';}clearSelection();},500);}else{clearSelection();}hintsRemaining--;hintUsed=true;updateHintButtonState();clearErrors();saveGameState();if(isGameSolved()){checkGame();updateLogicSolverButtonsState();}}else throw new Error(`Некорректное значение решения [${r},${c}]: ${sv}`);}catch(e){console.error("Hint Err:",e.message);showError(e.message);if(!hintUsed&&historyStack.length>0){historyStack.pop();updateUndoButtonState();}}}
-    function offerRewardedAdForHints(){if(currentMode!=='classic'||isShowingAd)return;console.log("Offering ad...");if(confirm(`Подсказки зак-сь! Реклама за ${MAX_HINTS} подсказку?`)){if(!isAdReady){showError("Реклама грузится...");preloadRewardedAd();return;}showRewardedAd({onSuccess:()=>{hintsRemaining+=MAX_HINTS;updateHintButtonState();saveGameState();showSuccess(`+${MAX_HINTS} подсказка!`);},onError:(msg)=>{showError(`Ошибка: ${msg||'Реклама?'} Подсказка не добавлена.`);}});}}
+     function provideHintInternal(){if(currentMode!=='classic')return showError("Подсказки только в классике");if(!selectedCell)return showError("Выберите ячейку"); const r=selectedRow,c=selectedCol;if(r<0||c<0||!userGrid[r]?.[c])return showError("Ошибка данных ячейки"); if(userGrid[r][c].value!==0)return showError("Ячейка заполнена");if(selectedCell.classList.contains('given')) return showError("Начальная цифра");pushHistoryState();let hintUsed=false;try{const sv=getSolutionValue(r,c);if(sv===null)throw new Error("Решение недоступно");if(sv>0){console.log(`Hint [${r},${c}]: ${sv}`);userGrid[r][c].value=sv;if(userGrid[r][c].notes)userGrid[r][c].notes.clear();
+         updateCandidatesOnSet(r, c, sv); // ОБНОВЛЕНИЕ КАНДИДАТОВ ПОСЛЕ ПОДСКАЗКИ
+         renderCell(r,c);const hEl=boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);if(hEl){hEl.classList.remove('selected');const hc=getComputedStyle(document.documentElement).getPropertyValue('--highlight-hint-flash').trim()||'#fffacd';hEl.style.transition='background-color 0.1s ease-out';hEl.style.backgroundColor=hc;setTimeout(()=>{if(hEl&&hEl.style.backgroundColor!==''){hEl.style.backgroundColor='';hEl.style.transition='';}clearSelection();},500);}else{clearSelection();}hintsRemaining--;hintUsed=true;updateHintButtonState();clearErrors();saveGameState();if(isGameSolved()){checkGame();updateLogicSolverButtonsState();}}else throw new Error(`Некорректное значение решения [${r},${c}]: ${sv}`);}catch(e){console.error("Hint Err:",e.message);showError(e.message);if(!hintUsed&&historyStack.length>0){historyStack.pop();updateUndoButtonState();}}}
+     function offerRewardedAdForHints(){if(currentMode!=='classic'||isShowingAd)return;console.log("Offering ad...");if(confirm(`Подсказки зак-сь! Реклама за ${MAX_HINTS} подсказку?`)){if(!isAdReady){showError("Реклама грузится...");preloadRewardedAd();return;}showRewardedAd({onSuccess:()=>{hintsRemaining+=MAX_HINTS;updateHintButtonState();saveGameState();showSuccess(`+${MAX_HINTS} подсказка!`);},onError:(msg)=>{showError(`Ошибка: ${msg||'Реклама?'} Подсказка не добавлена.`);}});}}
+
 
     // --- Логика Проверки ---
-    function checkGame(){console.log(`Check: ${currentMode}`);clearErrors();if(!userGrid||userGrid.length!==9)return;let isValid=false;let isComplete=!userGrid.flat().some(c=>!c||c.value===0);if(currentMode==="classic"){if(!currentSolution){showError("Нет решения!");return;}isValid=validateClassicSudoku();}else if(currentMode==="killer"){if(!currentSolverData){showError("Нет данных Killer!");return;}isValid=validateKillerSudoku();}if(isValid&&isComplete){showSuccess("Поздравляем! Решено верно!");stopTimer();clearSelection();updateHintButtonState();updateLogicSolverButtonsState();}else if(!isValid){showError("Найдены ошибки.");}else{if(statusMessageElement){statusMessageElement.textContent="Пока верно, но не закончено.";statusMessageElement.className='';}}}
-    function validateClassicSudoku(){ let ok=true;if(!currentSolution){console.error("Classic valid Err: no solution!");return false;}for(let r=0;r<9;r++){for(let c=0;c<9;c++){const cd=userGrid[r]?.[c];const el=boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);if(!cd||!el||cd.value===0||el.classList.contains('given'))continue;const sv=getSolutionValue(r,c);if(sv===null){console.error(`Classic valid Err: No sol value for ${r},${c}`);ok=false;break;}if(cd.value!==sv){el.classList.add('incorrect');ok=false;}}if(!ok)break;}return ok;}
-    function validateKillerSudoku(){let ok=true;const grid=userGrid.map(r=>r.map(c=>c.value));for(let i=0;i<9;i++){if(!isUnitValid(getRow(grid,i))||!isUnitValid(getCol(grid,i))||!isUnitValid(getBlock(grid,i))){ok=false;break;}}if(!ok){showError("Нарушены правила Судоку.");return false;}if(!currentSolverData?.cageDataArray)return false;for(const cage of currentSolverData.cageDataArray){const vals=[];let sum=0;let complete=true;let els=[];for(const cid of cage.cells){const crds=getCellCoords(cid);if(!crds)continue;const v=grid[crds.r][crds.c];const el=boardElement?.querySelector(`.cell[data-row='${crds.r}'][data-col='${crds.c}']`);if(el)els.push(el);if(v===0){complete=false;}else{vals.push(v);sum+=v;}}if(new Set(vals).size!==vals.length){console.warn(`Cage ${cage.id} unique violation:`,vals);ok=false;els.forEach(e=>e.classList.add('incorrect'));}if(complete&&sum!==cage.sum){console.warn(`Cage ${cage.id} sum violation: got ${sum}, expected ${cage.sum}`);ok=false;els.forEach(e=>e.classList.add('incorrect'));}}return ok;}
-    function isUnitValid(unit){const nums=unit.filter(n=>n!==0);return new Set(nums).size===nums.length;}
-    function getRow(g,r){return g[r];} function getCol(g,c){return g.map(rw=>rw[c]);} function getBlock(g,b){const sr=Math.floor(b/3)*3,sc=(b%3)*3,bl=[];for(let r=0;r<3;r++)for(let c=0;c<3;c++)bl.push(g[sr+r][sc+c]);return bl;}
+     function checkGame(){console.log(`Check: ${currentMode}`);clearErrors();if(!userGrid||userGrid.length!==9)return;let isValid=false;let isComplete=!userGrid.flat().some(c=>!c||c.value===0);if(currentMode==="classic"){if(!currentSolution){showError("Нет решения!");return;}isValid=validateClassicSudoku();}else if(currentMode==="killer"){if(!currentSolverData){showError("Нет данных Killer!");return;}isValid=validateKillerSudoku();}if(isValid&&isComplete){showSuccess("Поздравляем! Решено верно!");stopTimer();clearSelection();updateHintButtonState();updateLogicSolverButtonsState();}else if(!isValid){showError("Найдены ошибки.");}else{if(statusMessageElement){statusMessageElement.textContent="Пока верно, но не закончено.";statusMessageElement.className='';}}}
+     function validateClassicSudoku(){ let ok=true;if(!currentSolution){console.error("Classic valid Err: no solution!");return false;}for(let r=0;r<9;r++){for(let c=0;c<9;c++){const cd=userGrid[r]?.[c];const el=boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);if(!cd||!el||cd.value===0||el.classList.contains('given'))continue;const sv=getSolutionValue(r,c);if(sv===null){console.error(`Classic valid Err: No sol value for ${r},${c}`);ok=false;break;}if(cd.value!==sv){el.classList.add('incorrect');ok=false;}}if(!ok)break;}return ok;}
+     function validateKillerSudoku(){let ok=true;const grid=userGrid.map(r=>r.map(c=>c.value));for(let i=0;i<9;i++){if(!isUnitValid(getRow(grid,i))||!isUnitValid(getCol(grid,i))||!isUnitValid(getBlock(grid,i))){ok=false;break;}}if(!ok){showError("Нарушены правила Судоку.");return false;}if(!currentSolverData?.cageDataArray)return false;for(const cage of currentSolverData.cageDataArray){const vals=[];let sum=0;let complete=true;let els=[];for(const cid of cage.cells){const crds=getCellCoords(cid);if(!crds)continue;const v=grid[crds.r][crds.c];const el=boardElement?.querySelector(`.cell[data-row='${crds.r}'][data-col='${crds.c}']`);if(el)els.push(el);if(v===0){complete=false;}else{vals.push(v);sum+=v;}}if(new Set(vals).size!==vals.length){console.warn(`Cage ${cage.id} unique violation:`,vals);ok=false;els.forEach(e=>e.classList.add('incorrect'));}if(complete&&sum!==cage.sum){console.warn(`Cage ${cage.id} sum violation: got ${sum}, expected ${cage.sum}`);ok=false;els.forEach(e=>e.classList.add('incorrect'));}}return ok;}
+     function isUnitValid(unit){const nums=unit.filter(n=>n!==0);return new Set(nums).size===nums.length;}
+     function getRow(g,r){return g[r];} function getCol(g,c){return g.map(rw=>rw[c]);} function getBlock(g,b){const sr=Math.floor(b/3)*3,sc=(b%3)*3,bl=[];for(let r=0;r<3;r++)for(let c=0;c<3;c++)bl.push(g[sr+r][sc+c]);return bl;}
 
 
-    // --- ЛОГИЧЕСКИЙ РЕШАТЕЛЬ (Classic) ---
+
+    // --- ЛОГИЧЕСКИЙ РЕШАТЕЛЬ ---
 
     /**
-     * Вычисляет кандидатов для ВСЕХ пустых ячеек и сохраняет в currentCandidatesMap.
+     * Общая функция для расчета ВСЕХ кандидатов в зависимости от режима.
+     * Обновляет currentCandidatesMap.
      */
     function calculateAllCandidates() {
-        if (currentMode !== 'classic') {
-            currentCandidatesMap = {}; // Очистить для других режимов
-            return;
+        console.log(`Recalculating all candidates for mode: ${currentMode}`);
+        if (currentMode === 'classic') {
+             currentCandidatesMap = calculateAllClassicCandidates();
+        } else if (currentMode === 'killer' && killerSolverLogic && currentSolverData && userGrid.length === 9) {
+            // Используем функцию из killerSolverLogic.js
+            currentCandidatesMap = killerSolverLogic.calculateAllKillerCandidates(userGrid, currentSolverData);
+        } else {
+            currentCandidatesMap = {}; // Сбрасываем для неизвестных режимов или если данных нет
         }
+    }
+
+    /**
+     * Вычисляет кандидатов для классического режима.
+     * @returns {object} - Новая карта кандидатов { cellId: Set<number> }
+     */
+    function calculateAllClassicCandidates() {
         const newMap = {};
         for (let r = 0; r < 9; r++) {
             for (let c = 0; c < 9; c++) {
                 const cellId = getCellId(r, c);
                 if (!cellId) continue;
-                // Вычисляем только для пустых ячеек
                 if (userGrid[r]?.[c]?.value === 0) {
-                    newMap[cellId] = calculateCandidatesInternal(r, c);
+                    newMap[cellId] = calculateClassicCandidatesInternal(r, c);
                 } else {
-                    newMap[cellId] = new Set(); // Пустой сет для заполненных
+                    newMap[cellId] = new Set();
                 }
             }
         }
-        currentCandidatesMap = newMap;
-        console.log("Candidates map recalculated.", /* currentCandidatesMap */); // Можно раскомментировать для дебага
+        console.log("Classic Candidates map recalculated.");
+        return newMap;
     }
 
     /**
-     * Внутренняя функция для вычисления кандидатов ОДНОЙ ячейки (для calculateAllCandidates).
+     * Внутренняя функция для вычисления классических кандидатов ОДНОЙ ячейки.
      * Возвращает Set<number>.
      */
-    function calculateCandidatesInternal(r, c) {
-        // Проверка, что ячейка существует и пуста (хотя вызывается только для пустых)
+    function calculateClassicCandidatesInternal(r, c) {
         if (!userGrid[r]?.[c] || userGrid[r][c].value !== 0) {
-            return new Set(); // Возвращаем пустой Set
+            return new Set();
         }
         let cands = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9]);
-        // Проверка пиров (строка, столбец, блок)
         for (let i = 0; i < 9; i++) {
-            // Строка
-            if (userGrid[r]?.[i]?.value !== 0) {
-                cands.delete(userGrid[r][i].value);
-            }
-            // Столбец
-            if (userGrid[i]?.[c]?.value !== 0) {
-                cands.delete(userGrid[i][c].value);
-            }
+            if (userGrid[r]?.[i]?.value !== 0) cands.delete(userGrid[r][i].value);
+            if (userGrid[i]?.[c]?.value !== 0) cands.delete(userGrid[i][c].value);
         }
-        // Блок 3x3
         const startRow = Math.floor(r / 3) * 3;
         const startCol = Math.floor(c / 3) * 3;
         for (let i = 0; i < 3; i++) {
@@ -407,10 +433,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * Обновляет карту кандидатов после установки цифры.
+     * Обновляет карту кандидатов после установки цифры (для обоих режимов).
      */
     function updateCandidatesOnSet(r, c, digit) {
-        if (currentMode !== 'classic' || !currentCandidatesMap) return;
+        if (!currentCandidatesMap) return; // Карта должна существовать
         const cellId = getCellId(r, c);
         if (!cellId) return;
 
@@ -423,40 +449,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
         // Удалить эту цифру из кандидатов всех пиров
-        const peers = getClassicPeers(r, c);
+        const peers = getClassicPeers(r, c); // Используем классических пиров для обоих режимов
         for (const peerId of peers) {
-            if (currentCandidatesMap[peerId]) { // Убедиться, что пир есть в карте (он должен быть, если пустой)
+            if (currentCandidatesMap[peerId]) {
                 currentCandidatesMap[peerId].delete(digit);
             }
         }
-        // console.log(`Candidates updated after setting ${digit} at ${cellId}`);
+         // Примечание: Для Killer это не полное обновление. Для точности ПОСЛЕ
+         // применения шага может потребоваться полный пересчет calculateAllCandidates().
+         // Но для интерактивности пока оставим так.
+        console.log(`Candidates updated (basic peer check) after setting ${digit} at ${cellId}`);
     }
 
     /**
-     * Обновляет карту кандидатов после стирания цифры.
-     * Использует пересчет всей карты для простоты и надежности.
+     * Обновляет карту кандидатов после стирания цифры (для обоих режимов).
      */
     function updateCandidatesOnErase(r, c) {
-        if (currentMode !== 'classic') return;
-        // Самый простой и надежный способ - пересчитать всю карту
+        // Пересчет всей карты - самый надежный способ после стирания
         calculateAllCandidates();
-        // console.log(`Candidates recalculated after erasing at ${getCellId(r,c)}`);
+        console.log(`Candidates recalculated after erasing at ${getCellId(r,c)}`);
     }
 
-    /**
-     * Ищет Naked Single, используя currentCandidatesMap.
-     */
+    // --- Классические Функции поиска техник (find...) ---
+    // Используются только для Classic Mode
+
     function findNakedSingle() {
-        if (currentMode !== 'classic' || !currentCandidatesMap) return null; // Проверка карты
+        if (currentMode !== 'classic' || !currentCandidatesMap) return null;
         for (let r = 0; r < 9; r++) {
             for (let c = 0; c < 9; c++) {
                 const cellId = getCellId(r, c);
-                // Проверяем значение в userGrid и наличие записи в карте
                 if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) {
-                    const cands = currentCandidatesMap[cellId]; // Читаем из карты
-                    if (cands.size === 1) { // Используем .size для Set
-                        const digit = cands.values().next().value; // Получаем единственный элемент
-                        console.log(`Naked Single: ${digit} at [${r}, ${c}] (from map)`);
+                    const cands = currentCandidatesMap[cellId];
+                    if (cands.size === 1) {
+                        const digit = cands.values().next().value;
+                        console.log(`Classic Naked Single: ${digit} at [${r}, ${c}] (from map)`);
                         return { r, c, digit, technique: "Naked Single" };
                     }
                 }
@@ -465,12 +491,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return null;
     }
 
-    /**
-     * Ищет Hidden Single, используя currentCandidatesMap.
-     */
     function findHiddenSingle() {
-        if (currentMode !== 'classic' || !currentCandidatesMap) return null; // Проверка карты
-        // Нет необходимости создавать allCands, используем currentCandidatesMap напрямую
+        if (currentMode !== 'classic' || !currentCandidatesMap) return null;
         for (let i = 0; i < 9; i++) {
             const rowRes = findHiddenSingleInUnit(getRowIndices(i), currentCandidatesMap);
             if (rowRes) return rowRes;
@@ -482,126 +504,73 @@ document.addEventListener('DOMContentLoaded', () => {
         return null;
     }
 
-    /**
-     * Вспомогательная для Hidden Single, работает с переданной картой кандидатов.
-     */
-    function findHiddenSingleInUnit(unitIndices, candidatesMap) { // Принимает карту
+    function findHiddenSingleInUnit(unitIndices, candidatesMap) { // Убран userGrid
         for (let d = 1; d <= 9; d++) {
             let places = [];
-            let presentInUnit = false; // Флаг, что цифра уже установлена в юните
-
+            let presentInUnit = false;
             for (const [r, c] of unitIndices) {
-                const cell = userGrid[r]?.[c];
-                if (!cell) continue;
-
-                // Проверяем, установлена ли цифра d в юните
-                if (cell.value === d) {
+                if (userGrid[r]?.[c]?.value === d) {
                     presentInUnit = true;
-                    break; // Если нашли установленную, дальше для этой цифры можно не искать
+                    break;
                 }
-
-                // Если ячейка пустая, проверяем кандидата в карте
-                if (cell.value === 0) {
+                if (userGrid[r]?.[c]?.value === 0) {
                     const cellId = getCellId(r, c);
-                    const cands = candidatesMap[cellId]; // Читаем из карты
-                    if (cands?.has(d)) {
+                    if (candidatesMap[cellId]?.has(d)) {
                         places.push([r, c]);
                     }
                 }
             }
-
-            // Если цифра не установлена и есть ровно одно место для неё
             if (!presentInUnit && places.length === 1) {
                 const [r, c] = places[0];
-                console.log(`Hidden Single: ${d} at [${r}, ${c}] (from map)`);
+                console.log(`Classic Hidden Single: ${d} at [${r}, ${c}] (from map)`);
                 return { r, c, digit: d, technique: "Hidden Single" };
             }
         }
         return null;
     }
 
-     /**
-     * Ищет Naked Pair, используя currentCandidatesMap.
-     */
-    function findNakedPair() {
+     function findNakedPair() {
         if (currentMode !== 'classic' || !currentCandidatesMap) return null;
         const units = getAllUnitsIndices();
         for (let i = 0; i < units.length; i++) {
             const unit = units[i];
-            const cellsWith2Candidates = []; // Ячейки с ровно 2 кандидатами в этом юните
-
+            const cellsWith2Candidates = [];
             for (const [r, c] of unit) {
                 const cellId = getCellId(r, c);
-                // Проверяем, что ячейка пустая и есть запись в карте
                 if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) {
                     const cands = currentCandidatesMap[cellId];
                     if (cands.size === 2) {
-                        cellsWith2Candidates.push({ r, c, cands, cellId }); // Сохраняем и ID
+                        cellsWith2Candidates.push({ r, c, cands, cellId });
                     }
                 }
             }
-
             if (cellsWith2Candidates.length >= 2) {
-                // Ищем пары ячеек с одинаковым набором из 2 кандидатов
                 for (let j = 0; j < cellsWith2Candidates.length; j++) {
                     for (let k = j + 1; k < cellsWith2Candidates.length; k++) {
                         const c1 = cellsWith2Candidates[j];
                         const c2 = cellsWith2Candidates[k];
-
-                        // Проверяем, что наборы кандидатов идентичны
                         if (c1.cands.size === 2 && c2.cands.size === 2) {
                             let sameCandidates = true;
-                            for (const digit of c1.cands) {
-                                if (!c2.cands.has(digit)) {
-                                    sameCandidates = false;
-                                    break;
-                                }
-                            }
-                             // Дополнительная проверка, что второй сет не содержит лишних
+                            for (const digit of c1.cands) if (!c2.cands.has(digit)) { sameCandidates = false; break; }
+                            if (sameCandidates) for (const digit of c2.cands) if (!c1.cands.has(digit)) { sameCandidates = false; break; }
                             if (sameCandidates) {
-                               for (const digit of c2.cands) {
-                                   if (!c1.cands.has(digit)) {
-                                       sameCandidates = false;
-                                       break;
-                                   }
-                               }
-                           }
-
-
-                            if (sameCandidates) {
-                                // Нашли голую пару!
                                 const pairDigits = Array.from(c1.cands);
                                 const pairCells = [c1.cellId, c2.cellId];
-                                // console.log(`Naked Pair found: Digits ${pairDigits.join(',')} in cells ${pairCells.join(',')}`);
-
-                                // Проверяем, есть ли смысл применять (т.е. есть ли что удалять)
                                 let eliminationNeeded = false;
                                 const pairCellsSet = new Set(pairCells);
                                 for (const [r_unit, c_unit] of unit) {
                                     const unitCellId = getCellId(r_unit, c_unit);
-                                    // Если ячейка не входит в пару и пустая
                                     if (unitCellId && !pairCellsSet.has(unitCellId) && userGrid[r_unit]?.[c_unit]?.value === 0) {
                                         const otherCands = currentCandidatesMap[unitCellId];
-                                        // Проверяем, есть ли у нее кандидаты из найденной пары
                                         if (otherCands && (otherCands.has(pairDigits[0]) || otherCands.has(pairDigits[1]))) {
                                             eliminationNeeded = true;
-                                            break; // Нашли хотя бы одну ячейку для элиминации
+                                            break;
                                         }
                                     }
                                 }
-
-
                                 if (eliminationNeeded) {
-                                    console.log(`Naked Pair found: Digits ${pairDigits.join(',')} in cells ${pairCells.join(',')}`);
-                                    return {
-                                        unitType: getUnitType(i),
-                                        unitIndex: i, // Глобальный индекс юнита
-                                        cells: pairCells, // Массив ID ячеек пары
-                                        digits: pairDigits, // Массив цифр пары
-                                        technique: "Naked Pair"
-                                    };
-                                } else {
-                                    // console.log("...no eliminations needed for this pair.");
+                                    console.log(`Classic Naked Pair found: Digits ${pairDigits.join(',')} in cells ${pairCells.join(',')}`);
+                                    return { unitType: getUnitType(i), unitIndex: i, cells: pairCells, digits: pairDigits, technique: "Naked Pair" };
                                 }
                             }
                         }
@@ -612,41 +581,84 @@ document.addEventListener('DOMContentLoaded', () => {
         return null;
     }
 
-    /**
-     * Ищет Naked Triple, используя currentCandidatesMap.
-     */
+    function findHiddenPair() {
+         if (currentMode !== 'classic' || !currentCandidatesMap) return null;
+         const units = getAllUnitsIndices();
+         for (let i = 0; i < units.length; i++) {
+             const unit = units[i];
+             const digitLocations = {}; // { digit: [cellId1, cellId2, ...], ... }
+             for (const [r, c] of unit) {
+                 const cellId = getCellId(r, c);
+                 if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) {
+                     currentCandidatesMap[cellId].forEach(digit => {
+                         if (!digitLocations[digit]) digitLocations[digit] = [];
+                         digitLocations[digit].push(cellId);
+                     });
+                 }
+             }
+             const digitsIn2Cells = Object.entries(digitLocations)
+                                         .filter(([digit, locations]) => locations.length === 2)
+                                         .map(([digit, locations]) => ({ digit: parseInt(digit), locations: new Set(locations) }));
+             if (digitsIn2Cells.length >= 2) {
+                 for (let j = 0; j < digitsIn2Cells.length; j++) {
+                     for (let k = j + 1; k < digitsIn2Cells.length; k++) {
+                         const d1Info = digitsIn2Cells[j];
+                         const d2Info = digitsIn2Cells[k];
+                         if (d1Info.locations.size === 2 && d1Info.locations.size === d2Info.locations.size) {
+                            const loc1Arr = Array.from(d1Info.locations);
+                            const loc2Arr = Array.from(d2Info.locations);
+                            if ((loc1Arr[0] === loc2Arr[0] && loc1Arr[1] === loc2Arr[1]) || (loc1Arr[0] === loc2Arr[1] && loc1Arr[1] === loc2Arr[0])) {
+                                const pairDigits = [d1Info.digit, d2Info.digit];
+                                const pairCells = loc1Arr;
+                                let eliminationNeeded = false;
+                                for (const cellId of pairCells) {
+                                     const cellCands = currentCandidatesMap[cellId];
+                                     if (cellCands) {
+                                        for(const cand of cellCands) {
+                                            if (cand !== pairDigits[0] && cand !== pairDigits[1]) {
+                                                eliminationNeeded = true; break;
+                                            }
+                                        }
+                                     }
+                                     if (eliminationNeeded) break;
+                                }
+                                if (eliminationNeeded) {
+                                     console.log(`Classic Hidden Pair found: Digits ${pairDigits.join(',')} in cells ${pairCells.join(',')}`);
+                                     return { unitType: getUnitType(i), unitIndex: i, cells: pairCells, digits: pairDigits, technique: "Hidden Pair" };
+                                }
+                            }
+                         }
+                     }
+                 }
+             }
+         }
+         return null;
+     }
+
     function findNakedTriple() {
         if (currentMode !== 'classic' || !currentCandidatesMap) return null;
         const units = getAllUnitsIndices();
         for (let i = 0; i < units.length; i++) {
             const unitIndices = units[i];
-            const candidateCells = []; // Ячейки с 2 или 3 кандидатами
+            const candidateCells = [];
             for (const [r, c] of unitIndices) {
                 const cellId = getCellId(r, c);
-                if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) {
+                 if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) {
                     const candidates = currentCandidatesMap[cellId];
                     if (candidates && (candidates.size === 2 || candidates.size === 3)) {
                         candidateCells.push({ r, c, cands: candidates, cellId });
                     }
                 }
             }
-
             if (candidateCells.length >= 3) {
-                // Ищем комбинации из 3 ячеек
                 for (let j = 0; j < candidateCells.length; j++) {
                     for (let k = j + 1; k < candidateCells.length; k++) {
                         for (let l = k + 1; l < candidateCells.length; l++) {
                             const c1 = candidateCells[j], c2 = candidateCells[k], c3 = candidateCells[l];
-                            // Объединяем кандидатов из этих 3 ячеек
                             const combinedCands = new Set([...c1.cands, ...c2.cands, ...c3.cands]);
-
-                            // Если уникальных кандидатов ровно 3 - это Naked Triple!
                             if (combinedCands.size === 3) {
                                 const tripleDigits = Array.from(combinedCands);
                                 const tripleCells = [c1.cellId, c2.cellId, c3.cellId];
-                                // console.log(`Naked Triple found: Digits ${tripleDigits.join(',')} in cells ${tripleCells.join(',')}`);
-
-                                // Проверяем, есть ли что удалять
                                 let eliminationNeeded = false;
                                 const tripleCellsSet = new Set(tripleCells);
                                 for (const [r_unit, c_unit] of unitIndices) {
@@ -659,19 +671,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                         }
                                     }
                                 }
-
-
                                 if (eliminationNeeded) {
-                                     console.log(`Naked Triple found: Digits ${tripleDigits.join(',')} in cells ${tripleCells.join(',')}`);
-                                    return {
-                                        unitType: getUnitType(i),
-                                        unitIndex: i,
-                                        cells: tripleCells,
-                                        digits: tripleDigits,
-                                        technique: "Naked Triple"
-                                    };
-                                } else {
-                                    // console.log("...no eliminations needed for this triple.");
+                                     console.log(`Classic Naked Triple found: Digits ${tripleDigits.join(',')} in cells ${tripleCells.join(',')}`);
+                                    return { unitType: getUnitType(i), unitIndex: i, cells: tripleCells, digits: tripleDigits, technique: "Naked Triple" };
                                 }
                             }
                         }
@@ -682,53 +684,84 @@ document.addEventListener('DOMContentLoaded', () => {
         return null;
     }
 
-    /**
-     * Ищет Pointing Candidates, используя currentCandidatesMap.
-     */
+     function findHiddenTriple() {
+        if (currentMode !== 'classic' || !currentCandidatesMap) return null;
+        const units = getAllUnitsIndices();
+        for (let i = 0; i < units.length; i++) {
+            const unit = units[i];
+            const digitLocations = {};
+            for (const [r, c] of unit) {
+                const cellId = getCellId(r, c);
+                if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) {
+                    currentCandidatesMap[cellId].forEach(digit => {
+                        if (!digitLocations[digit]) digitLocations[digit] = [];
+                        digitLocations[digit].push(cellId);
+                    });
+                }
+            }
+            const potentialTripleDigits = Object.keys(digitLocations)
+                .map(d => parseInt(d))
+                .filter(d => digitLocations[d].length === 2 || digitLocations[d].length === 3);
+
+            if (potentialTripleDigits.length >= 3) {
+                 for (let j = 0; j < potentialTripleDigits.length; j++) {
+                     for (let k = j + 1; k < potentialTripleDigits.length; k++) {
+                         for (let l = k + 1; l < potentialTripleDigits.length; l++) {
+                             const d1 = potentialTripleDigits[j];
+                             const d2 = potentialTripleDigits[k];
+                             const d3 = potentialTripleDigits[l];
+                             const tripleDigits = [d1, d2, d3];
+                             const combinedCells = new Set([...digitLocations[d1], ...digitLocations[d2], ...digitLocations[d3]]);
+
+                             if (combinedCells.size === 3) {
+                                 const tripleCells = Array.from(combinedCells);
+                                 let eliminationNeeded = false;
+                                 for (const cellId of tripleCells) {
+                                     const cellCands = currentCandidatesMap[cellId];
+                                     if (cellCands) {
+                                         for (const cand of cellCands) {
+                                             if (!tripleDigits.includes(cand)) {
+                                                 eliminationNeeded = true; break;
+                                             }
+                                         }
+                                     }
+                                     if (eliminationNeeded) break;
+                                 }
+                                 if (eliminationNeeded) {
+                                     console.log(`Classic Hidden Triple found: Digits ${tripleDigits.join(',')} in cells ${tripleCells.join(',')}`);
+                                     return { unitType: getUnitType(i), unitIndex: i, cells: tripleCells, digits: tripleDigits, technique: "Hidden Triple" };
+                                 }
+                             }
+                         }
+                     }
+                 }
+             }
+        }
+        return null;
+    }
+
+
     function findPointingCandidates() {
         if (currentMode !== 'classic' || !currentCandidatesMap) return null;
-        // Используем currentCandidatesMap напрямую
-        for (let bi = 0; bi < 9; bi++) { // Итерация по блокам
+        for (let bi = 0; bi < 9; bi++) {
             const blockIndices = getBlockIndices(bi);
-            const blockCellIds = blockIndices.map(([r, c]) => getCellId(r, c)).filter(id => id !== null); // Убираем null, если getCellId вернул null
+            const blockCellIds = blockIndices.map(([r, c]) => getCellId(r, c)).filter(id => id !== null);
             const blockCellIdsSet = new Set(blockCellIds);
-
-
-            for (let d = 1; d <= 9; d++) { // Итерация по цифрам
-                // Находим все ячейки в блоке, где 'd' является кандидатом
+            for (let d = 1; d <= 9; d++) {
                 const possibleCellsInBlock = blockCellIds.filter(cellId => currentCandidatesMap[cellId]?.has(d));
-
-                if (possibleCellsInBlock.length >= 2) { // Нет смысла, если кандидат только в одной ячейке или его нет
+                if (possibleCellsInBlock.length >= 2) {
                     const rowsInBlock = new Set();
                     const colsInBlock = new Set();
-                    possibleCellsInBlock.forEach(cellId => {
-                        const coords = getCellCoords(cellId);
-                        if (coords) {
-                            rowsInBlock.add(coords.r);
-                            colsInBlock.add(coords.c);
-                        }
-                    });
-
-                    // Проверяем, все ли кандидаты 'd' лежат в одной строке блока
+                    possibleCellsInBlock.forEach(cellId => { const coords = getCellCoords(cellId); if (coords) { rowsInBlock.add(coords.r); colsInBlock.add(coords.c); } });
                     if (rowsInBlock.size === 1) {
                         const targetRowIndex = rowsInBlock.values().next().value;
-                        // Пытаемся найти элиминации в этой строке ВНЕ блока
                         const elimInfo = tryEliminatePointing('Row', targetRowIndex, blockCellIdsSet, d, currentCandidatesMap);
-                        if (elimInfo) {
-                            console.log(`Pointing (Row): Digit ${d} in block ${bi} points @ row ${targetRowIndex + 1}`);
-                            return elimInfo;
-                        }
+                        if (elimInfo) { console.log(`Classic Pointing (Row): Digit ${d} in block ${bi} points @ row ${targetRowIndex + 1}`); return elimInfo; }
                     }
-
-                    // Проверяем, все ли кандидаты 'd' лежат в одном столбце блока
                     if (colsInBlock.size === 1) {
                         const targetColIndex = colsInBlock.values().next().value;
-                        // Пытаемся найти элиминации в этом столбце ВНЕ блока
                         const elimInfo = tryEliminatePointing('Col', targetColIndex, blockCellIdsSet, d, currentCandidatesMap);
-                        if (elimInfo) {
-                            console.log(`Pointing (Col): Digit ${d} in block ${bi} points @ col ${targetColIndex + 1}`);
-                            return elimInfo;
-                        }
+                        if (elimInfo) { console.log(`Classic Pointing (Col): Digit ${d} in block ${bi} points @ col ${targetColIndex + 1}`); return elimInfo; }
                     }
                 }
             }
@@ -736,879 +769,553 @@ document.addEventListener('DOMContentLoaded', () => {
         return null;
     }
 
-    /**
-     * Вспомогательная для Pointing Candidates, работает с картой кандидатов.
-     */
     function tryEliminatePointing(unitType, unitIndex, blockCellIdsSet, digit, candidatesMap) {
-        const eliminations = []; // Массив ID ячеек, откуда можно удалить кандидата
+        const eliminations = [];
         const unitIndices = unitType === 'Row' ? getRowIndices(unitIndex) : getColIndices(unitIndex);
-
         for (const [r, c] of unitIndices) {
             const cellId = getCellId(r, c);
-            // Если ячейка не в текущем блоке, пустая и содержит кандидата 'd'
             if (cellId && !blockCellIdsSet.has(cellId) && userGrid[r]?.[c]?.value === 0 && candidatesMap[cellId]?.has(digit)) {
                 eliminations.push(cellId);
             }
         }
-
-
-        // Возвращаем информацию, если есть что элиминировать
-        return eliminations.length > 0 ? {
-            type: 'pointing',
-            unitType,
-            unitIndex,
-            digit,
-            eliminations, // Список ID ячеек для элиминации
-            technique: "Pointing Candidates"
-        } : null;
+        return eliminations.length > 0 ? { type: 'pointing', unitType, unitIndex, digit, eliminations, technique: "Pointing Candidates" } : null;
     }
 
-    /**
-     * Ищет Box/Line Reduction, используя currentCandidatesMap.
-     */
     function findBoxLineReduction() {
         if (currentMode !== 'classic' || !currentCandidatesMap) return null;
-        // Используем currentCandidatesMap напрямую
-        // Итерация по строкам и столбцам
         for (let i = 0; i < 9; i++) {
-            // Проверка для строки i
             const rowRes = checkReductionInLine('Row', i, getRowIndices(i), currentCandidatesMap);
             if (rowRes) return rowRes;
-            // Проверка для столбца i
             const colRes = checkReductionInLine('Col', i, getColIndices(i), currentCandidatesMap);
             if (colRes) return colRes;
         }
         return null;
     }
 
-    /**
-     * Вспомогательная для Box/Line Reduction, работает с картой кандидатов.
-     */
     function checkReductionInLine(lineType, lineIndex, lineIndices, candidatesMap) {
-        for (let d = 1; d <= 9; d++) { // Итерация по цифрам
-            // Находим все ячейки в линии, где 'd' является кандидатом
-            const possibleCellsInLine = lineIndices.filter(([r, c]) => {
-                const cellId = getCellId(r,c);
-                return cellId && candidatesMap[cellId]?.has(d);
-            });
-
-            if (possibleCellsInLine.length >= 2) { // Интересно только если 2 или больше мест
+        for (let d = 1; d <= 9; d++) {
+            const possibleCellsInLine = lineIndices.filter(([r, c]) => { const cellId = getCellId(r,c); return cellId && candidatesMap[cellId]?.has(d); });
+            if (possibleCellsInLine.length >= 2) {
                 let targetBlockIndex = -1;
-                let confinedToBlock = true; // Флаг, что все кандидаты 'd' в линии находятся в одном блоке
-
+                let confinedToBlock = true;
                 for (let idx = 0; idx < possibleCellsInLine.length; idx++) {
                     const [r, c] = possibleCellsInLine[idx];
                     const currentBlockIndex = Math.floor(r / 3) * 3 + Math.floor(c / 3);
-
-                    if (idx === 0) {
-                        targetBlockIndex = currentBlockIndex; // Запоминаем блок первой ячейки
-                    } else if (targetBlockIndex !== currentBlockIndex) {
-                        confinedToBlock = false; // Нашли ячейку в другом блоке
-                        break;
-                    }
+                    if (idx === 0) { targetBlockIndex = currentBlockIndex; }
+                    else if (targetBlockIndex !== currentBlockIndex) { confinedToBlock = false; break; }
                 }
-
-                // Если все кандидаты 'd' в линии находятся в одном блоке
                 if (confinedToBlock && targetBlockIndex !== -1) {
-                    // Пытаемся найти элиминации в этом блоке ВНЕ текущей линии
                     const elimInfo = tryEliminateBoxLine(targetBlockIndex, lineType, lineIndex, d, candidatesMap);
-                    if (elimInfo) {
-                        console.log(`Box/Line Reduction: Digit ${d} in ${lineType} ${lineIndex + 1} confined to block ${targetBlockIndex}`);
-                        return elimInfo;
-                    }
+                    if (elimInfo) { console.log(`Classic Box/Line Reduction: Digit ${d} in ${lineType} ${lineIndex + 1} confined to block ${targetBlockIndex}`); return elimInfo; }
                 }
             }
         }
         return null;
     }
 
-     /**
-     * Вспомогательная для Box/Line Reduction, работает с картой кандидатов.
-     */
-    function tryEliminateBoxLine(targetBlockIndex, lineType, lineIndex, digit, candidatesMap) {
-        const eliminations = []; // Массив ID ячеек для элиминации
+     function tryEliminateBoxLine(targetBlockIndex, lineType, lineIndex, digit, candidatesMap) {
+        const eliminations = [];
         const blockIndices = getBlockIndices(targetBlockIndex);
-
         for (const [r, c] of blockIndices) {
-            // Проверяем, находится ли ячейка блока ВНЕ текущей линии
             const isOutsideLine = (lineType === 'Row' && r !== lineIndex) || (lineType === 'Col' && c !== lineIndex);
-
             if (isOutsideLine) {
                 const cellId = getCellId(r, c);
-                // Если ячейка пустая и содержит кандидата 'd'
                 if (cellId && userGrid[r]?.[c]?.value === 0 && candidatesMap[cellId]?.has(digit)) {
                     eliminations.push(cellId);
                 }
             }
         }
-
-
-        // Возвращаем информацию, если есть что элиминировать
-        return eliminations.length > 0 ? {
-            type: 'boxLine',
-            targetBlockIndex,
-            lineType,
-            lineIndex,
-            digit,
-            eliminations, // Список ID ячеек для элиминации
-            technique: "Box/Line Reduction"
-        } : null;
+        return eliminations.length > 0 ? { type: 'boxLine', targetBlockIndex, lineType, lineIndex, digit, eliminations, technique: "Box/Line Reduction" } : null;
     }
 
-    /**
-     * Ищет X-Wing, используя currentCandidatesMap.
-     */
     function findXWing() {
         if (currentMode !== 'classic' || !currentCandidatesMap) return null;
-
-        for (let d = 1; d <= 9; d++) { // Итерация по цифрам-кандидатам
-            // --- Поиск X-Wing по строкам ---
-            const rowCandidates = []; // rowCandidates[r] = [c1, c2, ...] - столбцы, где d кандидат в строке r
+        for (let d = 1; d <= 9; d++) {
+            const rowCandidates = [];
             for (let r = 0; r < 9; r++) {
                 rowCandidates[r] = [];
-                for (let c = 0; c < 9; c++) {
-                     const cellId = getCellId(r, c);
-                    if (cellId && currentCandidatesMap[cellId]?.has(d)) {
-                        rowCandidates[r].push(c);
-                    }
-                }
+                for (let c = 0; c < 9; c++) { const cellId = getCellId(r, c); if (cellId && currentCandidatesMap[cellId]?.has(d)) { rowCandidates[r].push(c); } }
             }
-
-            // Ищем строки, где кандидат d встречается ровно 2 раза
             const rowsWith2Candidates = [];
-            for (let r = 0; r < 9; r++) {
-                if (rowCandidates[r].length === 2) {
-                    rowsWith2Candidates.push(r);
-                }
-            }
-
-            // Ищем пары таких строк с одинаковыми столбцами
+            for (let r = 0; r < 9; r++) { if (rowCandidates[r].length === 2) { rowsWith2Candidates.push(r); } }
             if (rowsWith2Candidates.length >= 2) {
                 for (let i = 0; i < rowsWith2Candidates.length; i++) {
                     for (let j = i + 1; j < rowsWith2Candidates.length; j++) {
-                        const r1 = rowsWith2Candidates[i];
-                        const r2 = rowsWith2Candidates[j];
-                        const cols1 = rowCandidates[r1]; // [c1, c2]
-                        const cols2 = rowCandidates[r2]; // [c3, c4]
-
-                        // Проверяем, что столбцы совпадают
+                        const r1 = rowsWith2Candidates[i]; const r2 = rowsWith2Candidates[j];
+                        const cols1 = rowCandidates[r1]; const cols2 = rowCandidates[r2];
                         if ((cols1[0] === cols2[0] && cols1[1] === cols2[1]) || (cols1[0] === cols2[1] && cols1[1] === cols2[0])) {
-                            const targetCols = [cols1[0], cols1[1]]; // Столбцы X-Wing'а
-                            const targetRows = [r1, r2]; // Строки X-Wing'а
+                            const targetCols = [cols1[0], cols1[1]]; const targetRows = [r1, r2];
                             const eliminations = [];
-
-                            // Ищем кандидатов для удаления в targetCols вне targetRows
-                            for (const c of targetCols) {
-                                for (let r_elim = 0; r_elim < 9; r_elim++) {
-                                    if (r_elim !== r1 && r_elim !== r2) {
-                                        const cellId = getCellId(r_elim, c);
-                                        if (cellId && currentCandidatesMap[cellId]?.has(d)) {
-                                            eliminations.push(cellId);
-                                        }
-                                    }
-                                }
-                            }
-
-
-                            if (eliminations.length > 0) {
-                                console.log(`X-Wing (Rows) found: Digit ${d} in rows ${r1 + 1}, ${r2 + 1} and cols ${targetCols[0] + 1}, ${targetCols[1] + 1}`);
-                                return {
-                                    technique: "X-Wing (Rows)",
-                                    digit: d,
-                                    rows: targetRows,
-                                    cols: targetCols,
-                                    eliminations: eliminations
-                                };
-                            }
+                            for (const c of targetCols) { for (let r_elim = 0; r_elim < 9; r_elim++) { if (r_elim !== r1 && r_elim !== r2) { const cellId = getCellId(r_elim, c); if (cellId && currentCandidatesMap[cellId]?.has(d)) { eliminations.push(cellId); } } } }
+                            if (eliminations.length > 0) { console.log(`Classic X-Wing (Rows) found: Digit ${d} in rows ${r1 + 1}, ${r2 + 1} and cols ${targetCols[0] + 1}, ${targetCols[1] + 1}`); return { technique: "X-Wing (Rows)", digit: d, rows: targetRows, cols: targetCols, eliminations: eliminations }; }
                         }
                     }
                 }
             }
-
-            // --- Поиск X-Wing по столбцам (аналогично) ---
-             const colCandidates = []; // colCandidates[c] = [r1, r2, ...] - строки, где d кандидат в столбце c
+             const colCandidates = [];
             for (let c = 0; c < 9; c++) {
                 colCandidates[c] = [];
-                for (let r = 0; r < 9; r++) {
-                     const cellId = getCellId(r, c);
-                    if (cellId && currentCandidatesMap[cellId]?.has(d)) {
-                        colCandidates[c].push(r);
-                    }
-                }
+                for (let r = 0; r < 9; r++) { const cellId = getCellId(r, c); if (cellId && currentCandidatesMap[cellId]?.has(d)) { colCandidates[c].push(r); } }
             }
-
             const colsWith2Candidates = [];
-            for (let c = 0; c < 9; c++) {
-                if (colCandidates[c].length === 2) {
-                    colsWith2Candidates.push(c);
-                }
-            }
-
+            for (let c = 0; c < 9; c++) { if (colCandidates[c].length === 2) { colsWith2Candidates.push(c); } }
             if (colsWith2Candidates.length >= 2) {
                 for (let i = 0; i < colsWith2Candidates.length; i++) {
                     for (let j = i + 1; j < colsWith2Candidates.length; j++) {
-                        const c1 = colsWith2Candidates[i];
-                        const c2 = colsWith2Candidates[j];
-                        const rows1 = colCandidates[c1]; // [r1, r2]
-                        const rows2 = colCandidates[c2]; // [r3, r4]
-
+                        const c1 = colsWith2Candidates[i]; const c2 = colsWith2Candidates[j];
+                        const rows1 = colCandidates[c1]; const rows2 = colCandidates[c2];
                         if ((rows1[0] === rows2[0] && rows1[1] === rows2[1]) || (rows1[0] === rows2[1] && rows1[1] === rows2[0])) {
-                            const targetRows = [rows1[0], rows1[1]];
-                            const targetCols = [c1, c2];
+                            const targetRows = [rows1[0], rows1[1]]; const targetCols = [c1, c2];
                             const eliminations = [];
-
-                            for (const r of targetRows) {
-                                for (let c_elim = 0; c_elim < 9; c_elim++) {
-                                    if (c_elim !== c1 && c_elim !== c2) {
-                                        const cellId = getCellId(r, c_elim);
-                                        if (cellId && currentCandidatesMap[cellId]?.has(d)) {
-                                            eliminations.push(cellId);
-                                        }
-                                    }
-                                }
-                            }
-
-
-                            if (eliminations.length > 0) {
-                                console.log(`X-Wing (Cols) found: Digit ${d} in cols ${c1 + 1}, ${c2 + 1} and rows ${targetRows[0] + 1}, ${targetRows[1] + 1}`);
-                                return {
-                                    technique: "X-Wing (Cols)",
-                                    digit: d,
-                                    rows: targetRows,
-                                    cols: targetCols,
-                                    eliminations: eliminations
-                                };
-                            }
+                            for (const r of targetRows) { for (let c_elim = 0; c_elim < 9; c_elim++) { if (c_elim !== c1 && c_elim !== c2) { const cellId = getCellId(r, c_elim); if (cellId && currentCandidatesMap[cellId]?.has(d)) { eliminations.push(cellId); } } } }
+                            if (eliminations.length > 0) { console.log(`Classic X-Wing (Cols) found: Digit ${d} in cols ${c1 + 1}, ${c2 + 1} and rows ${targetRows[0] + 1}, ${targetRows[1] + 1}`); return { technique: "X-Wing (Cols)", digit: d, rows: targetRows, cols: targetCols, eliminations: eliminations }; }
                         }
                     }
-                }
-            }
-        } // end for digit d
-
-        return null; // Ничего не найдено
-    }
-
-    /**
-     * Ищет XY-Wing, используя currentCandidatesMap.
-     */
-    function findXYWing() {
-        if (currentMode !== 'classic' || !currentCandidatesMap) return null;
-
-        // Собираем все ячейки с двумя кандидатами
-        const bivalueCells = [];
-        for (let r = 0; r < 9; r++) {
-            for (let c = 0; c < 9; c++) {
-                const cellId = getCellId(r, c);
-                if (cellId && userGrid[r][c].value === 0 && currentCandidatesMap[cellId]?.size === 2) {
-                    bivalueCells.push({ id: cellId, r, c, cands: currentCandidatesMap[cellId] });
                 }
             }
         }
+        return null;
+    }
 
-        // Итерируем по каждой ячейке с 2 кандидатами как по потенциальному "пивоту"
+    function findXYWing() {
+        if (currentMode !== 'classic' || !currentCandidatesMap) return null;
+        const bivalueCells = [];
+        for (let r = 0; r < 9; r++) { for (let c = 0; c < 9; c++) { const cellId = getCellId(r, c); if (cellId && userGrid[r][c].value === 0 && currentCandidatesMap[cellId]?.size === 2) { bivalueCells.push({ id: cellId, r, c, cands: currentCandidatesMap[cellId] }); } } }
         for (const pivot of bivalueCells) {
-            const pivotCands = Array.from(pivot.cands);
-             if (pivotCands.length !== 2) continue; // На всякий случай
-            const [X, Y] = pivotCands; // Кандидаты пивота XY
+            const pivotCands = Array.from(pivot.cands); if (pivotCands.length !== 2) continue;
+            const [X, Y] = pivotCands;
             const pivotPeers = getClassicPeers(pivot.r, pivot.c);
-
-            // Находим пиров пивота, которые тоже имеют 2 кандидата
             const bivaluePeers = bivalueCells.filter(cell => pivotPeers.has(cell.id));
-
-            // Ищем пары пиров (клешни - pincers), которые образуют XY-Wing с пивотом
             for (let i = 0; i < bivaluePeers.length; i++) {
-                const pincerA = bivaluePeers[i]; // Первая потенциальная клешня
-                const pincerACands = Array.from(pincerA.cands);
-                if (pincerACands.length !== 2) continue; // Пропускаем, если размер изменился (маловероятно)
-
-                // Определяем тип первой клешни (XZ или YZ) и находим Z
-                let Z_A = -1;
-                let pincerAType = '';
-                if (pincerACands.includes(X) && !pincerACands.includes(Y)) {
-                    Z_A = pincerACands.find(d => d !== X);
-                    pincerAType = 'XZ';
-                } else if (pincerACands.includes(Y) && !pincerACands.includes(X)) {
-                    Z_A = pincerACands.find(d => d !== Y);
-                    pincerAType = 'YZ';
-                } else {
-                    continue; // Не подходит (либо XY, либо не содержит X или Y)
-                }
-                 // Проверяем, что Z было найдено (Z не может быть undefined при size === 2)
+                const pincerA = bivaluePeers[i];
+                const pincerACands = Array.from(pincerA.cands); if (pincerACands.length !== 2) continue;
+                let Z_A = -1; let pincerAType = '';
+                if (pincerACands.includes(X) && !pincerACands.includes(Y)) { Z_A = pincerACands.find(d => d !== X); pincerAType = 'XZ'; }
+                else if (pincerACands.includes(Y) && !pincerACands.includes(X)) { Z_A = pincerACands.find(d => d !== Y); pincerAType = 'YZ'; }
+                else { continue; }
                 if (Z_A === undefined || Z_A === -1) continue;
-
-                // Ищем вторую клешню (pincerB)
                 for (let j = i + 1; j < bivaluePeers.length; j++) {
                     const pincerB = bivaluePeers[j];
-                    const pincerBCands = Array.from(pincerB.cands);
-                     if (pincerBCands.length !== 2) continue;
-
-                    // Важно: вторая клешня НЕ ДОЛЖНА видеть первую клешню
-                    if (getClassicPeers(pincerA.r, pincerA.c).has(pincerB.id)) {
-                        continue;
-                    }
-
-                    // Определяем pincerXZ, pincerYZ и общего кандидата Z
-                    let pincerXZ = null, pincerYZ = null;
-                    let Z = -1;
-
-                    if (pincerAType === 'XZ') { // Если pincerA = XZ
-                        // Ищем pincerB типа YZ (содержит Y и Z_A, но не X)
-                        if (pincerBCands.includes(Y) && pincerBCands.includes(Z_A) && !pincerBCands.includes(X)) {
-                             pincerXZ = pincerA;
-                             pincerYZ = pincerB;
-                             Z = Z_A;
-                        }
-                    } else { // Если pincerAType === 'YZ'
-                         // Ищем pincerB типа XZ (содержит X и Z_A, но не Y)
-                         if (pincerBCands.includes(X) && pincerBCands.includes(Z_A) && !pincerBCands.includes(Y)) {
-                              pincerXZ = pincerB; // Назначаем pincerB как XZ
-                              pincerYZ = pincerA; // Назначаем pincerA как YZ
-                              Z = Z_A;
-                         }
-                    }
-
-                    // Если нашли подходящую пару клешней (pincerXZ и pincerYZ)
+                    const pincerBCands = Array.from(pincerB.cands); if (pincerBCands.length !== 2) continue;
+                    if (getClassicPeers(pincerA.r, pincerA.c).has(pincerB.id)) continue;
+                    let pincerXZ = null, pincerYZ = null; let Z = -1;
+                    if (pincerAType === 'XZ') { if (pincerBCands.includes(Y) && pincerBCands.includes(Z_A) && !pincerBCands.includes(X)) { pincerXZ = pincerA; pincerYZ = pincerB; Z = Z_A; } }
+                    else { if (pincerBCands.includes(X) && pincerBCands.includes(Z_A) && !pincerBCands.includes(Y)) { pincerXZ = pincerB; pincerYZ = pincerA; Z = Z_A; } }
                     if (pincerXZ && pincerYZ && Z !== -1) {
-                        // Нашли XY-Wing! Pivot(XY), PincerXZ(XZ), PincerYZ(YZ)
-                        // Ищем ячейки, которые видят обе клешни (pincerXZ и pincerYZ)
                         const pincerXZ_Peers = getClassicPeers(pincerXZ.r, pincerXZ.c);
                         const pincerYZ_Peers = getClassicPeers(pincerYZ.r, pincerYZ.c);
                         const commonPeers = [];
-                        pincerXZ_Peers.forEach(peerId => {
-                            if (pincerYZ_Peers.has(peerId)) {
-                                commonPeers.push(peerId);
-                            }
-                        });
-
+                        pincerXZ_Peers.forEach(peerId => { if (pincerYZ_Peers.has(peerId)) commonPeers.push(peerId); });
                         const eliminations = [];
-                        // Проверяем, можно ли удалить Z из общих пиров
                         for (const commonPeerId of commonPeers) {
-                             const coords = getCellCoords(commonPeerId);
-                             if (!coords) continue;
-                             // Удаляем только из пустых ячеек, не являющихся пивотом или клешнями
-                             if (commonPeerId !== pivot.id && commonPeerId !== pincerXZ.id && commonPeerId !== pincerYZ.id &&
-                                 userGrid[coords.r][coords.c].value === 0 &&
-                                 currentCandidatesMap[commonPeerId]?.has(Z)) {
-                                eliminations.push(commonPeerId);
-                            }
+                             const coords = getCellCoords(commonPeerId); if (!coords) continue;
+                             if (commonPeerId !== pivot.id && commonPeerId !== pincerXZ.id && commonPeerId !== pincerYZ.id && userGrid[coords.r][coords.c].value === 0 && currentCandidatesMap[commonPeerId]?.has(Z)) { eliminations.push(commonPeerId); }
                         }
-
-                        if (eliminations.length > 0) {
-                            console.log(`XY-Wing found: Pivot ${pivot.id}(${X},${Y}), Pincer1 ${pincerXZ.id}(${X},${Z}), Pincer2 ${pincerYZ.id}(${Y},${Z}). Eliminating ${Z}.`);
-                            return {
-                                technique: "XY-Wing",
-                                pivot: pivot.id,
-                                pincer1: pincerXZ.id, // Стандартизировано как XZ
-                                pincer2: pincerYZ.id, // Стандартизировано как YZ
-                                digitX: X,
-                                digitY: Y,
-                                digitZ: Z, // Кандидат для удаления
-                                eliminations: eliminations
-                            };
-                        }
-                    }
-                } // конец цикла по pincerB (j)
-            } // конец цикла по pincerA (i)
-        } // конец цикла по pivot
-
-        return null; // Ничего не найдено
-    }
-
-
-    /**
-     * Применяет найденный Single (Naked или Hidden).
-     * Обновляет userGrid и currentCandidatesMap.
-     */
-    function applyFoundSingle(foundInfo) {
-        if (!foundInfo) return false;
-        const { r, c, digit } = foundInfo;
-        if (userGrid[r]?.[c]?.value === 0) {
-            console.log(`Apply Single: [${r},${c}]=${digit}`);
-            pushHistoryState(); // Сохраняем состояние ДО изменения
-            userGrid[r][c].value = digit;
-            if (userGrid[r][c].notes) {
-                userGrid[r][c].notes.clear(); // Очищаем заметки в userGrid
-            }
-            updateCandidatesOnSet(r, c, digit); // ОБНОВЛЯЕМ КАРТУ КАНДИДАТОВ
-            renderCell(r, c); // Перерисовываем ячейку
-
-            // Визуальное выделение
-            const el = boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
-            if(el){
-                clearSelection();
-                selectedCell = el;
-                selectedRow = r;
-                selectedCol = c;
-                el.classList.add('selected');
-                highlightRelatedCells(r, c);
-                const hc = getComputedStyle(document.documentElement).getPropertyValue('--highlight-hint-flash').trim() || '#fffacd';
-                el.style.transition = 'background-color 0.1s ease-out';
-                el.style.backgroundColor = hc;
-                setTimeout(() => {
-                    // Проверяем, что ячейка всё ещё та самая (не было быстрого клика/отмены)
-                    if (selectedCell === el) {
-                        el.style.backgroundColor = '';
-                        el.style.transition = '';
-                    }
-                }, 600);
-            }
-            return true; // Успешно применили
-        } else {
-            console.warn(`Tried apply Single ${digit} to already filled cell [${r},${c}]`);
-            return false; // Не применили
-        }
-    }
-
-    /**
-     * Применяет элиминацию для Naked Pair/Triple.
-     * Обновляет userGrid.notes И currentCandidatesMap.
-     */
-    function applyNakedGroupElimination(elimInfo) {
-        if (!elimInfo || !elimInfo.digits || !elimInfo.cells || !elimInfo.unitIndex === undefined) return false;
-        const { unitType, unitIndex, cells, digits, technique } = elimInfo;
-        console.log(`Apply ${technique} Elim: Digits ${digits.join(',')} in ${unitType} ${getUnitIndexForDisplay(elimInfo.unitIndex)} (Unit index ${unitIndex})`); // Используем global index
-
-        const unitIndices = getUnitIndices(unitIndex); // Получаем индексы ячеек юнита
-        if (!unitIndices) {
-            console.error(`Could not get unit indices for global index ${unitIndex}`);
-            return false;
-        }
-
-        const groupCellsSet = new Set(cells); // Сет ID ячеек, входящих в группу
-        let eliminatedSomething = false;
-        let changes = []; // Для возможного детального логирования
-
-        pushHistoryState(); // Сохраняем состояние ДО изменений
-
-        for (const [r, c] of unitIndices) {
-            const cellId = getCellId(r, c);
-            // Если ячейка не входит в группу и пустая
-            if (cellId && !groupCellsSet.has(cellId) && userGrid[r]?.[c]?.value === 0) {
-                const cellData = userGrid[r][c];
-                const candidatesInMap = currentCandidatesMap[cellId]; // Кандидаты из карты
-                let cellChanged = false;
-
-                // Инициализируем заметки в userGrid, если их нет
-                if (!cellData.notes) cellData.notes = new Set();
-
-                digits.forEach(digit => {
-                    let removedFromNotes = false;
-                    let removedFromMap = false;
-
-                    // Удаляем из заметок в userGrid
-                    if (cellData.notes.has(digit)) {
-                        cellData.notes.delete(digit);
-                        removedFromNotes = true;
-                        cellChanged = true;
-                    }
-                    // Удаляем из карты кандидатов
-                    if (candidatesInMap?.has(digit)) {
-                        candidatesInMap.delete(digit);
-                        removedFromMap = true;
-                        cellChanged = true; // Даже если в notes не было, но было в карте - изменилось
-                    }
-
-                    if (removedFromNotes || removedFromMap) {
-                        eliminatedSomething = true;
-                        // console.log(`  - Removed candidate ${digit} from ${cellId}`);
-                    }
-                });
-
-                if (cellChanged) {
-                    renderCell(r, c); // Перерисовываем ячейку, если были изменения
-                }
-            }
-        }
-
-        if (eliminatedSomething) {
-            // saveGameState(); // Сохраняем, т.к. были изменения
-            updateLogicSolverButtonsState();
-            console.log(`${technique} applied successfully.`);
-        } else {
-            // Если ничего не удалили, откатываем history push
-            if(historyStack.length > 0) historyStack.pop();
-            console.log(`No eliminations were made for ${technique}.`);
-        }
-        return eliminatedSomething;
-    }
-
-    /**
-     * Применяет элиминацию для Pointing/Box-Line.
-     * Обновляет userGrid.notes И currentCandidatesMap.
-     */
-    function applyPointingBoxLineElimination(elimInfo) {
-        if (!elimInfo || !elimInfo.eliminations || !elimInfo.digit) return false;
-        const { digit, eliminations, technique } = elimInfo;
-
-        if (technique === 'Pointing Candidates') {
-             console.log(`Apply Pointing Elim: Remove ${digit} from affected cells outside block`);
-        } else if (technique === 'Box/Line Reduction') {
-             console.log(`Apply Box/Line Elim: Remove ${digit} from affected cells inside block`);
-        } else {
-             console.log(`Apply ${technique} Elim: Remove ${digit}`);
-        }
-
-
-        let eliminatedSomething = false;
-        let changes = []; // Для логирования
-
-        pushHistoryState(); // Сохраняем состояние ДО изменений
-
-        eliminations.forEach(cellId => {
-            const coords = getCellCoords(cellId);
-            if (coords) {
-                const { r, c } = coords;
-                if (userGrid[r]?.[c]?.value === 0) { // Убедимся, что ячейка все еще пустая
-                    const cellData = userGrid[r][c];
-                    const candidatesInMap = currentCandidatesMap[cellId];
-                    let cellChanged = false;
-                    let removedFromNotes = false;
-                    let removedFromMap = false;
-
-                    if (!cellData.notes) cellData.notes = new Set(); // Инициализация заметок
-
-                    // Удаляем из заметок userGrid
-                    if (cellData.notes.has(digit)) {
-                        cellData.notes.delete(digit);
-                        removedFromNotes = true;
-                        cellChanged = true;
-                    }
-                    // Удаляем из карты кандидатов
-                    if (candidatesInMap?.has(digit)) {
-                        candidatesInMap.delete(digit);
-                        removedFromMap = true;
-                        cellChanged = true;
-                    }
-
-                    if (removedFromNotes || removedFromMap) {
-                        eliminatedSomething = true;
-                        console.log(`  - Removing candidate ${digit} from ${cellId}`);
-                        changes.push({ cellId, r, c });
-                    }
-
-                    if (cellChanged) {
-                        renderCell(r, c); // Перерисовываем, если были изменения
+                        if (eliminations.length > 0) { console.log(`Classic XY-Wing found: Pivot ${pivot.id}(${X},${Y}), Pincer1 ${pincerXZ.id}(${X},${Z}), Pincer2 ${pincerYZ.id}(${Y},${Z}). Eliminating ${Z}.`); return { technique: "XY-Wing", pivot: pivot.id, pincer1: pincerXZ.id, pincer2: pincerYZ.id, digitX: X, digitY: Y, digitZ: Z, eliminations: eliminations }; }
                     }
                 }
             }
-        });
-
-        if (eliminatedSomething) {
-            // saveGameState(); // Сохраняем
-            updateLogicSolverButtonsState();
-            console.log(`${technique} applied successfully.`);
-        } else {
-            // Если ничего не удалили, откатываем history push
-            if(historyStack.length > 0) historyStack.pop();
-            console.log(`No eliminations were made for ${technique}.`);
         }
-        return eliminatedSomething;
-    }
-
-    /**
-     * Применяет элиминацию для X-Wing.
-     * Обновляет userGrid.notes И currentCandidatesMap.
-     */
-     function applyXWingElimination(elimInfo) {
-        if (!elimInfo || !elimInfo.eliminations || !elimInfo.digit) return false;
-        const { digit, eliminations, technique } = elimInfo;
-        console.log(`Apply ${technique} Elim: Remove candidate ${digit} from ${eliminations.length} cells`);
-
-        let eliminatedSomething = false;
-        pushHistoryState(); // Сохраняем состояние ДО изменений
-
-        eliminations.forEach(cellId => {
-            const coords = getCellCoords(cellId);
-            if (coords) {
-                const { r, c } = coords;
-                if (userGrid[r]?.[c]?.value === 0) { // Убедимся, что ячейка пустая
-                    const cellData = userGrid[r][c];
-                    const candidatesInMap = currentCandidatesMap[cellId];
-                    let cellChanged = false;
-                    let removedFromNotes = false;
-                    let removedFromMap = false;
-
-                    if (!cellData.notes) cellData.notes = new Set();
-
-                    // Удаляем из заметок userGrid
-                    if (cellData.notes.has(digit)) {
-                        cellData.notes.delete(digit);
-                        removedFromNotes = true;
-                        cellChanged = true;
-                    }
-                    // Удаляем из карты кандидатов
-                    if (candidatesInMap?.has(digit)) {
-                        candidatesInMap.delete(digit);
-                        removedFromMap = true;
-                        cellChanged = true;
-                    }
-
-                    if (removedFromNotes || removedFromMap) {
-                        eliminatedSomething = true;
-                        console.log(`  - Removed candidate ${digit} from ${cellId}`);
-                    }
-
-                    if (cellChanged) {
-                        renderCell(r, c);
-                    }
-                }
-            }
-        });
-
-        if (eliminatedSomething) {
-            updateLogicSolverButtonsState();
-            console.log(`${technique} applied successfully.`);
-        } else {
-            if(historyStack.length > 0) historyStack.pop(); // Откатываем
-            console.log(`No eliminations were made for ${technique}.`);
-        }
-        return eliminatedSomething;
-    }
-
-    /**
-     * Применяет элиминацию для XY-Wing.
-     * Похожа на applyXWingElimination.
-     */
-     function applyXYWingElimination(elimInfo) {
-        if (!elimInfo || !elimInfo.eliminations || !elimInfo.digitZ) return false;
-        const { digitZ, eliminations, technique, pivot, pincer1, pincer2 } = elimInfo;
-        console.log(`Apply ${technique} Elim: Remove candidate ${digitZ} from ${eliminations.length} cells based on pivot ${pivot}, pincers ${pincer1}, ${pincer2}`);
-
-        let eliminatedSomething = false;
-        pushHistoryState(); // Сохраняем состояние ДО изменений
-
-        eliminations.forEach(cellId => {
-            const coords = getCellCoords(cellId);
-            if (coords) {
-                const { r, c } = coords;
-                if (userGrid[r]?.[c]?.value === 0) { // Убедимся, что ячейка пустая
-                    const cellData = userGrid[r][c];
-                    const candidatesInMap = currentCandidatesMap[cellId];
-                    let cellChanged = false;
-                    let removedFromNotes = false;
-                    let removedFromMap = false;
-
-                    if (!cellData.notes) cellData.notes = new Set();
-
-                    // Удаляем из заметок userGrid
-                    if (cellData.notes.has(digitZ)) {
-                        cellData.notes.delete(digitZ);
-                        removedFromNotes = true;
-                        cellChanged = true;
-                    }
-                    // Удаляем из карты кандидатов
-                    if (candidatesInMap?.has(digitZ)) {
-                        candidatesInMap.delete(digitZ);
-                        removedFromMap = true;
-                        cellChanged = true;
-                    }
-
-                    if (removedFromNotes || removedFromMap) {
-                        eliminatedSomething = true;
-                        console.log(`  - Removed candidate ${digitZ} from ${cellId}`);
-                    }
-
-                    if (cellChanged) {
-                        renderCell(r, c);
-                    }
-                }
-            }
-        });
-
-        if (eliminatedSomething) {
-            updateLogicSolverButtonsState();
-            console.log(`${technique} applied successfully.`);
-        } else {
-            if(historyStack.length > 0) historyStack.pop(); // Откатываем
-            console.log(`No eliminations were made for ${technique}.`);
-        }
-        return eliminatedSomething;
-    }
-
-
-    /** Выполняет ОДИН шаг логического решателя */
-    function doLogicStep() {
-         console.log("%c--- Logic Step ---", "color: green; font-weight: bold;");
-         if (currentMode !== 'classic') return showError("Логика только для классики.");
-         if (isGameSolved()) return showSuccess("Судоку уже решено!");
-         clearErrors();
-         let appliedInfo = null;
-         let foundInfo = null; // Разделяем нахождение и применение
-
-         // Техники, которые ставят цифру
-         const singleTechniques = [
-            { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle },
-            { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle },
-         ];
-         // Техники, которые удаляют кандидатов
-         const eliminationTechniques = [
-             { name: "Pointing Candidates", findFunc: findPointingCandidates, applyFunc: applyPointingBoxLineElimination },
-             { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyPointingBoxLineElimination },
-             { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination },
-             { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination },
-             { name: "X-Wing", findFunc: findXWing, applyFunc: applyXWingElimination },
-             { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyXYWingElimination }, // ДОБАВЛЕНО
-             // Сюда можно добавлять более сложные
-         ];
-
-         // Сначала ищем техники, которые ставят цифру
-         for (const tech of singleTechniques) {
-             console.log(`Searching ${tech.name}...`);
-             foundInfo = tech.findFunc();
-             if (foundInfo) {
-                 if (tech.applyFunc(foundInfo)) {
-                     appliedInfo = foundInfo; // Запоминаем, что применили
-                     break; // Выходим из цикла, т.к. применили шаг
-                 } else {
-                     // Если нашли, но не смогли применить (редко, но возможно)
-                     console.warn(`Found ${tech.name} but failed to apply.`);
-                     foundInfo = null; // Сбрасываем, чтобы не считать найденным
-                 }
-             }
-         }
-
-         // Если не нашли Single, ищем техники элиминации
-         if (!appliedInfo) {
-             for (const tech of eliminationTechniques) {
-                 console.log(`Searching ${tech.name}...`);
-                 foundInfo = tech.findFunc();
-                 if (foundInfo) {
-                     if (tech.applyFunc(foundInfo)) {
-                          appliedInfo = foundInfo; // Запоминаем, что применили
-                          break; // Выходим из цикла
-                     } else {
-                          // Если нашли, но не смогли применить (например, не было кандидатов для удаления)
-                          console.log(`Found ${tech.name} but no eliminations were applied.`);
-                          foundInfo = null; // Сбрасываем
-                     }
-                 }
-             }
-         }
-
-
-         // Сообщаем результат
-         if (appliedInfo) {
-             const tech = appliedInfo.technique || "Unknown";
-             let details = "Неизвестное действие";
-              if (appliedInfo.digit && appliedInfo.r !== undefined && appliedInfo.c !== undefined) { // Singles
-                 details = `цифра ${appliedInfo.digit} в [${getCellId(appliedInfo.r, appliedInfo.c)}]`;
-             } else if (appliedInfo.digits && appliedInfo.cells) { // Naked Groups
-                 const unitType = getUnitType(appliedInfo.unitIndex);
-                 const displayIndex = getUnitIndexForDisplay(appliedInfo.unitIndex);
-                 details = `цифры ${appliedInfo.digits.join(',')} в ${unitType} ${displayIndex}`;
-             } else if (appliedInfo.digit && appliedInfo.eliminations) { // Pointing, Box/Line, X-Wing
-                 details = `цифра ${appliedInfo.digit} (убраны кандидаты из ${appliedInfo.eliminations.length} ячеек)`;
-             } else if (appliedInfo.digitZ && appliedInfo.eliminations) { // XY-Wing
-                  details = `цифра ${appliedInfo.digitZ} (убраны кандидаты из ${appliedInfo.eliminations.length} ячеек)`;
-             }
-
-             showSuccess(`Применено ${tech}: ${details}`);
-             saveGameState(); // Сохраняем после успешного шага
-         }
-         else {
-             showError("Не найдено следующих логических шагов.");
-         }
-         updateLogicSolverButtonsState(); // Обновляем кнопки в любом случае
-    }
-
-    /** Запускает логический решатель до упора */
-    function runLogicSolver() {
-        console.log("%c--- Running Logic Solver ---", "color: green; font-weight: bold;");
-        if (currentMode !== 'classic') { showError("Логика только для классики."); return; }
-        if (isGameSolved()) { showSuccess("Судоку уже решено!"); return; }
-        if (isLogicSolverRunning) { console.log("Solver already running."); return; }
-
-        isLogicSolverRunning = true; updateLogicSolverButtonsState();
-        statusMessageElement.textContent = "Решаю..."; statusMessageElement.className = '';
-        let stepsMade = 0;
-        let actionFoundInLastCycle = true; // <<< ИЗМЕНЕНО: Флаг для управления циклом
-        let lastActionType = '';
-
-        // Объединяем техники в один массив для цикла
-        const techniques = [
-           { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle },
-           { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle },
-           { name: "Pointing Candidates", findFunc: findPointingCandidates, applyFunc: applyPointingBoxLineElimination },
-           { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyPointingBoxLineElimination },
-           { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination },
-           { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination },
-           { name: "X-Wing", findFunc: findXWing, applyFunc: applyXWingElimination },
-           { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyXYWingElimination }, // ДОБАВЛЕНО
-        ];
-
-        function solverCycle() {
-            // <<< ИЗМЕНЕНО: Условие остановки
-            if (isGameSolved() || !actionFoundInLastCycle) {
-                isLogicSolverRunning = false; updateLogicSolverButtonsState(); saveGameState();
-                if (isGameSolved()) showSuccess(`Решено за ${stepsMade} шаг(ов)!`);
-                 // <<< ИЗМЕНЕНО: Сообщение при остановке
-                else showError(`Стоп после ${stepsMade} шагов. ${lastActionType ? ('Последнее: ' + lastActionType + '.') : 'Не найдено следующих действий.'}`);
-                return;
-            }
-
-            let actionFoundInCurrentCycle = false; // <<< ИЗМЕНЕНО: Флаг для текущего цикла
-            let foundInfo = null;
-
-            for (const tech of techniques) {
-                 // console.log(`Solver cycle: Searching ${tech.name}...`);
-                 foundInfo = tech.findFunc();
-                 if (foundInfo) {
-                      if (tech.applyFunc(foundInfo)) {
-                           actionFoundInCurrentCycle = true; // Нашли и применили действие в этом цикле
-                           lastActionType = foundInfo.technique || tech.name;
-                           stepsMade++;
-                           console.log(`Solver Step ${stepsMade}: Applied ${lastActionType}`);
-                           break; // Выходим из цикла по техникам (вернули break)
-                      } else {
-                           foundInfo = null;
-                      }
-                 }
-            }
-
-            actionFoundInLastCycle = actionFoundInCurrentCycle; // <<< ИЗМЕНЕНО: Обновляем флаг для следующей итерации
-
-            // Планируем следующий шаг цикла
-            setTimeout(solverCycle, 10);
-        }
-        solverCycle(); // Start the cycle
-   }
-
-
-     /** Обновляет состояние кнопок решателя */
-     function updateLogicSolverButtonsState() {
-         const enabled = currentMode === 'classic' && !isGameSolved() && !isLogicSolverRunning;
-         if(logicStepButton) logicStepButton.disabled = !enabled;
-         if(logicSolveButton) logicSolveButton.disabled = !enabled;
-         // В режиме Killer Sudoku кнопки всегда выключены
-         if(currentMode === 'killer') {
-              if(logicStepButton) logicStepButton.disabled = true;
-              if(logicSolveButton) logicSolveButton.disabled = true;
-         }
-     }
-
-    // --- Вспомогательные для логического решателя ---
-    function getRowIndices(r){const i=[];for(let c=0;c<9;c++)i.push([r,c]);return i;}
-    function getColIndices(c){const i=[];for(let r=0;r<9;r++)i.push([r,c]);return i;}
-    function getBlockIndices(b){const sr=Math.floor(b/3)*3,sc=(b%3)*3,i=[];for(let r=0;r<3;r++)for(let c=0;c<3;c++)i.push([sr+r,sc+c]);return i;}
-    function getAllUnitsIndices() { const allUnits = []; for (let i = 0; i < 9; i++) { allUnits.push(getRowIndices(i)); allUnits.push(getColIndices(i)); allUnits.push(getBlockIndices(i)); } return allUnits; }
-    function getUnitType(globalUnitIndex) { if (globalUnitIndex < 9) return 'Row'; if (globalUnitIndex < 18) return 'Col'; return 'Block'; }
-    function getUnitIndexForDisplay(globalUnitIndex) { return (globalUnitIndex % 9) + 1; }
-    /**
-     * Получает массив индексов [r, c] для глобального индекса юнита (0-8 для строк, 9-17 для столбцов, 18-26 для блоков).
-     */
-    function getUnitIndices(globalUnitIndex) {
-        if (globalUnitIndex < 0 || globalUnitIndex > 26) return null;
-        const type = getUnitType(globalUnitIndex);
-        const index = globalUnitIndex % 9;
-        if (type === 'Row') return getRowIndices(index);
-        if (type === 'Col') return getColIndices(index);
-        if (type === 'Block') return getBlockIndices(index);
         return null;
     }
 
 
+    // --- Классические Функции применения техник (apply...) ---
+
+    /** Применяет найденный Single. Обновляет userGrid и currentCandidatesMap. */
+    function applyFoundSingle(foundInfo) {
+        if (!foundInfo) return false;
+        const { r, c, digit } = foundInfo;
+        if (userGrid[r]?.[c]?.value === 0) {
+            console.log(`Apply Classic Single: [${r},${c}]=${digit}`);
+            userGrid[r][c].value = digit;
+            if (userGrid[r][c].notes) {
+                userGrid[r][c].notes.clear();
+            }
+            updateCandidatesOnSet(r, c, digit); // Обновляем карту кандидатов
+            renderCell(r, c); // Перерисовываем ячейку
+            const el = boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
+            if(el){
+                 clearSelection(); selectedCell = el; selectedRow = r; selectedCol = c; el.classList.add('selected'); highlightRelatedCells(r, c);
+                 const hc=getComputedStyle(document.documentElement).getPropertyValue('--highlight-hint-flash').trim()||'#fffacd'; el.style.transition = 'background-color 0.1s ease-out'; el.style.backgroundColor = hc;
+                 setTimeout(() => { if (selectedCell === el) {el.style.backgroundColor = ''; el.style.transition = '';} }, 600);
+            }
+            return true;
+        } else {
+            console.warn(`Tried apply Classic Single ${digit} to already filled cell [${r},${c}]`);
+            return false;
+        }
+    }
+
+    /** Применяет элиминацию для Naked Pair/Triple. Обновляет userGrid.notes И currentCandidatesMap. */
+    function applyNakedGroupElimination(elimInfo) {
+        if (!elimInfo || !elimInfo.digits || !elimInfo.cells || elimInfo.unitIndex === undefined) return false;
+        const { unitType, unitIndex, cells, digits, technique } = elimInfo;
+        const unitIndices = getUnitIndices(unitIndex);
+        if (!unitIndices) return false;
+        const groupCellsSet = new Set(cells);
+        let eliminatedSomething = false;
+        for (const [r, c] of unitIndices) {
+            const cellId = getCellId(r, c);
+            if (cellId && !groupCellsSet.has(cellId) && userGrid[r]?.[c]?.value === 0) {
+                const cellData = userGrid[r][c];
+                const candidatesInMap = currentCandidatesMap[cellId];
+                let cellChanged = false;
+                if (!cellData.notes) cellData.notes = new Set();
+                digits.forEach(digit => {
+                    let removedFromNotes = cellData.notes.delete(digit);
+                    let removedFromMap = candidatesInMap?.delete(digit) || false;
+                    if (removedFromNotes || removedFromMap) {
+                        eliminatedSomething = true;
+                        cellChanged = true;
+                        console.log(`  - Removed candidate ${digit} from ${cellId} (Classic Naked Group)`);
+                    }
+                });
+                if (cellChanged) renderCell(r, c);
+            }
+        }
+        if (!eliminatedSomething) console.log(`No eliminations were made for Classic ${technique}.`);
+        return eliminatedSomething;
+    }
+
+     /** Применяет элиминацию для Hidden Pair/Triple. */
+     function applyHiddenGroupElimination(elimInfo) {
+         if (!elimInfo || !elimInfo.digits || !elimInfo.cells) return false;
+         const { cells, digits, technique } = elimInfo;
+         let eliminatedSomething = false;
+         const digitsToKeep = new Set(digits);
+         for (const cellId of cells) {
+             const coords = getCellCoords(cellId);
+             if (coords && userGrid[coords.r]?.[coords.c]?.value === 0) {
+                 const cellData = userGrid[coords.r][coords.c];
+                 const candidatesInMap = currentCandidatesMap[cellId];
+                 let cellChanged = false;
+                 if (!cellData.notes) cellData.notes = new Set();
+                 const notesBefore = new Set(cellData.notes);
+
+                 cellData.notes.forEach(noteDigit => {
+                     if (!digitsToKeep.has(noteDigit)) {
+                         if(cellData.notes.delete(noteDigit)) {
+                            cellChanged = true;
+                            eliminatedSomething = true;
+                            console.log(`  - Removed candidate ${noteDigit} from ${cellId} (Classic Hidden Group)`);
+                         }
+                     }
+                 });
+
+                 if (candidatesInMap) {
+                     candidatesInMap.forEach(candDigit => {
+                         if (!digitsToKeep.has(candDigit)) {
+                             if(candidatesInMap.delete(candDigit)) {
+                                cellChanged = true; // Отмечаем изменение
+                                eliminatedSomething = true;
+                                if (!notesBefore.has(candDigit)) { // Логируем, если удалили только из карты
+                                    console.log(`  - Removed candidate ${candDigit} from map of ${cellId} (Classic Hidden Group)`);
+                                }
+                             }
+                         }
+                     });
+                 }
+                 if (cellChanged) renderCell(coords.r, coords.c);
+             }
+         }
+         if (!eliminatedSomething) console.log(`No eliminations were made for Classic ${technique}.`);
+         return eliminatedSomething;
+     }
+
+
+    /** Применяет элиминацию для Pointing/Box-Line/X-Wing/XY-Wing. Обновляет userGrid.notes И currentCandidatesMap. */
+    function applyElimination(elimInfo) {
+        if (!elimInfo || !elimInfo.eliminations) return false;
+        const { eliminations, technique } = elimInfo;
+        const digit = elimInfo.digit || elimInfo.digitZ; // Цифра для удаления
+        if (!digit) return false;
+        let eliminatedSomething = false;
+        eliminations.forEach(cellId => {
+            const coords = getCellCoords(cellId);
+            if (coords && userGrid[coords.r]?.[coords.c]?.value === 0) {
+                const cellData = userGrid[coords.r][coords.c];
+                const candidatesInMap = currentCandidatesMap[cellId];
+                let cellChanged = false;
+                if (!cellData.notes) cellData.notes = new Set();
+                let removedFromNotes = cellData.notes.delete(digit);
+                let removedFromMap = candidatesInMap?.delete(digit) || false;
+                if (removedFromNotes || removedFromMap) {
+                    eliminatedSomething = true;
+                    cellChanged = true;
+                    console.log(`  - Removed candidate ${digit} from ${cellId} (Classic ${technique})`);
+                }
+                if (cellChanged) renderCell(coords.r, coords.c);
+            }
+        });
+        if (!eliminatedSomething) console.log(`No eliminations were made for Classic ${technique}.`);
+        return eliminatedSomething;
+    }
+
+
+    // --- Основные функции решателя (ОБНОВЛЕНЫ) ---
+
+    /** Выполняет ОДИН шаг логического решателя в зависимости от режима */
+    function doLogicStep() {
+        console.log(`%c--- Logic Step (${currentMode}) ---`, "color: green; font-weight: bold;");
+        if (isGameSolved()) return showSuccess("Судоку уже решено!");
+        if (isLogicSolverRunning) return;
+        clearErrors();
+
+        let appliedInfo = null;
+        pushHistoryState(); // Сохраняем состояние ДО попытки шага
+        let historyKept = true; // Флаг, что историю нужно оставить
+
+        try {
+            if (currentMode === 'classic') {
+                 const singleTechniques = [
+                    { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle },
+                    { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle },
+                 ];
+                 const eliminationTechniques = [
+                     { name: "Pointing Candidates", findFunc: findPointingCandidates, applyFunc: applyElimination }, // Используем общую applyElimination
+                     { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyElimination },
+                     { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination },
+                      { name: "Hidden Pair", findFunc: findHiddenPair, applyFunc: applyHiddenGroupElimination },
+                     { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination },
+                      { name: "Hidden Triple", findFunc: findHiddenTriple, applyFunc: applyHiddenGroupElimination },
+                     { name: "X-Wing", findFunc: findXWing, applyFunc: applyElimination },
+                     { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyElimination },
+                 ];
+                 // Сначала singles
+                 for (const tech of singleTechniques) {
+                     console.log(`Classic Searching ${tech.name}...`);
+                     const found = tech.findFunc(); // Использует глобальный currentCandidatesMap
+                     if (found) {
+                         if (tech.applyFunc(found)) { // Обновляет userGrid и currentCandidatesMap
+                             appliedInfo = found; break;
+                         } else { appliedInfo = null; historyKept = false; } // Не применили - откат истории
+                     }
+                 }
+                 // Потом eliminations
+                 if (!appliedInfo) {
+                     for (const tech of eliminationTechniques) {
+                         console.log(`Classic Searching ${tech.name}...`);
+                         const found = tech.findFunc();
+                         if (found) {
+                             if (tech.applyFunc(found)) {
+                                 appliedInfo = found; break;
+                             } else { appliedInfo = null; historyKept = false; } // Не применили - откат истории
+                         }
+                     }
+                 }
+
+            } else if (currentMode === 'killer') {
+                if (!killerSolverLogic || !currentSolverData) {
+                    throw new Error("Killer solver logic or data not available.");
+                }
+                 // Вызываем функцию из killerSolverLogic, передавая текущее состояние и колбэки
+                 appliedInfo = killerSolverLogic.doKillerLogicStep(
+                     userGrid,
+                     currentCandidatesMap,
+                     currentSolverData,
+                     // Callback для обновления карты после установки цифры
+                     (r, c, digit) => updateCandidatesOnSet(r, c, digit),
+                     // Callback для рендера ячейки
+                     (r, c) => renderCell(r, c)
+                 );
+                 if (!appliedInfo) {
+                     historyKept = false; // Если killer-шаг ничего не нашел/применил
+                 }
+
+            } else {
+                 throw new Error("Unsupported game mode for logic solver.");
+            }
+
+            // Обработка результата
+            if (appliedInfo) {
+                const tech = appliedInfo.technique || "Unknown";
+                let details = "Неизвестное действие";
+                 if (appliedInfo.digit && appliedInfo.r !== undefined && appliedInfo.c !== undefined) { details = `цифра ${appliedInfo.digit} в [${getCellId(appliedInfo.r, appliedInfo.c)}]`; }
+                 else if (appliedInfo.digits && appliedInfo.cells && appliedInfo.unitIndex !== undefined) { const unitType = getUnitType(appliedInfo.unitIndex); const displayIndex = getUnitIndexForDisplay(appliedInfo.unitIndex); details = `цифры ${appliedInfo.digits.join(',')} в ${unitType} ${displayIndex}`; }
+                 else if (appliedInfo.digits && appliedInfo.cells) { details = `цифры ${appliedInfo.digits.join(',')} в ячейках ${appliedInfo.cells.join(', ')} (Hidden)`;} // Hidden Pair/Triple
+                 else if (appliedInfo.digit && appliedInfo.eliminations) { details = `цифра ${appliedInfo.digit} (убраны кандидаты из ${appliedInfo.eliminations.length} ячеек)`; }
+                 else if (appliedInfo.digitZ && appliedInfo.eliminations) { details = `цифра ${appliedInfo.digitZ} (убраны кандидаты из ${appliedInfo.eliminations.length} ячеек)`; }
+
+                showSuccess(`(${currentMode}) Применено ${tech}: ${details}`);
+                saveGameState(); // Сохраняем после успешного шага
+            } else {
+                 showError(`(${currentMode}) Не найдено следующих логических шагов.`);
+                 // Откат истории происходит здесь, если historyKept = false
+            }
+
+        } catch (error) {
+             console.error("Error during logic step:", error);
+             showError(`Ошибка решателя: ${error.message}`);
+             historyKept = false; // Откатываем историю при ошибке
+        } finally {
+            if (!historyKept && historyStack.length > 0) {
+                 historyStack.pop(); // <<< Откатываем историю, если шаг не применен или была ошибка
+             }
+            updateUndoButtonState(); // Обновляем кнопку отмены в любом случае
+            updateLogicSolverButtonsState();
+        }
+    }
+
+
+    /** Запускает логический решатель до упора (ОБНОВЛЕНО) */
+    function runLogicSolver() {
+        console.log(`%c--- Running Full Solver (${currentMode}) ---`, "color: green; font-weight: bold;");
+        if (isGameSolved()) { showSuccess("Судоку уже решено!"); return; }
+        if (isLogicSolverRunning) { console.log("Solver already running."); return; }
+
+        isLogicSolverRunning = true;
+        updateLogicSolverButtonsState(); // Отключаем кнопки на время работы
+        statusMessageElement.textContent = "Решаю..."; statusMessageElement.className = '';
+
+        let stepsMade = 0;
+        let actionFoundInLastCycle = true; // Начинаем с true
+        let lastActionType = '';
+        let errorOccurred = false;
+
+        // --- Определяем функцию для выполнения одного шага в зависимости от режима ---
+        let stepFunction;
+
+        if (currentMode === 'classic') {
+            stepFunction = () => {
+                 let applied = null;
+                 const singleTechs = [
+                    { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle },
+                    { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle },
+                 ];
+                 const elimTechs = [
+                    { name: "Pointing Candidates", findFunc: findPointingCandidates, applyFunc: applyElimination },
+                    { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyElimination },
+                    { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination },
+                    { name: "Hidden Pair", findFunc: findHiddenPair, applyFunc: applyHiddenGroupElimination },
+                    { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination },
+                    { name: "Hidden Triple", findFunc: findHiddenTriple, applyFunc: applyHiddenGroupElimination },
+                    { name: "X-Wing", findFunc: findXWing, applyFunc: applyElimination },
+                    { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyElimination },
+                 ];
+                 // Порядок: сначала ищем Singles, потом остальные
+                 for(const tech of singleTechs) { const f = tech.findFunc(); if(f) { if(tech.applyFunc(f)) { applied = f; break; } else { applied = null; } } } // Если не применили, сбрасываем applied
+                 if (!applied) { for(const tech of elimTechs) { const f = tech.findFunc(); if(f) { if(tech.applyFunc(f)) { applied = f; break; } else { applied = null; } } } } // Если не применили, сбрасываем applied
+                 return applied; // Возвращаем инфо о шаге или null
+             };
+        } else if (currentMode === 'killer') {
+            if (!killerSolverLogic || !currentSolverData) {
+                showError("Ошибка: Логика или данные Killer Sudoku недоступны.");
+                isLogicSolverRunning = false;
+                updateLogicSolverButtonsState();
+                return;
+            }
+            // Обертка для killer-шага, чтобы он соответствовал интерфейсу
+            stepFunction = () => killerSolverLogic.doKillerLogicStep(
+                 userGrid, currentCandidatesMap, currentSolverData,
+                 updateCandidatesOnSet, renderCell
+            );
+        } else {
+            showError("Неподдерживаемый режим для решателя.");
+            isLogicSolverRunning = false;
+            updateLogicSolverButtonsState();
+            return;
+        }
+        // ---------------------------------------------------------
+
+        function solverCycle() {
+            if (errorOccurred || isGameSolved() || !actionFoundInLastCycle) {
+                isLogicSolverRunning = false;
+                updateLogicSolverButtonsState();
+                saveGameState();
+                if (!errorOccurred) { // Сообщение показываем, только если не было ошибки
+                    if (isGameSolved()) showSuccess(`(${currentMode}) Решено за ${stepsMade} шаг(ов)!`);
+                    else showError(`(${currentMode}) Стоп после ${stepsMade} шагов. ${lastActionType ? ('Последнее: ' + lastActionType + '.') : 'Не найдено следующих действий.'}`);
+                }
+                return;
+            }
+
+            let appliedInfo = null;
+            pushHistoryState(); // Сохраняем перед каждым шагом
+            let historyKept = true; // По умолчанию оставляем историю
+
+            try {
+                appliedInfo = stepFunction(); // Выполняем один шаг (Classic или Killer)
+
+                if (appliedInfo) {
+                    actionFoundInLastCycle = true; // Действие было
+                    lastActionType = appliedInfo.technique || 'Unknown';
+                    stepsMade++;
+                    console.log(`(${currentMode}) Solver Step ${stepsMade}: Applied ${lastActionType}`);
+                } else {
+                    actionFoundInLastCycle = false; // Действий не было
+                    historyKept = false; // Откатываем историю
+                }
+            } catch (error) {
+                console.error("Error during solver cycle:", error);
+                showError(`Ошибка решателя: ${error.message}`);
+                errorOccurred = true;
+                historyKept = false; // Откатываем историю
+            } finally {
+                 if (!historyKept && historyStack.length > 0) {
+                     historyStack.pop();
+                 }
+                 updateUndoButtonState(); // Обновляем кнопку в любом случае
+                 // Планируем следующий шаг
+                 setTimeout(solverCycle, 5); // Уменьшил задержку для скорости
+            }
+        }
+
+        actionFoundInLastCycle = true; // Начинаем цикл
+        solverCycle(); // Запускаем
+    }
+
+
+
+     /** Обновляет состояние кнопок решателя (ОБНОВЛЕНО) */
+     function updateLogicSolverButtonsState() {
+          // Включаем, если игра не решена и решатель не запущен
+         const enabled = !isGameSolved() && !isLogicSolverRunning;
+         let stepEnabled = false; // Отдельный флаг для Next Step
+         let solveEnabled = false; // Отдельный флаг для Solve
+
+         if (enabled) {
+              if (currentMode === 'classic') {
+                   stepEnabled = true;
+                   solveEnabled = true;
+              } else if (currentMode === 'killer') {
+                    // Включаем для Killer, если есть данные и логика
+                   if (currentSolverData && killerSolverLogic) {
+                        stepEnabled = true;
+                        solveEnabled = true;
+                   }
+              }
+         }
+
+         if(logicStepButton) logicStepButton.disabled = !stepEnabled;
+         if(logicSolveButton) logicSolveButton.disabled = !solveEnabled;
+     }
+
+
+    // --- Вспомогательные для логического решателя ---
+     function getRowIndices(r){const i=[];for(let c=0;c<9;c++)i.push([r,c]);return i;}
+     function getColIndices(c){const i=[];for(let r=0;r<9;r++)i.push([r,c]);return i;}
+     function getBlockIndices(b){const sr=Math.floor(b/3)*3,sc=(b%3)*3,i=[];for(let r=0;r<3;r++)for(let c=0;c<3;c++)i.push([sr+r,sc+c]);return i;}
+     function getAllUnitsIndices() { const allUnits = []; for (let i = 0; i < 9; i++) { allUnits.push(getRowIndices(i)); allUnits.push(getColIndices(i)); allUnits.push(getBlockIndices(i)); } return allUnits; }
+     function getUnitType(globalUnitIndex) { if (globalUnitIndex < 9) return 'Row'; if (globalUnitIndex < 18) return 'Col'; return 'Block'; }
+     function getUnitIndexForDisplay(globalUnitIndex) { return (globalUnitIndex % 9) + 1; }
+     /**
+      * Получает массив индексов [r, c] для глобального индекса юнита (0-8 для строк, 9-17 для столбцов, 18-26 для блоков).
+      */
+     function getUnitIndices(globalUnitIndex) {
+         if (globalUnitIndex < 0 || globalUnitIndex > 26) return null;
+         const type = getUnitType(globalUnitIndex);
+         const index = globalUnitIndex % 9;
+         if (type === 'Row') return getRowIndices(index);
+         if (type === 'Col') return getColIndices(index);
+         if (type === 'Block') return getBlockIndices(index);
+         return null;
+     }
+
+
+
     // --- Обработчики Событий ---
-    function addEventListeners() {
+     function addEventListeners() {
         console.log("Adding event listeners...");
         startNewGameButton?.addEventListener('click', () => { console.log("New Game btn"); showScreen(newGameOptionsScreen); });
         continueGameButton?.addEventListener('click', () => { console.log("Continue btn"); const s=loadGameState(); if(s){ initGame(s.mode, s.difficulty, s); } else { showError("Нет сохраненной игры."); continueGameButton.disabled = true; } });
@@ -1719,8 +1426,8 @@ document.addEventListener('DOMContentLoaded', () => {
         undoButton?.addEventListener('click', handleUndo);
         hintButton?.addEventListener('click', ()=>{if(isShowingAd||isGameSolved())return;if(currentMode==='classic'&&hintsRemaining>0)provideHintInternal();else if(currentMode==='classic')offerRewardedAdForHints();else showError("Подсказки недоступны");});
         exitGameButton?.addEventListener('click', ()=>{console.log("Exit btn");stopTimer();showScreen(initialScreen);checkContinueButton();});
-        logicStepButton?.addEventListener('click', doLogicStep);
-        logicSolveButton?.addEventListener('click', runLogicSolver);
+        logicStepButton?.addEventListener('click', doLogicStep); // Вызывает общую функцию
+        logicSolveButton?.addEventListener('click', runLogicSolver); // Вызывает общую функцию
         // KEYDOWN Handler (с обновлением кандидатов)
         document.addEventListener('keydown', (e)=>{
             if(document.activeElement.tagName==='INPUT'||isShowingAd||!gameContainer?.classList.contains('visible')||isGameSolved())return;
