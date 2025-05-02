@@ -1,5 +1,3 @@
-// killerSolverLogic.js
-
 /**
  * Логика для интерактивного пошагового решателя Killer Sudoku.
  * Работает с представлением данных из script.js (userGrid, currentCandidatesMap).
@@ -7,10 +5,70 @@
  */
 const killerSolverLogic = (() => {
 
-    // --- Вспомогательные функции (могут быть скопированы из script.js или импортированы) ---
-    // Для краткости предположим, что эти функции доступны глобально или передаются
-    // getCellId, getCellCoords, getClassicPeers, getRowIndices, getColIndices, getBlockIndices,
-    // getAllUnitsIndices, getUnitType, getUnitIndexForDisplay, getUnitIndices
+    // --- Вспомогательные функции (скопированы из script.js) ---
+    // Эти функции теперь локальны для этого модуля
+
+    function getCellCoords(cellId){ if(!cellId||cellId.length!==2)return null; const r="ABCDEFGHI".indexOf(cellId[0]), c="123456789".indexOf(cellId[1]); if(r===-1||c===-1)return null; return{r,c}; }
+    function getCellId(r,c){ if(r<0||r>8||c<0||c>8)return null; return "ABCDEFGHI"[r]+"123456789"[c]; }
+    function getRowIndices(r){const i=[];for(let c=0;c<9;c++)i.push([r,c]);return i;}
+    function getColIndices(c){const i=[];for(let r=0;r<9;r++)i.push([r,c]);return i;}
+    function getBlockIndices(b){const sr=Math.floor(b/3)*3,sc=(b%3)*3,i=[];for(let r=0;r<3;r++)for(let c=0;c<3;c++)i.push([sr+r,sc+c]);return i;}
+    function getAllUnitsIndices() { const allUnits = []; for (let i = 0; i < 9; i++) { allUnits.push(getRowIndices(i)); allUnits.push(getColIndices(i)); allUnits.push(getBlockIndices(i)); } return allUnits; }
+    function getUnitType(globalUnitIndex) { if (globalUnitIndex < 9) return 'Row'; if (globalUnitIndex < 18) return 'Col'; return 'Block'; }
+    function getUnitIndexForDisplay(globalUnitIndex) { return (globalUnitIndex % 9) + 1; }
+    function getUnitIndices(globalUnitIndex) {
+        if (globalUnitIndex < 0 || globalUnitIndex > 26) return null;
+        const type = getUnitType(globalUnitIndex);
+        const index = globalUnitIndex % 9;
+        if (type === 'Row') return getRowIndices(index);
+        if (type === 'Col') return getColIndices(index);
+        if (type === 'Block') return getBlockIndices(index);
+        return null;
+    }
+
+    let classicPeersMapCache = null; // Кэш для пиров внутри этого модуля
+    /**
+     * Получает Set ID всех пиров для ячейки (кэшируется внутри killerSolverLogic).
+     */
+    function getClassicPeers(r, c) {
+        const cellId = getCellId(r,c);
+        if (!cellId) return new Set();
+
+        if (classicPeersMapCache === null) {
+            console.log("Initializing killerSolverLogic peers cache...");
+            classicPeersMapCache = {};
+            for (let r_cache = 0; r_cache < 9; r_cache++) {
+                for (let c_cache = 0; c_cache < 9; c_cache++) {
+                    const id_cache = getCellId(r_cache, c_cache);
+                    if (id_cache) {
+                        const peers = new Set();
+                        for (let ci = 0; ci < 9; ci++) if (ci !== c_cache) { const pid = getCellId(r_cache, ci); if(pid) peers.add(pid); }
+                        for (let ri = 0; ri < 9; ri++) if (ri !== r_cache) { const pid = getCellId(ri, c_cache); if(pid) peers.add(pid); }
+                        const startRow = Math.floor(r_cache / 3) * 3;
+                        const startCol = Math.floor(c_cache / 3) * 3;
+                        for (let i = 0; i < 3; i++) {
+                            for (let j = 0; j < 3; j++) {
+                                const peerR = startRow + i;
+                                const peerC = startCol + j;
+                                if (peerR !== r_cache || peerC !== c_cache) {
+                                    const pid = getCellId(peerR, peerC);
+                                    if(pid) peers.add(pid);
+                                }
+                            }
+                        }
+                        classicPeersMapCache[id_cache] = peers;
+                    }
+                }
+            }
+            console.log("killerSolverLogic peers cache initialized.");
+        }
+        return classicPeersMapCache[cellId] || new Set();
+   }
+   // Функция сброса кэша пиров (если понадобится, например, при старте новой игры)
+   function resetPeersCache() {
+       classicPeersMapCache = null;
+   }
+
 
     /**
      * Вычисляет кандидатов для ОДНОЙ ячейки, учитывая КЛАССИЧЕСКИЕ и KILLER правила.
@@ -21,30 +79,30 @@ const killerSolverLogic = (() => {
      * @returns {Set<number>} - Множество возможных кандидатов для ячейки
      */
     function calculateKillerCandidates(r, c, userGrid, solverData) {
-        const cellId = getCellId(r, c);
+        const cellId = getCellId(r, c); // Используем локальную getCellId
         if (!cellId || !userGrid[r]?.[c] || userGrid[r][c].value !== 0) {
-            return new Set(); // Возвращаем пустой Set для заполненных или невалидных
+            return new Set();
         }
 
         let candidates = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
         // 1. Классические исключения (пиры)
         for (let i = 0; i < 9; i++) {
-            if (userGrid[r]?.[i]?.value !== 0) candidates.delete(userGrid[r][i].value); // Строка
-            if (userGrid[i]?.[c]?.value !== 0) candidates.delete(userGrid[i][c].value); // Столбец
+            if (userGrid[r]?.[i]?.value !== 0) candidates.delete(userGrid[r][i].value);
+            if (userGrid[i]?.[c]?.value !== 0) candidates.delete(userGrid[i][c].value);
         }
         const startRow = Math.floor(r / 3) * 3;
         const startCol = Math.floor(c / 3) * 3;
         for (let i = 0; i < 3; i++) {
             for (let j = 0; j < 3; j++) {
                 if (userGrid[startRow + i]?.[startCol + j]?.value !== 0) {
-                    candidates.delete(userGrid[startRow + i][startCol + j].value); // Блок
+                    candidates.delete(userGrid[startRow + i][startCol + j].value);
                 }
             }
         }
 
         // 2. Исключения Killer Sudoku (клетка)
-        if (solverData && solverData.cellToCageMap && solverData.cageDataArray) {
+        if (solverData && solverData.cellToCageMap && solverData.cageDataArray && typeof killerSudoku !== 'undefined' && killerSudoku.getSumCombinationInfo) { // Проверка наличия killerSudoku
             const cageIndex = solverData.cellToCageMap[cellId];
             if (cageIndex !== undefined) {
                 const cage = solverData.cageDataArray[cageIndex];
@@ -53,15 +111,12 @@ const killerSolverLogic = (() => {
                     let emptyCellsInCage = [];
                     let placedDigitsInCage = new Set();
 
-                    // Собираем информацию о текущем состоянии клетки
                     for (const cageCellId of cage.cells) {
-                        const coords = getCellCoords(cageCellId);
+                        const coords = getCellCoords(cageCellId); // Используем локальную getCellCoords
                         if (coords && userGrid[coords.r]?.[coords.c]) {
                             const cellValue = userGrid[coords.r][coords.c].value;
                             if (cellValue !== 0) {
-                                // Удаляем уже размещенные в клетке цифры из кандидатов НАШЕЙ ячейки
                                 candidates.delete(cellValue);
-                                // Собираем информацию для расчета оставшейся суммы/комбинаций
                                 currentCageSum += cellValue;
                                 placedDigitsInCage.add(cellValue);
                             } else {
@@ -70,42 +125,40 @@ const killerSolverLogic = (() => {
                         }
                     }
 
-                    // Рассчитываем оставшуюся сумму и количество пустых ячеек
                     const remainingSum = cage.sum - currentCageSum;
                     const remainingCellsCount = emptyCellsInCage.length;
 
                     if (remainingCellsCount > 0 && remainingSum >= 0) {
-                         // Получаем ИНФОРМАЦИЮ о возможных комбинациях для ОСТАВШИХСЯ пустых ячеек
+                        // Получаем ИНФОРМАЦИЮ о возможных комбинациях для ОСТАВШИХСЯ пустых ячеек
+                         // Используем getSumCombinationInfo из глобальной библиотеки killerSudoku
                         const combinationInfo = killerSudoku.getSumCombinationInfo(remainingSum, remainingCellsCount);
 
-                        if (combinationInfo) {
-                            // Определяем цифры, которые *должны* быть среди оставшихся пустых ячеек
-                            // Это цифры из combinationInfo.digitMask, которых еще нет в placedDigitsInCage
+                        if (combinationInfo && typeof killerSudoku.DIGIT_MASKS !== 'undefined') { // Проверка наличия DIGIT_MASKS
                             let possibleCandidatesForRemaining = new Set();
                             for (let d = 1; d <= 9; d++) {
+                                // Проверяем маску и отсутствие цифры среди уже размещенных
                                 if ((combinationInfo.digitMask & killerSudoku.DIGIT_MASKS[d]) !== 0 && !placedDigitsInCage.has(d)) {
                                     possibleCandidatesForRemaining.add(d);
                                 }
                             }
-
-                            // Оставляем в наших кандидатах только те, что ВХОДЯТ в набор возможных для оставшихся
+                            // Оставляем только те кандидаты, которые могут быть в оставшихся ячейках
                             candidates = new Set([...candidates].filter(cand => possibleCandidatesForRemaining.has(cand)));
 
+                            // Дополнительная проверка: если в ячейке ОСТАЛАСЬ цифра, которая НЕ МОЖЕТ
+                            // участвовать в комбинации для достижения оставшейся суммы с учетом
+                            // других кандидатов в этой же ячейке и оставшихся ячеек клетки.
+                            // Эта логика сложна и выходит за рамки базового расчета кандидатов здесь.
+                            // Оставляем это для более продвинутых шагов или полного решателя.
+
                         } else {
-                             // Если нет комбинаций для оставшейся суммы/количества - это противоречие,
-                             // но для расчета кандидатов просто вернем пустой сет (или текущий, т.к. явного противоречия для *этой* ячейки нет)
-                             // Для простоты оставим текущий набор кандидатов, проблема обнаружится позже.
-                             // Но если remainingSum < 0 или combinationInfo === null (невозможная сумма), то кандидатов нет.
-                             if (remainingSum < 0) {
+                             if (remainingSum < 0 || !combinationInfo) { // Если сумма невозможна
                                  candidates.clear();
                              }
                         }
                     } else if (remainingCellsCount === 0 && remainingSum !== 0) {
-                        // Клетка заполнена, но сумма неверна - противоречие
-                         candidates.clear();
+                        candidates.clear(); // Противоречие: клетка заполнена неверно
                     } else if (remainingSum < 0) {
-                        // Сумма уже превышена - противоречие
-                        candidates.clear();
+                        candidates.clear(); // Противоречие: сумма превышена
                     }
                 }
             }
@@ -121,10 +174,11 @@ const killerSolverLogic = (() => {
      * @returns {object} - Новая карта кандидатов { cellId: Set<number> }
      */
      function calculateAllKillerCandidates(userGrid, solverData) {
+        resetPeersCache(); // Сбрасываем кэш пиров при полном пересчете
         const newMap = {};
         for (let r = 0; r < 9; r++) {
             for (let c = 0; c < 9; c++) {
-                const cellId = getCellId(r, c);
+                const cellId = getCellId(r, c); // Используем локальную getCellId
                 if (!cellId) continue;
                 if (userGrid[r]?.[c]?.value === 0) {
                     newMap[cellId] = calculateKillerCandidates(r, c, userGrid, solverData);
@@ -139,8 +193,8 @@ const killerSolverLogic = (() => {
 
     // --- Функции поиска техник (Адаптированные для Killer) ---
 
-    // Naked Single (использует candidatesMap, созданную с учетом Killer-правил)
-    function findNakedSingle(userGrid, candidatesMap) {
+    // Naked Single
+    function findNakedSingle(userGrid, candidatesMap, solverData) { // solverData добавлен для единообразия
         for (let r = 0; r < 9; r++) {
             for (let c = 0; c < 9; c++) {
                 const cellId = getCellId(r, c);
@@ -154,8 +208,8 @@ const killerSolverLogic = (() => {
         return null;
     }
 
-    // Hidden Single (использует candidatesMap, созданную с учетом Killer-правил)
-     function findHiddenSingle(userGrid, candidatesMap) {
+    // Hidden Single
+     function findHiddenSingle(userGrid, candidatesMap, solverData) { // solverData добавлен
         for (let i = 0; i < 9; i++) {
             const rowRes = findHiddenSingleInUnit(getRowIndices(i), userGrid, candidatesMap);
             if (rowRes) return rowRes;
@@ -192,8 +246,8 @@ const killerSolverLogic = (() => {
         return null;
     }
 
-    // Naked Pair (использует candidatesMap, созданную с учетом Killer-правил)
-    function findNakedPair(userGrid, candidatesMap) {
+    // Naked Pair
+    function findNakedPair(userGrid, candidatesMap, solverData) { // solverData добавлен
          const units = getAllUnitsIndices();
          for (let i = 0; i < units.length; i++) {
              const unit = units[i];
@@ -209,10 +263,10 @@ const killerSolverLogic = (() => {
                      for (let k = j + 1; k < cellsWith2Candidates.length; k++) {
                          const c1 = cellsWith2Candidates[j];
                          const c2 = cellsWith2Candidates[k];
-                         if (c1.cands.size === 2 && c2.cands.size === 2) { // Доп. проверка
+                         if (c1.cands.size === 2 && c2.cands.size === 2) {
                              let sameCandidates = true;
                              for (const digit of c1.cands) if (!c2.cands.has(digit)) { sameCandidates = false; break; }
-                             if (sameCandidates) for (const digit of c2.cands) if (!c1.cands.has(digit)) { sameCandidates = false; break; } // Обратная проверка
+                             if (sameCandidates) for (const digit of c2.cands) if (!c1.cands.has(digit)) { sameCandidates = false; break; }
 
                              if (sameCandidates) {
                                  const pairDigits = Array.from(c1.cands);
@@ -242,14 +296,12 @@ const killerSolverLogic = (() => {
          return null;
      }
 
-     // Hidden Pair (использует candidatesMap, созданную с учетом Killer-правил)
-     function findHiddenPair(userGrid, candidatesMap) {
+     // Hidden Pair
+     function findHiddenPair(userGrid, candidatesMap, solverData) { // solverData добавлен
          const units = getAllUnitsIndices();
          for (let i = 0; i < units.length; i++) {
              const unit = units[i];
-             const digitLocations = {}; // { digit: [cellId1, cellId2, ...], ... }
-
-             // Собираем локации для каждого кандидата в юните
+             const digitLocations = {};
              for (const [r, c] of unit) {
                  const cellId = getCellId(r, c);
                  if (userGrid[r]?.[c]?.value === 0 && candidatesMap[cellId]) {
@@ -259,53 +311,36 @@ const killerSolverLogic = (() => {
                      });
                  }
              }
-
-             // Ищем цифры, которые появляются ровно в 2 ячейках
              const digitsIn2Cells = Object.entries(digitLocations)
                                          .filter(([digit, locations]) => locations.length === 2)
                                          .map(([digit, locations]) => ({ digit: parseInt(digit), locations: new Set(locations) }));
 
              if (digitsIn2Cells.length >= 2) {
-                 // Ищем пары таких цифр, которые находятся в одних и тех же 2 ячейках
                  for (let j = 0; j < digitsIn2Cells.length; j++) {
                      for (let k = j + 1; k < digitsIn2Cells.length; k++) {
                          const d1Info = digitsIn2Cells[j];
                          const d2Info = digitsIn2Cells[k];
-
-                         // Проверяем, совпадают ли множества ячеек
                          if (d1Info.locations.size === 2 && d1Info.locations.size === d2Info.locations.size) {
                             const loc1Arr = Array.from(d1Info.locations);
                             const loc2Arr = Array.from(d2Info.locations);
                             if ((loc1Arr[0] === loc2Arr[0] && loc1Arr[1] === loc2Arr[1]) || (loc1Arr[0] === loc2Arr[1] && loc1Arr[1] === loc2Arr[0])) {
-                                // Нашли Hidden Pair!
                                 const pairDigits = [d1Info.digit, d2Info.digit];
-                                const pairCells = loc1Arr; // [cellId1, cellId2]
+                                const pairCells = loc1Arr;
                                 let eliminationNeeded = false;
-
-                                // Проверяем, есть ли у этих ячеек *другие* кандидаты для удаления
                                 for (const cellId of pairCells) {
                                      const cellCands = candidatesMap[cellId];
                                      if (cellCands) {
                                         for(const cand of cellCands) {
                                             if (cand !== pairDigits[0] && cand !== pairDigits[1]) {
-                                                eliminationNeeded = true;
-                                                break;
+                                                eliminationNeeded = true; break;
                                             }
                                         }
                                      }
                                      if (eliminationNeeded) break;
                                 }
-
-
                                 if (eliminationNeeded) {
                                      console.log(`Killer Hidden Pair found: Digits ${pairDigits.join(',')} in cells ${pairCells.join(',')}`);
-                                     return {
-                                         unitType: getUnitType(i),
-                                         unitIndex: i,
-                                         cells: pairCells, // ID ячеек, где пара найдена
-                                         digits: pairDigits, // Цифры, составляющие пару
-                                         technique: "Hidden Pair"
-                                     };
+                                     return { unitType: getUnitType(i), unitIndex: i, cells: pairCells, digits: pairDigits, technique: "Hidden Pair" };
                                 }
                             }
                          }
@@ -317,8 +352,8 @@ const killerSolverLogic = (() => {
      }
 
 
-    // Naked Triple (использует candidatesMap, созданную с учетом Killer-правил)
-    function findNakedTriple(userGrid, candidatesMap) {
+    // Naked Triple
+    function findNakedTriple(userGrid, candidatesMap, solverData) { // solverData добавлен
         const units = getAllUnitsIndices();
         for (let i = 0; i < units.length; i++) {
             const unitIndices = units[i];
@@ -366,13 +401,12 @@ const killerSolverLogic = (() => {
         return null;
     }
 
-    // Hidden Triple (использует candidatesMap, созданную с учетом Killer-правил)
-    function findHiddenTriple(userGrid, candidatesMap) {
+    // Hidden Triple
+    function findHiddenTriple(userGrid, candidatesMap, solverData) { // solverData добавлен
         const units = getAllUnitsIndices();
         for (let i = 0; i < units.length; i++) {
             const unit = units[i];
-            const digitLocations = {}; // { digit: [cellId1, cellId2, ...], ... }
-
+            const digitLocations = {};
             for (const [r, c] of unit) {
                 const cellId = getCellId(r, c);
                 if (userGrid[r]?.[c]?.value === 0 && candidatesMap[cellId]) {
@@ -382,14 +416,11 @@ const killerSolverLogic = (() => {
                     });
                 }
             }
-
-            // Находим кандидатов, которые появляются в 2 или 3 местах
             const potentialTripleDigits = Object.keys(digitLocations)
                 .map(d => parseInt(d))
                 .filter(d => digitLocations[d].length === 2 || digitLocations[d].length === 3);
 
             if (potentialTripleDigits.length >= 3) {
-                 // Перебираем комбинации из 3 таких кандидатов
                  for (let j = 0; j < potentialTripleDigits.length; j++) {
                      for (let k = j + 1; k < potentialTripleDigits.length; k++) {
                          for (let l = k + 1; l < potentialTripleDigits.length; l++) {
@@ -397,38 +428,25 @@ const killerSolverLogic = (() => {
                              const d2 = potentialTripleDigits[k];
                              const d3 = potentialTripleDigits[l];
                              const tripleDigits = [d1, d2, d3];
-
-                             // Объединяем ячейки, где эти 3 кандидата могут быть
                              const combinedCells = new Set([...digitLocations[d1], ...digitLocations[d2], ...digitLocations[d3]]);
 
-                             // Если таких ячеек ровно 3 - это Hidden Triple!
                              if (combinedCells.size === 3) {
                                  const tripleCells = Array.from(combinedCells);
                                  let eliminationNeeded = false;
-
-                                 // Проверяем, есть ли в этих 3 ячейках *другие* кандидаты для удаления
                                  for (const cellId of tripleCells) {
                                      const cellCands = candidatesMap[cellId];
                                      if (cellCands) {
                                          for (const cand of cellCands) {
                                              if (!tripleDigits.includes(cand)) {
-                                                 eliminationNeeded = true;
-                                                 break;
+                                                 eliminationNeeded = true; break;
                                              }
                                          }
                                      }
                                      if (eliminationNeeded) break;
                                  }
-
                                  if (eliminationNeeded) {
                                      console.log(`Killer Hidden Triple found: Digits ${tripleDigits.join(',')} in cells ${tripleCells.join(',')}`);
-                                     return {
-                                         unitType: getUnitType(i),
-                                         unitIndex: i,
-                                         cells: tripleCells, // ID ячеек тройки
-                                         digits: tripleDigits, // Цифры тройки
-                                         technique: "Hidden Triple"
-                                     };
+                                     return { unitType: getUnitType(i), unitIndex: i, cells: tripleCells, digits: tripleDigits, technique: "Hidden Triple" };
                                  }
                              }
                          }
@@ -440,9 +458,8 @@ const killerSolverLogic = (() => {
     }
 
     // --- Функции применения (общие для Classic/Killer в script.js) ---
-    // Функции apply... остаются в script.js, так как они модифицируют
-    // userGrid и вызывают renderCell, но им нужно передавать обновленную карту кандидатов.
-    // Мы будем передавать callback для обновления карты из killerSolverLogic в script.js.
+    // Эти функции вызываются из doKillerLogicStep и модифицируют ГЛОБАЛЬНЫЕ
+    // userGrid и currentCandidatesMap (переданные по ссылке)
 
     /**
      * Применяет найденный Single. Обновляет userGrid и вызывает callback для обновления кандидатов.
@@ -454,10 +471,9 @@ const killerSolverLogic = (() => {
      function applyFoundSingle(foundInfo, updateCandidatesCallback, renderCellCallback) {
          if (!foundInfo) return false;
          const { r, c, digit } = foundInfo;
-         // Используем глобальный userGrid напрямую (или передаем как параметр)
+         // Используем глобальный userGrid напрямую
          if (userGrid[r]?.[c]?.value === 0) {
              console.log(`Apply Single: [${r},${c}]=${digit}`);
-             // pushHistoryState(); // История обрабатывается в вызывающей функции (doKillerLogicStep)
              userGrid[r][c].value = digit;
              if (userGrid[r][c].notes) {
                  userGrid[r][c].notes.clear();
@@ -468,9 +484,6 @@ const killerSolverLogic = (() => {
              if (renderCellCallback) {
                   renderCellCallback(r, c); // Перерисовываем ячейку
              }
-
-             // Визуальное выделение (остается в script.js)
-             // ... (код для выделения) ...
              return true;
          } else {
              console.warn(`Tried apply Single ${digit} to already filled cell [${r},${c}]`);
@@ -480,7 +493,7 @@ const killerSolverLogic = (() => {
 
 
     /**
-     * Применяет элиминацию для Naked Pair/Triple. Обновляет userGrid.notes и вызывает callback для обновления кандидатов.
+     * Применяет элиминацию для Naked Pair/Triple. Обновляет userGrid.notes и карту кандидатов.
      * @param {object} elimInfo - Информация о шаге.
      * @param {object} candidatesMap - Текущая карта кандидатов (для обновления).
      * @param {Function} renderCellCallback - Функция для перерисовки ячейки.
@@ -489,9 +502,8 @@ const killerSolverLogic = (() => {
     function applyNakedGroupElimination(elimInfo, candidatesMap, renderCellCallback) {
         if (!elimInfo || !elimInfo.digits || !elimInfo.cells || elimInfo.unitIndex === undefined) return false;
         const { unitType, unitIndex, cells, digits, technique } = elimInfo;
-        // console.log(`Apply ${technique} Elim: Digits ${digits.join(',')} in ${unitType} ${getUnitIndexForDisplay(unitIndex)}`);
 
-        const unitIndices = getUnitIndices(unitIndex);
+        const unitIndices = getUnitIndices(unitIndex); // Используем локальную
         if (!unitIndices) {
              console.error(`Could not get unit indices for global index ${unitIndex}`);
              return false;
@@ -499,13 +511,11 @@ const killerSolverLogic = (() => {
         const groupCellsSet = new Set(cells);
         let eliminatedSomething = false;
 
-        // pushHistoryState(); // Обрабатывается в doKillerLogicStep
-
         for (const [r, c] of unitIndices) {
-            const cellId = getCellId(r, c);
-            if (cellId && !groupCellsSet.has(cellId) && userGrid[r]?.[c]?.value === 0) {
+            const cellId = getCellId(r, c); // Используем локальную
+            if (cellId && !groupCellsSet.has(cellId) && userGrid[r]?.[c]?.value === 0) { // Глобальный userGrid
                 const cellData = userGrid[r][c];
-                const candidatesInMap = candidatesMap[cellId];
+                const candidatesInMap = candidatesMap[cellId]; // Переданная карта
                 let cellChanged = false;
 
                 if (!cellData.notes) cellData.notes = new Set();
@@ -534,7 +544,6 @@ const killerSolverLogic = (() => {
                 }
             }
         }
-        // Не откатываем историю здесь, т.к. она создается в doKillerLogicStep
         if (!eliminatedSomething) console.log(`No eliminations were made for ${technique}.`);
         return eliminatedSomething;
     }
@@ -548,50 +557,46 @@ const killerSolverLogic = (() => {
       */
      function applyHiddenGroupElimination(elimInfo, candidatesMap, renderCellCallback) {
          if (!elimInfo || !elimInfo.digits || !elimInfo.cells) return false;
-         const { cells, digits, technique } = elimInfo; // unitType/Index не нужны для применения
-         // console.log(`Apply ${technique} Elim: Keep only ${digits.join(',')} in cells ${cells.join(',')}`);
+         const { cells, digits, technique } = elimInfo;
 
          let eliminatedSomething = false;
          const digitsToKeep = new Set(digits);
 
-         // pushHistoryState(); // Обрабатывается в doKillerLogicStep
-
          for (const cellId of cells) {
-             const coords = getCellCoords(cellId);
-             if (coords && userGrid[coords.r]?.[coords.c]?.value === 0) {
+             const coords = getCellCoords(cellId); // Локальная
+             if (coords && userGrid[coords.r]?.[coords.c]?.value === 0) { // Глобальный userGrid
                  const cellData = userGrid[coords.r][coords.c];
-                 const candidatesInMap = candidatesMap[cellId];
+                 const candidatesInMap = candidatesMap[cellId]; // Переданная
                  let cellChanged = false;
 
                  if (!cellData.notes) cellData.notes = new Set();
-                 const notesBefore = new Set(cellData.notes); // Копия для сравнения
+                 const notesBefore = new Set(cellData.notes);
 
                  // Удаляем из заметок все, КРОМЕ цифр группы
                  cellData.notes.forEach(noteDigit => {
                      if (!digitsToKeep.has(noteDigit)) {
-                         cellData.notes.delete(noteDigit);
-                         cellChanged = true;
-                         eliminatedSomething = true;
-                         console.log(`  - Removed candidate ${noteDigit} from ${cellId} (Hidden Group)`);
+                          if(cellData.notes.delete(noteDigit)) { // Убедимся, что удаление произошло
+                                cellChanged = true;
+                                eliminatedSomething = true;
+                                console.log(`  - Removed candidate ${noteDigit} from ${cellId} (Hidden Group)`);
+                          }
                      }
                  });
 
                  // Удаляем из карты кандидатов все, КРОМЕ цифр группы
                  if (candidatesInMap) {
-                    const mapCandsBefore = new Set(candidatesInMap);
                     candidatesInMap.forEach(candDigit => {
                         if (!digitsToKeep.has(candDigit)) {
-                             candidatesInMap.delete(candDigit); // Обновляем карту
-                             cellChanged = true; // Отмечаем изменение, даже если в notes не было
-                             eliminatedSomething = true;
-                             // Логируем удаление из карты, если его не было в notes
-                             if (!notesBefore.has(candDigit)) {
-                                console.log(`  - Removed candidate ${candDigit} from map of ${cellId} (Hidden Group)`);
+                             if(candidatesInMap.delete(candDigit)) { // Обновляем карту, убедимся, что удаление произошло
+                                cellChanged = true;
+                                eliminatedSomething = true;
+                                if (!notesBefore.has(candDigit)) {
+                                    console.log(`  - Removed candidate ${candDigit} from map of ${cellId} (Hidden Group)`);
+                                }
                              }
                         }
                     });
                  }
-
 
                  if (cellChanged && renderCellCallback) {
                      renderCellCallback(coords.r, coords.c);
@@ -602,7 +607,6 @@ const killerSolverLogic = (() => {
          if (!eliminatedSomething) {
               console.log(`No eliminations were made for ${technique}.`);
          }
-          // Не откатываем историю здесь
          return eliminatedSomething;
      }
 
@@ -612,9 +616,9 @@ const killerSolverLogic = (() => {
     /**
      * Выполняет один шаг логического решателя для Killer Sudoku.
      * @param {Array<Array<object>>} userGrid - Текущая сетка.
-     * @param {object} currentCandidatesMap - Текущая карта кандидатов.
+     * @param {object} currentCandidatesMap - Текущая карта кандидатов (будет модифицирована!).
      * @param {object} solverData - Данные Killer Sudoku.
-     * @param {Function} updateCandidatesCallback - Callback для обновления карты кандидатов в script.js.
+     * @param {Function} updateCandidatesCallback - Callback для обновления карты кандидатов в script.js ПОСЛЕ установки цифры.
      * @param {Function} renderCellCallback - Callback для рендеринга ячейки в script.js.
      * @returns {object|null} - Информация о примененном шаге или null, если шаг не найден/не применен.
      */
@@ -630,35 +634,29 @@ const killerSolverLogic = (() => {
             { name: "Hidden Pair", findFunc: findHiddenPair, applyFunc: applyHiddenGroupElimination },
             { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination },
             { name: "Hidden Triple", findFunc: findHiddenTriple, applyFunc: applyHiddenGroupElimination },
-             // Сюда можно будет добавить другие Killer-специфичные или более сложные техники
         ];
 
         for (const tech of techniques) {
             console.log(`Killer Searching ${tech.name}...`);
-             // Передаем текущее состояние в функции поиска
             foundInfo = tech.findFunc(userGrid, currentCandidatesMap, solverData);
 
             if (foundInfo) {
-                // pushHistoryState(); // <<<<<<< Важно! История сохраняется в script.js ПЕРЕД вызовом doKillerLogicStep
                 let appliedSuccessfully = false;
                 if (tech.applyFunc === applyFoundSingle) {
-                     // Передаем колбэки для обновления карты и рендера
+                     // Передаем колбэки для обновления карты ПОСЛЕ установки и рендера
                      appliedSuccessfully = tech.applyFunc(foundInfo, updateCandidatesCallback, renderCellCallback);
                 } else {
-                     // Передаем карту кандидатов и колбэк рендера для функций элиминации
+                     // Передаем карту кандидатов (она будет изменена) и колбэк рендера
                      appliedSuccessfully = tech.applyFunc(foundInfo, currentCandidatesMap, renderCellCallback);
                 }
 
-
                 if (appliedSuccessfully) {
-                    appliedStepInfo = foundInfo; // Запоминаем успешно примененный шаг
+                    appliedStepInfo = foundInfo;
                     console.log(`Killer Applied ${tech.name}.`);
-                    break; // Выходим после первого успешного применения
+                    break;
                 } else {
                     console.log(`Found ${tech.name}, but failed to apply or no eliminations needed.`);
-                     // Если не применили, откатываем историю (которая была создана в script.js)
-                     // Это должен делать вызывающий код (runKillerLogicSolver или обертка в script.js)
-                    foundInfo = null; // Сбрасываем, чтобы не считать примененным
+                    foundInfo = null;
                 }
             }
         }
@@ -666,7 +664,7 @@ const killerSolverLogic = (() => {
         if (!appliedStepInfo) {
             console.log("No Killer logic step found in this cycle.");
         }
-        return appliedStepInfo; // Возвращаем информацию о шаге (или null)
+        return appliedStepInfo;
     }
 
 
@@ -674,8 +672,9 @@ const killerSolverLogic = (() => {
     return {
         calculateKillerCandidates,
         calculateAllKillerCandidates,
-        doKillerLogicStep
-        // runKillerLogicSolver - эту функцию лучше оставить в script.js для управления UI
+        doKillerLogicStep,
+        resetPeersCache // Экспортируем функцию сброса кэша
+        // Функции поиска и применения теперь внутренние
     };
 
-})();
+})(); // Конец IIFE killerSolverLogic
