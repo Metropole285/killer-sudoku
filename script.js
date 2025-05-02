@@ -323,7 +323,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (success) {
              statusMessageElement.textContent = '';
              console.log("Calculating initial candidates map and synchronizing notes...");
-             calculateAllCandidates();
+             calculateAllCandidates(); // Обновляет currentCandidatesMap и userGrid.notes
              console.log("Rendering...");
              updateNoteToggleButtonState(); renderBoard(); updateHintButtonState(); updateUndoButtonState(); updateLogicSolverButtonsState(); updateTimerDisplay(); console.log(`Game initialized. Is solved? ${isGameSolved()}`); showScreen(gameContainer); console.log("Schedule timer..."); setTimeout(() => { console.log("setTimeout: start timer."); startTimer(); }, 50); console.log("InitGame COMPLETE.");
         } else {
@@ -620,10 +620,10 @@ document.addEventListener('DOMContentLoaded', () => {
                  const hc=getComputedStyle(document.documentElement).getPropertyValue('--highlight-hint-flash').trim()||'#fffacd'; el.style.transition = 'background-color 0.1s ease-out'; el.style.backgroundColor = hc;
                  setTimeout(() => { if (selectedCell === el) {el.style.backgroundColor = ''; el.style.transition = '';} }, 600);
             }
-            return true;
+            return true; // <<< Успех
         } else {
             console.warn(`Tried apply Classic Single ${digit} to already filled cell [${r},${c}]`);
-            return false;
+            return false; // <<< Неудача
         }
     }
 
@@ -634,7 +634,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const unitIndices = getUnitIndices(unitIndex);
         if (!unitIndices) return false;
         const groupCellsSet = new Set(cells);
-        let eliminatedSomething = false;
+        let eliminatedSomething = false; // <<< Флаг
         for (const [r, c] of unitIndices) {
             const cellId = getCellId(r, c);
             if (cellId && !groupCellsSet.has(cellId) && userGrid[r]?.[c]?.value === 0) {
@@ -653,14 +653,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         if (!eliminatedSomething) console.log(`No *new* eliminations were made for Classic ${technique}.`);
-        return eliminatedSomething;
+        return eliminatedSomething; // <<< Возвращаем флаг
     }
 
      /** Применяет элиминацию для Hidden Pair/Triple (Classic). Возвращает true, если что-то удалено. */
      function applyHiddenGroupElimination(elimInfo) {
          if (!elimInfo || !elimInfo.digits || !elimInfo.cells) return false;
          const { cells, digits, technique } = elimInfo;
-         let eliminatedSomething = false;
+         let eliminatedSomething = false; // <<< Флаг
          const digitsToKeep = new Set(digits);
          for (const cellId of cells) {
              const coords = getCellCoords(cellId);
@@ -683,7 +683,7 @@ document.addEventListener('DOMContentLoaded', () => {
              }
          }
          if (!eliminatedSomething) console.log(`No *new* eliminations were made for Classic ${technique}.`);
-         return eliminatedSomething;
+         return eliminatedSomething; // <<< Возвращаем флаг
      }
 
 
@@ -693,7 +693,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const { eliminations, technique } = elimInfo;
         const digit = elimInfo.digit || elimInfo.digitZ;
         if (!digit) return false;
-        let eliminatedSomething = false;
+        let eliminatedSomething = false; // <<< Флаг
         eliminations.forEach(cellId => {
             const coords = getCellCoords(cellId);
             if (coords && userGrid[coords.r]?.[coords.c]?.value === 0) {
@@ -710,7 +710,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
         if (!eliminatedSomething) console.log(`No *new* eliminations were made for Classic ${technique}.`);
-        return eliminatedSomething;
+        return eliminatedSomething; // <<< Возвращаем флаг
     }
 
 
@@ -724,7 +724,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearErrors();
 
         let appliedInfo = null;
-        let appliedSuccessfully = false; // Флаг успешного применения
+        let appliedSuccessfully = false;
         pushHistoryState();
         let historyKept = true;
 
@@ -732,19 +732,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (currentMode === 'classic') {
                  const singleTechniques = [ { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle }, { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle } ];
                  const eliminationTechniques = [ { name: "Pointing Candidates", findFunc: findPointingCandidates, applyFunc: applyElimination }, { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyElimination }, { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination }, { name: "Hidden Pair", findFunc: findHiddenPair, applyFunc: applyHiddenGroupElimination }, { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination }, { name: "Hidden Triple", findFunc: findHiddenTriple, applyFunc: applyHiddenGroupElimination }, { name: "X-Wing", findFunc: findXWing, applyFunc: applyElimination }, { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyElimination } ];
-                 // Поиск
                  for (const tech of singleTechniques) { console.log(`Classic Searching ${tech.name}...`); const found = tech.findFunc(); if (found) { if (tech.applyFunc(found)) { appliedInfo = found; appliedSuccessfully = true; break; } } }
                  if (!appliedInfo) { for (const tech of eliminationTechniques) { console.log(`Classic Searching ${tech.name}...`); const found = tech.findFunc(); if (found) { if (tech.applyFunc(found)) { appliedInfo = found; appliedSuccessfully = true; break; } } } }
                  if (!appliedSuccessfully) historyKept = false;
 
             } else if (currentMode === 'killer') {
                 if (!killerSolverLogic || !currentSolverData) { throw new Error("Killer solver logic or data not available."); }
-                 appliedInfo = killerSolverLogic.doKillerLogicStep(
-                     userGrid, currentCandidatesMap, currentSolverData,
-                     (r, c, digit) => updateCandidatesOnSet(r, c, digit, userGrid),
-                     renderCell
-                 );
-                 if (appliedInfo) { // <<< doKillerLogicStep возвращает инфо только если применил
+                 appliedInfo = killerSolverLogic.doKillerLogicStep( userGrid, currentCandidatesMap, currentSolverData, (r, c, digit) => updateCandidatesOnSet(r, c, digit, userGrid), renderCell );
+                 if (appliedInfo) {
                       appliedSuccessfully = true;
                       console.log("Recalculating killer candidates/notes after step...");
                       calculateAllCandidates();
@@ -757,7 +752,6 @@ document.addEventListener('DOMContentLoaded', () => {
                  throw new Error("Unsupported game mode for logic solver.");
             }
 
-            // Обработка результата
             if (appliedSuccessfully && appliedInfo) {
                 const tech = appliedInfo.technique || "Unknown";
                 let details = "Неизвестное действие";
@@ -804,6 +798,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Определяем функцию для выполнения одного шага
         let stepFunction;
+        let fullRecalculateAfterStep = (currentMode === 'killer'); // <<< Флаг для Killer
 
         if (currentMode === 'classic') {
             stepFunction = () => {
@@ -811,21 +806,14 @@ document.addEventListener('DOMContentLoaded', () => {
                  let appliedSuccessfully = false;
                  const singleTechs = [ { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle }, { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle } ];
                  const elimTechs = [ { name: "Pointing Candidates", findFunc: findPointingCandidates, applyFunc: applyElimination }, { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyElimination }, { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination }, { name: "Hidden Pair", findFunc: findHiddenPair, applyFunc: applyHiddenGroupElimination }, { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination }, { name: "Hidden Triple", findFunc: findHiddenTriple, applyFunc: applyHiddenGroupElimination }, { name: "X-Wing", findFunc: findXWing, applyFunc: applyElimination }, { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyElimination } ];
-                 for(const tech of singleTechs) { const found = tech.findFunc(); if(found) { if(tech.applyFunc(found)) { appliedInfo = found; appliedSuccessfully = true; break; } } } // <<< Проверяем результат applyFunc
-                 if (!appliedInfo) { for(const tech of elimTechs) { const found = tech.findFunc(); if(found) { if(tech.applyFunc(found)) { appliedInfo = found; appliedSuccessfully = true; break; } } } } // <<< Проверяем результат applyFunc
+                 for(const tech of singleTechs) { const found = tech.findFunc(); if(found) { if(tech.applyFunc(found)) { appliedInfo = found; appliedSuccessfully = true; break; } } }
+                 if (!appliedInfo) { for(const tech of elimTechs) { const found = tech.findFunc(); if(found) { if(tech.applyFunc(found)) { appliedInfo = found; appliedSuccessfully = true; break; } } } }
                  return { appliedInfo, appliedSuccessfully }; // <<< Возвращаем объект
              };
         } else if (currentMode === 'killer') {
-            if (!killerSolverLogic || !currentSolverData) {
-                showError("Ошибка: Логика или данные Killer Sudoku недоступны.");
-                isLogicSolverRunning = false; updateLogicSolverButtonsState(); return;
-            }
+            if (!killerSolverLogic || !currentSolverData) { showError("Ошибка: Логика или данные Killer Sudoku недоступны."); isLogicSolverRunning = false; updateLogicSolverButtonsState(); return; }
             stepFunction = () => {
-                const appliedInfo = killerSolverLogic.doKillerLogicStep( // <<< doKillerLogicStep возвращает инфо только при успехе
-                    userGrid, currentCandidatesMap, currentSolverData,
-                    updateCandidatesOnSet, renderCell
-                );
-                // <<< Пересчет кандидатов после шага Killer ПЕРЕНЕСЕН в цикл solverCycle >>>
+                const appliedInfo = killerSolverLogic.doKillerLogicStep( userGrid, currentCandidatesMap, currentSolverData, (r, c, digit) => updateCandidatesOnSet(r, c, digit, userGrid), renderCell );
                 return { appliedInfo, appliedSuccessfully: !!appliedInfo }; // <<< Возвращаем объект
             };
         } else {
@@ -861,16 +849,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 appliedInfo = result.appliedInfo;
                 appliedSuccessfully = result.appliedSuccessfully; // <<< Получаем флаг успеха
 
-                if (appliedSuccessfully && appliedInfo) { // <<< Проверяем оба
+                if (appliedSuccessfully && appliedInfo) { // <<< Проверяем ОБА
                     actionAppliedInLastCycle = true;
                     lastActionType = appliedInfo.technique || 'Unknown';
                     stepsMade++;
                     console.log(`(${currentMode}) Solver Step ${stepsMade}: Applied ${lastActionType}`);
                      // <<< Пересчет кандидатов/заметок ПОСЛЕ успешного шага Killer >>>
-                     if (currentMode === 'killer') {
+                     if (fullRecalculateAfterStep) {
                           console.log("Recalculating killer candidates/notes during full solve...");
                           calculateAllCandidates();
-                          renderBoard(); // Перерисовываем доску после пересчета кандидатов в Killer
                      }
                 } else {
                     actionAppliedInLastCycle = false; // <<< Шаг не найден или не применен
@@ -888,10 +875,10 @@ document.addEventListener('DOMContentLoaded', () => {
                  }
                  updateUndoButtonState();
                  if (!errorOccurred) {
-                     // Рендер доски для Killer теперь происходит после пересчета кандидатов
-                     // if (currentMode === 'killer' && appliedSuccessfully) {
-                     //     renderBoard();
-                     // }
+                     // Рендерим доску только после Killer шага (для обновления всех заметок)
+                     if (currentMode === 'killer' && appliedSuccessfully) {
+                         renderBoard();
+                     }
                      setTimeout(solverCycle, 5);
                  } else {
                       isLogicSolverRunning = false;
@@ -974,13 +961,11 @@ document.addEventListener('DOMContentLoaded', () => {
             let candidatesChanged = false;
             let pushHistoryNeeded = false;
 
-            // Определяем, нужно ли сохранять историю ДО действия
             if (b.id === 'erase-button') { pushHistoryNeeded = (cd.value !== 0) || (cd.notes?.size > 0); }
             else if (b.dataset.num) { const n = parseInt(b.dataset.num); if (!isNoteMode) { pushHistoryNeeded = (cd.value !== n); } else { pushHistoryNeeded = (cd.value === 0); } }
 
             if (pushHistoryNeeded && !isGameSolved()) { pushHistoryState(); }
 
-            // Выполняем действие
             if (b.id === 'erase-button') {
                 if (cd.value !== 0) { cd.value = 0; rerenderNeeded = true; candidatesChanged = true; updateCandidatesOnErase(selectedRow, selectedCol); }
                 else if (cd.notes?.size > 0) { cd.notes.clear(); rerenderNeeded = true; }
@@ -994,7 +979,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // Перерисовка и сохранение
             if (rerenderNeeded) {
                 renderCell(selectedRow, selectedCol);
                  if(isNoteMode && currentMode === 'killer') {
