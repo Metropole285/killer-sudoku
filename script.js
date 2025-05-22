@@ -138,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
             timeElapsed++;
             const minutes = String(Math.floor(timeElapsed / 60)).padStart(2, '0');
             const seconds = String(timeElapsed % 60).padStart(2, '0');
-            timerElement.textContent = `<span class="math-inline">\{minutes\}\:</span>{seconds}`;
+            timerElement.textContent = `${minutes}:${seconds}`;
         }, 1000);
     }
 
@@ -213,7 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Эта функция будет вызываться из killerSolverLogic для обновления одной ячейки
     function renderCell(r, c, value = null, candidates = null) {
-        const cellElement = boardElement.querySelector(`.cell[data-row='<span class="math-inline">\{r\}'\]\[data\-col\='</span>{c}']`);
+        const cellElement = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
         if (!cellElement) return;
 
         cellElement.textContent = ''; // Очищаем содержимое
@@ -280,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearSelection();
         selectedRow = r;
         selectedCol = c;
-        selectedCell = boardElement.querySelector(`.cell[data-row='<span class="math-inline">\{r\}'\]\[data\-col\='</span>{c}']`);
+        selectedCell = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
 
         if (selectedCell && !(currentMode === 'classic' && userGrid[r][c].isGiven)) {
             selectedCell.classList.add('selected');
@@ -307,7 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const value = userGrid[r][c].value;
         userGrid.forEach((row, rowIdx) => {
             row.forEach((cell, colIdx) => {
-                const cellElement = boardElement.querySelector(`.cell[data-row='<span class="math-inline">\{rowIdx\}'\]\[data\-col\='</span>{colIdx}']`);
+                const cellElement = boardElement.querySelector(`.cell[data-row='${rowIdx}'][data-col='${colIdx}']`);
                 if (!cellElement) return;
 
                 // Подсветка строки, столбца и блока
@@ -418,7 +418,7 @@ document.addEventListener('DOMContentLoaded', () => {
         userGrid.forEach((row, rIdx) => {
             row.forEach((cell, cIdx) => {
                 cell.isError = false; // Сброс ошибок
-                const cellElement = boardElement.querySelector(`.cell[data-row='<span class="math-inline">\{rIdx\}'\]\[data\-col\='</span>{cIdx}']`);
+                const cellElement = boardElement.querySelector(`.cell[data-row='${rIdx}'][data-col='${cIdx}']`);
                 if (cellElement) cellElement.classList.remove('error'); // Сброс визуальных ошибок
 
                 if (cell.value !== 0) {
@@ -688,4 +688,413 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Populate killerSolverData
                 killerSolverData = {
                     cageDataArray: cages,
-                    cellTo
+                    cellToCageMap: {} // 'A1': cageIndex
+                };
+                cages.forEach((cage, index) => {
+                    cage.cells.forEach(cellId => {
+                        killerSolverData.cellToCageMap[cellId] = index;
+                    });
+                });
+
+            } catch (e) {
+                console.error("Error generating Killer Sudoku:", e);
+                alert("Ошибка при генерации Killer Sudoku. Попробуйте еще раз.");
+                showScreen('initial-screen');
+                return;
+            }
+        }
+
+        userGrid = Array(9).fill(null).map(() => Array(9).fill(null));
+        solutionGrid = Array(9).fill(null).map(() => Array(9).fill(null));
+
+        // Заполняем userGrid и solutionGrid
+        let charIndex = 0;
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                const puzzleChar = puzzleString[charIndex];
+                const solutionChar = fullSolutionString[charIndex];
+
+                const value = (puzzleChar === sudoku.BLANK_CHAR || puzzleChar === killerSudoku.BLANK_CHAR) ? 0 : parseInt(puzzleChar);
+                const isGiven = (value !== 0);
+
+                userGrid[r][c] = {
+                    value: value,
+                    isGiven: isGiven,
+                    isError: false,
+                    notes: new Set(),
+                    isSolved: isGiven // Если задано изначально, считаем решенной
+                };
+                solutionGrid[r][c] = { value: parseInt(solutionChar) };
+                charIndex++;
+            }
+        }
+
+        // Рендер специфичных для Killer Sudoku элементов (клеток)
+        if (currentMode === 'killer') {
+            renderKillerCages(cages);
+        }
+
+        // Инициализация заметок решателя (currentCandidatesMap)
+        updateAllCandidates(); // Это вызовет calculateAllKillerCandidates и перерендерит заметки
+
+        renderBoard(); // Рендерим доску в целом
+        startTimer();
+        updateHintsDisplay();
+        enableInput();
+        undoButton.disabled = true; // В начале игры отмена недоступна
+        showScreen('game-container');
+        saveGameState();
+        console.log(`New ${currentMode} game started with difficulty ${currentDifficulty}.`);
+    }
+
+    function renderKillerCages(cages) {
+        boardElement.querySelectorAll('.cell').forEach(cellElement => {
+            cellElement.classList.remove('cage-border-top', 'cage-border-bottom', 'cage-border-left', 'cage-border-right');
+            const cageSumDiv = cellElement.querySelector('.cage-sum');
+            if (cageSumDiv) {
+                cellElement.removeChild(cageSumDiv);
+            }
+        });
+
+        cages.forEach(cage => {
+            if (cage.cells.length === 0) return;
+
+            // Находим top-left ячейку для отображения суммы
+            let minR = 9, minC = 9;
+            cage.cells.forEach(cellId => {
+                const { r, c } = killerSolverLogic.getCellCoords(cellId);
+                if (r < minR) minR = r;
+                if (c < minC) minC = c;
+            });
+
+            // Находим элемент для top-left ячейки
+            const topLeftCellElement = boardElement.querySelector(`.cell[data-row='${minR}'][data-col='${minC}']`);
+            if (topLeftCellElement) {
+                const cageSumDiv = document.createElement('div');
+                cageSumDiv.classList.add('cage-sum');
+                cageSumDiv.textContent = cage.sum;
+                topLeftCellElement.prepend(cageSumDiv); // Вставляем в начало, чтобы не перекрывать цифру
+            }
+
+            // Добавляем границы для каждой ячейки в клетке
+            cage.cells.forEach(cellId => {
+                const { r, c } = killerSolverLogic.getCellCoords(cellId);
+                const currentCellElement = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
+                if (!currentCellElement) return;
+
+                // Проверяем соседей, чтобы определить, где нужна граница
+                const neighbors = [
+                    { dr: -1, dc: 0, class: 'cage-border-top' }, // top
+                    { dr: 1, dc: 0, class: 'cage-border-bottom' }, // bottom
+                    { dr: 0, dc: -1, class: 'cage-border-left' }, // left
+                    { dr: 0, dc: 1, class: 'cage-border-right' }  // right
+                ];
+
+                neighbors.forEach(n => {
+                    const neighborR = r + n.dr;
+                    const neighborC = c + n.dc;
+                    const neighborId = killerSolverLogic.getCellId(neighborR, neighborC);
+
+                    // Если соседа нет, или сосед не в этой же клетке, добавляем границу
+                    if (!neighborId || killerSolverData.cellToCageMap[neighborId] !== killerSolverData.cellToCageMap[cellId]) {
+                        currentCellElement.classList.add(n.class);
+                    }
+                });
+            });
+        });
+    }
+
+    function showScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(screen => {
+            screen.classList.remove('active');
+        });
+        document.getElementById(screenId).classList.add('active');
+    }
+
+    function updateLogicSolverButtonsState() {
+        const isKillerMode = currentMode === 'killer';
+        logicNextStepButton.style.display = isKillerMode ? 'block' : 'none';
+        logicSolveButton.style.display = isKillerMode ? 'block' : 'none';
+
+        if (isKillerMode && !isGameSolved()) {
+            logicNextStepButton.disabled = false;
+            logicSolveButton.disabled = false;
+        } else {
+            logicNextStepButton.disabled = true;
+            logicSolveButton.disabled = true;
+        }
+    }
+
+
+    // --- Обработчики событий решателя ---
+    logicNextStepButton.addEventListener('click', () => {
+        if (currentMode !== 'killer' || isGameSolved()) return;
+
+        // Пересчитать кандидатов перед поиском шага (это важно, чтобы логика работала с актуальными данными)
+        updateAllCandidates(); // Это обновит currentCandidatesMap
+
+        const stepApplied = killerSolverLogic.doKillerLogicStep(
+            userGrid,
+            currentCandidatesMap, // Передаем ссылку на текущую карту кандидатов
+            killerSolverData,
+            updateAllCandidates, // Колбэк для полного пересчёта и ререндера кандидатов
+            renderCell             // Колбэк для обновления одной ячейки (значение или заметки)
+        );
+
+        if (stepApplied) {
+            statusMessageElement.textContent = `Применена техника: ${stepApplied.appliedTechnique}!`;
+            statusMessageElement.classList.remove('incorrect-msg');
+            statusMessageElement.classList.add('success-msg');
+            // updateAllCandidates() уже вызвана внутри doKillerLogicStep
+            // renderBoard() вызывается при updateAllCandidates
+            updateBoardState(); // Обновление ошибок, т.к. значение могло быть проставлено
+            saveGameState();
+            checkGameCompletion();
+        } else {
+            statusMessageElement.textContent = "Не найдено новых логических шагов.";
+            statusMessageElement.classList.remove('success-msg');
+            statusMessageElement.classList.add('incorrect-msg');
+        }
+        updateLogicSolverButtonsState();
+    });
+
+    logicSolveButton.addEventListener('click', () => {
+        if (currentMode !== 'killer' || isGameSolved()) return;
+
+        let stepsCount = 0;
+        let maxIterations = 200; // Ограничение на количество шагов, чтобы избежать бесконечного цикла
+        let somethingAppliedInIteration;
+
+        do {
+            somethingAppliedInIteration = false;
+            updateAllCandidates(); // Всегда пересчитываем кандидатов перед поиском нового шага
+            const stepApplied = killerSolverLogic.doKillerLogicStep(
+                userGrid,
+                currentCandidatesMap,
+                killerSolverData,
+                updateAllCandidates,
+                renderCell
+            );
+
+            if (stepApplied) {
+                stepsCount++;
+                somethingAppliedInIteration = true;
+                // updateAllCandidates() и renderCell() уже вызваны внутри doKillerLogicStep
+                updateBoardState(); // Обновление ошибок
+            }
+
+            maxIterations--;
+        } while (somethingAppliedInIteration && !isGameSolved() && maxIterations > 0);
+
+        if (isGameSolved()) {
+            statusMessageElement.textContent = `Головоломка решена за ${stepsCount} логических шагов!`;
+            statusMessageElement.classList.remove('incorrect-msg');
+            statusMessageElement.classList.add('success-msg');
+        } else if (stepsCount > 0) {
+            statusMessageElement.textContent = `Применено ${stepsCount} логических шагов. Дальнейшие шаги не найдены или требуется более сложная логика.`;
+            statusMessageElement.classList.remove('success-msg');
+            statusMessageElement.classList.add('incorrect-msg');
+        } else {
+            statusMessageElement.textContent = "Не найдено логических шагов для применения.";
+            statusMessageElement.classList.remove('success-msg');
+            statusMessageElement.classList.add('incorrect-msg');
+        }
+        saveGameState();
+        checkGameCompletion();
+        updateLogicSolverButtonsState();
+    });
+
+    // --- Инициализация и слушатели событий ---
+    function addEventListeners() {
+        startNewGameButton.addEventListener('click', () => showScreen('new-game-options'));
+        continueGameButton.addEventListener('click', () => {
+            if (loadGameState()) {
+                showScreen('game-container');
+            } else {
+                alert("Не удалось загрузить сохраненную игру.");
+            }
+        });
+
+        document.querySelectorAll('#game-mode-selection .mode-button').forEach(button => {
+            button.addEventListener('click', (e) => {
+                document.querySelectorAll('#game-mode-selection .mode-button').forEach(btn => btn.classList.remove('selected'));
+                e.target.classList.add('selected');
+                currentMode = e.target.dataset.mode;
+                const killerSolverControls = document.getElementById('killer-solver-controls');
+                if (killerSolverControls) {
+                    killerSolverControls.style.display = (currentMode === 'killer' ? 'block' : 'none');
+                }
+            });
+        });
+
+        difficultyButtonsContainer.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON') {
+                document.querySelectorAll('.difficulty-selection button').forEach(btn => btn.classList.remove('selected'));
+                e.target.classList.add('selected');
+                currentDifficulty = e.target.dataset.difficulty;
+            }
+        });
+
+        document.getElementById('generate-game-button').addEventListener('click', () => {
+            // Убедитесь, что выбран режим и сложность
+            const selectedModeButton = document.querySelector('#game-mode-selection .mode-button.selected');
+            const selectedDifficultyButton = document.querySelector('.difficulty-selection button.selected');
+
+            if (!selectedModeButton || !selectedDifficultyButton) {
+                alert('Пожалуйста, выберите режим и сложность.');
+                return;
+            }
+            generateNewGame(selectedModeButton.dataset.mode, selectedDifficultyButton.dataset.difficulty);
+        });
+
+        backToInitialButton.addEventListener('click', () => showScreen('initial-screen'));
+        exitGameButton.addEventListener('click', () => {
+            // Возможно, запрос на подтверждение сохранения или очистки
+            if (confirm("Вы уверены, что хотите выйти? Прогресс будет сохранен.")) {
+                saveGameState(); // Сохраняем перед выходом
+                showScreen('initial-screen');
+                stopTimer();
+                clearSelection();
+            }
+        });
+
+        numpad.querySelectorAll('button[data-num]').forEach(button => {
+            button.addEventListener('click', (e) => handleInput(parseInt(e.target.dataset.num)));
+        });
+
+        eraseButton.addEventListener('click', eraseCell); // <--- Теперь eraseButton определен
+        noteToggleButton.addEventListener('click', toggleNoteMode);
+        checkButton.addEventListener('click', updateBoardState); // Просто перепроверить ошибки
+        hintButton.addEventListener('click', applyHint);
+        undoButton.addEventListener('click', undoLastMove);
+
+        // Обработка клавиш клавиатуры
+        document.addEventListener('keydown', (e) => {
+            if (gameContainer.classList.contains('active') && selectedCell) {
+                const digit = parseInt(e.key);
+                if (digit >= 1 && digit <= 9) {
+                    handleInput(digit);
+                    return; // Предотвратить дальнейшую обработку, чтобы не сбрасывать выделение
+                } else if (e.key === 'Backspace' || e.key === 'Delete') {
+                    eraseCell();
+                    return;
+                } else if (e.key === ' ' || e.key === 'Enter') { // Space or Enter for toggling notes
+                    toggleNoteMode();
+                    e.preventDefault(); // Предотвратить прокрутку для пробела
+                    return;
+                }
+            }
+
+            // Навигация по доске стрелками
+            if (gameContainer.classList.contains('active') && selectedRow !== -1 && selectedCol !== -1) {
+                let newR = selectedRow;
+                let newC = selectedCol;
+                let moved = false;
+
+                if (e.key === 'ArrowUp') { newR--; moved = true; }
+                else if (e.key === 'ArrowDown') { newR++; moved = true; }
+                else if (e.key === 'ArrowLeft') { newC--; moved = true; }
+                else if (e.key === 'ArrowRight') { newC++; moved = true; }
+
+                if (moved) {
+                    e.preventDefault(); // Предотвратить прокрутку страницы
+                    newR = Math.max(0, Math.min(8, newR));
+                    newC = Math.max(0, Math.min(8, newC));
+                    selectCell(newR, newC);
+                }
+            }
+
+            // Горячие клавиши для отмены (Ctrl+Z или Cmd+Z)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                undoLastMove();
+                e.preventDefault();
+            }
+
+            // Горячие клавиши для "Next Step" (Ctrl+N или Cmd+N)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+                if (currentMode === 'killer' && !logicNextStepButton.disabled) {
+                    logicNextStepButton.click();
+                }
+                e.preventDefault();
+            }
+            // Горячие клавиши для "Solve" (Ctrl+S или Cmd+S)
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                if (currentMode === 'killer' && !logicSolveButton.disabled) {
+                    logicSolveButton.click();
+                }
+                e.preventDefault();
+            }
+        });
+
+
+        console.log("Event listeners added.");
+    }
+
+
+    // --- Инициализация Приложения ---
+    function initializeApp(){
+        console.log("Init app...");
+        try{
+            loadThemePreference();
+            checkContinueButton();
+            addEventListeners();
+            showScreen('initial-screen'); // Показать начальный экран
+            // initializeAds(); // Если есть функция инициализации рекламы
+            try{
+                if(window.Telegram?.WebApp) Telegram.WebApp.ready();
+                else console.log("TG SDK not found.");
+            }catch(e){
+                console.error("TG SDK Err:",e);
+            }
+        }catch(e){
+            console.error("CRITICAL INIT ERR:",e);
+            document.body.innerHTML=`<div style='padding:20px;color:red;'><h1>Ошибка!</h1><p>${e.message}</p><pre>${e.stack}</pre></div>`;
+        }
+    }
+    function checkContinueButton(){
+        if(!continueGameButton) return;
+        try{
+            const s = localStorage.getItem('sudokuGameState'); // Изменено с loadGameState() на localStorage.getItem()
+            continueGameButton.disabled = !s;
+            console.log(`Continue btn state:${!continueGameButton.disabled}`);
+        }catch(e){
+            console.error("Err check cont:",e);
+            continueGameButton.disabled = true;
+        }
+    }
+
+    // --- Theme Toggling ---
+    const themeStylesheet = document.getElementById('theme-stylesheet');
+    const THEME_KEY = 'sudokuTheme';
+
+    function loadThemePreference() {
+        const savedTheme = localStorage.getItem(THEME_KEY);
+        if (savedTheme === 'dark') {
+            document.body.classList.add('dark-theme');
+            if (themeToggleCheckbox) {
+                themeToggleCheckbox.checked = true;
+            }
+        } else {
+            document.body.classList.remove('dark-theme');
+            if (themeToggleCheckbox) {
+                themeToggleCheckbox.checked = false;
+            }
+        }
+    }
+
+    if (themeToggleCheckbox) {
+        themeToggleCheckbox.addEventListener('change', () => {
+            if (themeToggleCheckbox.checked) {
+                document.body.classList.add('dark-theme');
+                localStorage.setItem(THEME_KEY, 'dark');
+            } else {
+                document.body.classList.remove('dark-theme');
+                localStorage.setItem(THEME_KEY, 'light');
+            }
+        });
+    }
+
+    // --- Запуск ---
+    initializeApp();
+
+}); // Конец 'DOMContentLoaded'
