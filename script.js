@@ -818,13 +818,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // ИСПРАВЛЕНО: Изменено с 'active' на 'visible' для соответствия CSS
     function showScreen(screenId) {
         document.querySelectorAll('.screen').forEach(screen => {
-            screen.classList.remove('active');
+            screen.classList.remove('visible'); // <-- ИСПРАВЛЕНО ЗДЕСЬ
         });
-        const targetScreen = typeof screenId === 'string' ? document.getElementById(screenId) : screenId; // Обработка как ID, так и элемента
+        const targetScreen = typeof screenId === 'string' ? document.getElementById(screenId) : screenId;
         if (targetScreen) {
-            targetScreen.classList.add('active');
+            targetScreen.classList.add('visible'); // <-- И ИСПРАВЛЕНО ЗДЕСЬ
         }
     }
 
@@ -1002,7 +1003,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Обработка клавиш клавиатуры
         document.addEventListener('keydown', (e) => {
-            if (gameContainer && gameContainer.classList.contains('active') && selectedCell) {
+            if (gameContainer && gameContainer.classList.contains('visible') && selectedCell) { // Используем 'visible'
                 const digit = parseInt(e.key);
                 if (digit >= 1 && digit <= 9) {
                     handleInput(digit);
@@ -1018,7 +1019,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Навигация по доске стрелками
-            if (gameContainer && gameContainer.classList.contains('active') && selectedRow !== -1 && selectedCol !== -1) {
+            if (gameContainer && gameContainer.classList.contains('visible') && selectedRow !== -1 && selectedCol !== -1) { // Используем 'visible'
                 let newR = selectedRow;
                 let newC = selectedCol;
                 let moved = false;
