@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusMessageElement = document.getElementById('status-message');
     const numpad = document.getElementById('numpad');
     const noteToggleButton = document.getElementById('note-toggle-button');
-    const eraseButton = document.getElementById('erase-button'); // <--- ДОБАВЛЕНО!
+    const eraseButton = document.getElementById('erase-button'); // <--- ИСПРАВЛЕНО: Добавлено объявление eraseButton
     const timerElement = document.getElementById('timer');
     const logicNextStepButton = document.getElementById('logic-next-step-button'); // Кнопка "Next Step"
     const logicSolveButton = document.getElementById('logic-solve-button');       // Кнопка "Solve"
@@ -176,12 +176,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Отображение заметок/кандидатов
                 // Если ячейка пуста и у нас есть кандидаты, отображаем их
-                if (cell.value === 0 && currentCandidatesMap[cell.id]?.size > 0) {
+                if (cell.value === 0 && currentCandidatesMap[cellElement.id]?.size > 0) { // Используем cellElement.id
                     // Создаем контейнер для заметок
                     const notesContainer = document.createElement('div');
                     notesContainer.classList.add('notes-container');
 
-                    const notes = Array.from(currentCandidatesMap[cell.id]).sort((a,b) => a-b);
+                    const notes = Array.from(currentCandidatesMap[cellElement.id]).sort((a,b) => a-b);
                     notes.forEach(note => {
                         const noteSpan = document.createElement('span');
                         noteSpan.classList.add('note');
@@ -354,8 +354,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentCell.notes.add(digit);
             }
             // Удаляем заметки из currentCandidatesMap, если пользователь сам их меняет
-            if (currentCandidatesMap[cellId]) {
-                currentCandidatesMap[cellId].delete(digit);
+            if (currentCandidatesMap[cellId]) { // Удаляем из карты решателя при ручном изменении
+                currentCandidatesMap[cellId].clear(); // Очищаем, чтобы не конфликтовать
             }
             currentCell.value = 0; // Убедиться, что значение пусто
             renderCell(selectedRow, selectedCol, null, currentCell.notes); // Обновляем UI заметок
@@ -576,28 +576,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function disableInput() {
-        numpad.querySelectorAll('button').forEach(button => button.disabled = true);
-        boardElement.querySelectorAll('.cell').forEach(cell => cell.style.pointerEvents = 'none');
-        hintButton.disabled = true;
-        checkButton.disabled = true;
-        undoButton.disabled = true;
-        logicNextStepButton.disabled = true;
-        logicSolveButton.disabled = true;
+        if (numpad) numpad.querySelectorAll('button').forEach(button => button.disabled = true);
+        if (boardElement) boardElement.querySelectorAll('.cell').forEach(cell => cell.style.pointerEvents = 'none');
+        if (hintButton) hintButton.disabled = true;
+        if (checkButton) checkButton.disabled = true;
+        if (undoButton) undoButton.disabled = true;
+        if (logicNextStepButton) logicNextStepButton.disabled = true;
+        if (logicSolveButton) logicSolveButton.disabled = true;
     }
 
     function enableInput() {
-        numpad.querySelectorAll('button').forEach(button => button.disabled = false);
-        boardElement.querySelectorAll('.cell').forEach(cell => cell.style.pointerEvents = 'auto');
-        hintButton.disabled = false;
-        checkButton.disabled = false;
+        if (numpad) numpad.querySelectorAll('button').forEach(button => button.disabled = false);
+        if (boardElement) boardElement.querySelectorAll('.cell').forEach(cell => cell.style.pointerEvents = 'auto');
+        if (hintButton) hintButton.disabled = false;
+        if (checkButton) checkButton.disabled = false;
         // undoButton состояние зависит от истории
-        undoButton.disabled = history.length === 0;
+        if (undoButton) undoButton.disabled = history.length === 0;
         updateLogicSolverButtonsState(); // Включить кнопки решателя
     }
 
     function updateHintsDisplay() {
-        hintButton.textContent = `💡 ${hintsRemaining}/3`;
-        hintButton.disabled = hintsRemaining <= 0;
+        if (hintButton) {
+            hintButton.textContent = `💡 ${hintsRemaining}/3`;
+            hintButton.disabled = hintsRemaining <= 0;
+        }
     }
 
     function applyHint() {
@@ -609,8 +611,23 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let c = 0; c < 9; c++) {
                 if (userGrid[r][c].value === 0) {
                     const correctValue = solutionGrid[r][c].value; // Получаем значение из решения
-                    handleInput(correctValue); // Используем handleInput для применения (сохранит в историю)
-                    userGrid[r][c].isGiven = true; // Помечаем как "given" (пользователь не может изменить)
+                    // Прежде чем применять, сохраним текущее состояние для undo
+                    history.push({
+                        r: r,
+                        c: c,
+                        oldValue: userGrid[r][c].value,
+                        newNotes: new Set(userGrid[r][c].notes),
+                        oldCandidates: currentCandidatesMap[getCellId(r,c)] ? new Set(currentCandidatesMap[getCellId(r,c)]) : new Set()
+                    });
+
+                    userGrid[r][c].value = correctValue;
+                    userGrid[r][c].notes.clear(); // Очищаем заметки при вводе значения
+                    userGrid[r][c].isError = false;
+                    userGrid[r][c].isSolved = true; // Отмечаем как решенную (подсказкой)
+                    
+                    // Обновляем отображение ячейки
+                    renderCell(r, c, correctValue, new Set());
+
                     hintsRemaining--;
                     hintApplied = true;
                     statusMessageElement.textContent = ""; // Очищаем сообщение об ошибке
@@ -624,6 +641,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateBoardState(); // Обновить состояние доски (пересчет ошибок, заметок)
         saveGameState();
         checkGameCompletion();
+        if (undoButton) undoButton.disabled = false; // Включаем кнопку отмены
     }
 
 
@@ -650,7 +668,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         updateBoardState(); // Пересчитать ошибки и кандидатов для всей доски
-        undoButton.disabled = history.length === 0;
+        if (undoButton) undoButton.disabled = history.length === 0;
         saveGameState();
         checkGameCompletion();
     }
@@ -673,12 +691,7 @@ document.addEventListener('DOMContentLoaded', () => {
             puzzleString = classicPuzzle.puzzle;
             fullSolutionString = classicPuzzle.solution;
         } else { // Killer Sudoku
-            // Killer Sudoku generator is more complex.
-            // For now, we'll use a placeholder or a simple generation
-            // if killerSudoku.js doesn't have a fully robust generator.
-            // Assuming killerSudoku.generateKillerBoard exists and returns {grid, cages, solution}
             try {
-                // You might need to adjust difficulty for killerSudoku.generate
                 const killerBoard = killerSudoku.generateKillerBoard(81, difficulty); // Example call
                 puzzleString = killerBoard.grid; // Grid string like "1.34..."
                 fullSolutionString = killerBoard.solution;
@@ -741,7 +754,7 @@ document.addEventListener('DOMContentLoaded', () => {
         startTimer();
         updateHintsDisplay();
         enableInput();
-        undoButton.disabled = true; // В начале игры отмена недоступна
+        if (undoButton) undoButton.disabled = true; // В начале игры отмена недоступна
         showScreen('game-container');
         saveGameState();
         console.log(`New ${currentMode} game started with difficulty ${currentDifficulty}.`);
@@ -796,6 +809,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const neighborId = killerSolverLogic.getCellId(neighborR, neighborC);
 
                     // Если соседа нет, или сосед не в этой же клетке, добавляем границу
+                    // Проверка на null neighborId для граничных ячеек
                     if (!neighborId || killerSolverData.cellToCageMap[neighborId] !== killerSolverData.cellToCageMap[cellId]) {
                         currentCellElement.classList.add(n.class);
                     }
@@ -808,112 +822,121 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.screen').forEach(screen => {
             screen.classList.remove('active');
         });
-        document.getElementById(screenId).classList.add('active');
+        const targetScreen = typeof screenId === 'string' ? document.getElementById(screenId) : screenId; // Обработка как ID, так и элемента
+        if (targetScreen) {
+            targetScreen.classList.add('active');
+        }
     }
 
     function updateLogicSolverButtonsState() {
         const isKillerMode = currentMode === 'killer';
-        logicNextStepButton.style.display = isKillerMode ? 'block' : 'none';
-        logicSolveButton.style.display = isKillerMode ? 'block' : 'none';
+        if (logicNextStepButton) logicNextStepButton.style.display = isKillerMode ? 'block' : 'none';
+        if (logicSolveButton) logicSolveButton.style.display = isKillerMode ? 'block' : 'none';
 
         if (isKillerMode && !isGameSolved()) {
-            logicNextStepButton.disabled = false;
-            logicSolveButton.disabled = false;
+            if (logicNextStepButton) logicNextStepButton.disabled = false;
+            if (logicSolveButton) logicSolveButton.disabled = false;
         } else {
-            logicNextStepButton.disabled = true;
-            logicSolveButton.disabled = true;
+            if (logicNextStepButton) logicNextStepButton.disabled = true;
+            if (logicSolveButton) logicSolveButton.disabled = true;
         }
     }
 
 
     // --- Обработчики событий решателя ---
-    logicNextStepButton.addEventListener('click', () => {
-        if (currentMode !== 'killer' || isGameSolved()) return;
+    if (logicNextStepButton) { // Проверяем существование кнопки перед добавлением слушателя
+        logicNextStepButton.addEventListener('click', () => {
+            if (currentMode !== 'killer' || isGameSolved()) return;
 
-        // Пересчитать кандидатов перед поиском шага (это важно, чтобы логика работала с актуальными данными)
-        updateAllCandidates(); // Это обновит currentCandidatesMap
+            // Пересчитать кандидатов перед поиском шага (это важно, чтобы логика работала с актуальными данными)
+            updateAllCandidates(); // Это обновит currentCandidatesMap
 
-        const stepApplied = killerSolverLogic.doKillerLogicStep(
-            userGrid,
-            currentCandidatesMap, // Передаем ссылку на текущую карту кандидатов
-            killerSolverData,
-            updateAllCandidates, // Колбэк для полного пересчёта и ререндера кандидатов
-            renderCell             // Колбэк для обновления одной ячейки (значение или заметки)
-        );
-
-        if (stepApplied) {
-            statusMessageElement.textContent = `Применена техника: ${stepApplied.appliedTechnique}!`;
-            statusMessageElement.classList.remove('incorrect-msg');
-            statusMessageElement.classList.add('success-msg');
-            // updateAllCandidates() уже вызвана внутри doKillerLogicStep
-            // renderBoard() вызывается при updateAllCandidates
-            updateBoardState(); // Обновление ошибок, т.к. значение могло быть проставлено
-            saveGameState();
-            checkGameCompletion();
-        } else {
-            statusMessageElement.textContent = "Не найдено новых логических шагов.";
-            statusMessageElement.classList.remove('success-msg');
-            statusMessageElement.classList.add('incorrect-msg');
-        }
-        updateLogicSolverButtonsState();
-    });
-
-    logicSolveButton.addEventListener('click', () => {
-        if (currentMode !== 'killer' || isGameSolved()) return;
-
-        let stepsCount = 0;
-        let maxIterations = 200; // Ограничение на количество шагов, чтобы избежать бесконечного цикла
-        let somethingAppliedInIteration;
-
-        do {
-            somethingAppliedInIteration = false;
-            updateAllCandidates(); // Всегда пересчитываем кандидатов перед поиском нового шага
             const stepApplied = killerSolverLogic.doKillerLogicStep(
                 userGrid,
-                currentCandidatesMap,
+                currentCandidatesMap, // Передаем ссылку на текущую карту кандидатов
                 killerSolverData,
-                updateAllCandidates,
-                renderCell
+                updateAllCandidates, // Колбэк для полного пересчёта и ререндера кандидатов
+                renderCell             // Колбэк для обновления одной ячейки (значение или заметки)
             );
 
             if (stepApplied) {
-                stepsCount++;
-                somethingAppliedInIteration = true;
-                // updateAllCandidates() и renderCell() уже вызваны внутри doKillerLogicStep
-                updateBoardState(); // Обновление ошибок
+                statusMessageElement.textContent = `Применена техника: ${stepApplied.appliedTechnique}!`;
+                statusMessageElement.classList.remove('incorrect-msg');
+                statusMessageElement.classList.add('success-msg');
+                // updateAllCandidates() уже вызвана внутри doKillerLogicStep
+                // renderBoard() вызывается при updateAllCandidates
+                updateBoardState(); // Обновление ошибок, т.к. значение могло быть проставлено
+                saveGameState();
+                checkGameCompletion();
+            } else {
+                statusMessageElement.textContent = "Не найдено новых логических шагов.";
+                statusMessageElement.classList.remove('success-msg');
+                statusMessageElement.classList.add('incorrect-msg');
             }
+            updateLogicSolverButtonsState();
+        });
+    }
 
-            maxIterations--;
-        } while (somethingAppliedInIteration && !isGameSolved() && maxIterations > 0);
+    if (logicSolveButton) { // Проверяем существование кнопки перед добавлением слушателя
+        logicSolveButton.addEventListener('click', () => {
+            if (currentMode !== 'killer' || isGameSolved()) return;
 
-        if (isGameSolved()) {
-            statusMessageElement.textContent = `Головоломка решена за ${stepsCount} логических шагов!`;
-            statusMessageElement.classList.remove('incorrect-msg');
-            statusMessageElement.classList.add('success-msg');
-        } else if (stepsCount > 0) {
-            statusMessageElement.textContent = `Применено ${stepsCount} логических шагов. Дальнейшие шаги не найдены или требуется более сложная логика.`;
-            statusMessageElement.classList.remove('success-msg');
-            statusMessageElement.classList.add('incorrect-msg');
-        } else {
-            statusMessageElement.textContent = "Не найдено логических шагов для применения.";
-            statusMessageElement.classList.remove('success-msg');
-            statusMessageElement.classList.add('incorrect-msg');
-        }
-        saveGameState();
-        checkGameCompletion();
-        updateLogicSolverButtonsState();
-    });
+            let stepsCount = 0;
+            let maxIterations = 200; // Ограничение на количество шагов, чтобы избежать бесконечного цикла
+            let somethingAppliedInIteration;
+
+            do {
+                somethingAppliedInIteration = false;
+                updateAllCandidates(); // Всегда пересчитываем кандидатов перед поиском нового шага
+                const stepApplied = killerSolverLogic.doKillerLogicStep(
+                    userGrid,
+                    currentCandidatesMap,
+                    killerSolverData,
+                    updateAllCandidates,
+                    renderCell
+                );
+
+                if (stepApplied) {
+                    stepsCount++;
+                    somethingAppliedInIteration = true;
+                    // updateAllCandidates() и renderCell() уже вызваны внутри doKillerLogicStep
+                    updateBoardState(); // Обновление ошибок
+                }
+
+                maxIterations--;
+            } while (somethingAppliedInIteration && !isGameSolved() && maxIterations > 0);
+
+            if (isGameSolved()) {
+                statusMessageElement.textContent = `Головоломка решена за ${stepsCount} логических шагов!`;
+                statusMessageElement.classList.remove('incorrect-msg');
+                statusMessageElement.classList.add('success-msg');
+            } else if (stepsCount > 0) {
+                statusMessageElement.textContent = `Применено ${stepsCount} логических шагов. Дальнейшие шаги не найдены или требуется более сложная логика.`;
+                statusMessageElement.classList.remove('success-msg');
+                statusMessageElement.classList.add('incorrect-msg');
+            } else {
+                statusMessageElement.textContent = "Не найдено логических шагов для применения.";
+                statusMessageElement.classList.remove('success-msg');
+                statusMessageElement.classList.add('incorrect-msg');
+            }
+            saveGameState();
+            checkGameCompletion();
+            updateLogicSolverButtonsState();
+        });
+    }
 
     // --- Инициализация и слушатели событий ---
     function addEventListeners() {
-        startNewGameButton.addEventListener('click', () => showScreen('new-game-options'));
-        continueGameButton.addEventListener('click', () => {
-            if (loadGameState()) {
-                showScreen('game-container');
-            } else {
-                alert("Не удалось загрузить сохраненную игру.");
-            }
-        });
+        if (startNewGameButton) startNewGameButton.addEventListener('click', () => showScreen('new-game-options'));
+        if (continueGameButton) {
+            continueGameButton.addEventListener('click', () => {
+                if (loadGameState()) {
+                    showScreen('game-container');
+                } else {
+                    alert("Не удалось загрузить сохраненную игру.");
+                }
+            });
+        }
 
         document.querySelectorAll('#game-mode-selection .mode-button').forEach(button => {
             button.addEventListener('click', (e) => {
@@ -927,50 +950,59 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        difficultyButtonsContainer.addEventListener('click', (e) => {
-            if (e.target.tagName === 'BUTTON') {
-                document.querySelectorAll('.difficulty-selection button').forEach(btn => btn.classList.remove('selected'));
-                e.target.classList.add('selected');
-                currentDifficulty = e.target.dataset.difficulty;
-            }
-        });
+        if (difficultyButtonsContainer) {
+            difficultyButtonsContainer.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    document.querySelectorAll('.difficulty-selection button').forEach(btn => btn.classList.remove('selected'));
+                    e.target.classList.add('selected');
+                    currentDifficulty = e.target.dataset.difficulty;
+                }
+            });
+        }
 
-        document.getElementById('generate-game-button').addEventListener('click', () => {
-            // Убедитесь, что выбран режим и сложность
-            const selectedModeButton = document.querySelector('#game-mode-selection .mode-button.selected');
-            const selectedDifficultyButton = document.querySelector('.difficulty-selection button.selected');
+        const generateGameButton = document.getElementById('generate-game-button');
+        if (generateGameButton) {
+            generateGameButton.addEventListener('click', () => {
+                // Убедитесь, что выбран режим и сложность
+                const selectedModeButton = document.querySelector('#game-mode-selection .mode-button.selected');
+                const selectedDifficultyButton = document.querySelector('.difficulty-selection button.selected');
 
-            if (!selectedModeButton || !selectedDifficultyButton) {
-                alert('Пожалуйста, выберите режим и сложность.');
-                return;
-            }
-            generateNewGame(selectedModeButton.dataset.mode, selectedDifficultyButton.dataset.difficulty);
-        });
+                if (!selectedModeButton || !selectedDifficultyButton) {
+                    alert('Пожалуйста, выберите режим и сложность.');
+                    return;
+                }
+                generateNewGame(selectedModeButton.dataset.mode, selectedDifficultyButton.dataset.difficulty);
+            });
+        }
 
-        backToInitialButton.addEventListener('click', () => showScreen('initial-screen'));
-        exitGameButton.addEventListener('click', () => {
-            // Возможно, запрос на подтверждение сохранения или очистки
-            if (confirm("Вы уверены, что хотите выйти? Прогресс будет сохранен.")) {
-                saveGameState(); // Сохраняем перед выходом
-                showScreen('initial-screen');
-                stopTimer();
-                clearSelection();
-            }
-        });
+        if (backToInitialButton) backToInitialButton.addEventListener('click', () => showScreen('initial-screen'));
+        if (exitGameButton) {
+            exitGameButton.addEventListener('click', () => {
+                // Возможно, запрос на подтверждение сохранения или очистки
+                if (confirm("Вы уверены, что хотите выйти? Прогресс будет сохранен.")) {
+                    saveGameState(); // Сохраняем перед выходом
+                    showScreen('initial-screen');
+                    stopTimer();
+                    clearSelection();
+                }
+            });
+        }
 
-        numpad.querySelectorAll('button[data-num]').forEach(button => {
-            button.addEventListener('click', (e) => handleInput(parseInt(e.target.dataset.num)));
-        });
-
-        eraseButton.addEventListener('click', eraseCell); // <--- Теперь eraseButton определен
-        noteToggleButton.addEventListener('click', toggleNoteMode);
-        checkButton.addEventListener('click', updateBoardState); // Просто перепроверить ошибки
-        hintButton.addEventListener('click', applyHint);
-        undoButton.addEventListener('click', undoLastMove);
+        if (numpad) {
+            numpad.querySelectorAll('button[data-num]').forEach(button => {
+                button.addEventListener('click', (e) => handleInput(parseInt(e.target.dataset.num)));
+            });
+        }
+        
+        if (eraseButton) eraseButton.addEventListener('click', eraseCell); // <--- Теперь eraseButton определен и используется
+        if (noteToggleButton) noteToggleButton.addEventListener('click', toggleNoteMode);
+        if (checkButton) checkButton.addEventListener('click', updateBoardState); // Просто перепроверить ошибки
+        if (hintButton) hintButton.addEventListener('click', applyHint);
+        if (undoButton) undoButton.addEventListener('click', undoLastMove);
 
         // Обработка клавиш клавиатуры
         document.addEventListener('keydown', (e) => {
-            if (gameContainer.classList.contains('active') && selectedCell) {
+            if (gameContainer && gameContainer.classList.contains('active') && selectedCell) {
                 const digit = parseInt(e.key);
                 if (digit >= 1 && digit <= 9) {
                     handleInput(digit);
@@ -986,7 +1018,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Навигация по доске стрелками
-            if (gameContainer.classList.contains('active') && selectedRow !== -1 && selectedCol !== -1) {
+            if (gameContainer && gameContainer.classList.contains('active') && selectedRow !== -1 && selectedCol !== -1) {
                 let newR = selectedRow;
                 let newC = selectedCol;
                 let moved = false;
@@ -1012,14 +1044,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Горячие клавиши для "Next Step" (Ctrl+N или Cmd+N)
             if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-                if (currentMode === 'killer' && !logicNextStepButton.disabled) {
+                if (logicNextStepButton && currentMode === 'killer' && !logicNextStepButton.disabled) {
                     logicNextStepButton.click();
                 }
                 e.preventDefault();
             }
             // Горячие клавиши для "Solve" (Ctrl+S или Cmd+S)
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                if (currentMode === 'killer' && !logicSolveButton.disabled) {
+                if (logicSolveButton && currentMode === 'killer' && !logicSolveButton.disabled) {
                     logicSolveButton.click();
                 }
                 e.preventDefault();
@@ -1038,7 +1070,7 @@ document.addEventListener('DOMContentLoaded', () => {
             loadThemePreference();
             checkContinueButton();
             addEventListeners();
-            showScreen('initial-screen'); // Показать начальный экран
+            showScreen(initialScreen); // Показать начальный экран
             // initializeAds(); // Если есть функция инициализации рекламы
             try{
                 if(window.Telegram?.WebApp) Telegram.WebApp.ready();
@@ -1064,7 +1096,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Theme Toggling ---
-    const themeStylesheet = document.getElementById('theme-stylesheet');
+    const themeStylesheet = document.getElementById('theme-stylesheet'); // Эта переменная не используется, можно удалить или использовать
     const THEME_KEY = 'sudokuTheme';
 
     function loadThemePreference() {
