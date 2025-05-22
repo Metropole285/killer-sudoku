@@ -961,7 +961,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        const generateGameButton = document.getElementById('generate-game-button');
+        const generateGameButton = document.getElementById('start-selected-game-button');
         if (generateGameButton) {
             generateGameButton.addEventListener('click', () => {
                 // Убедитесь, что выбран режим и сложность
