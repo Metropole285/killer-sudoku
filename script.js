@@ -21,990 +21,1008 @@ document.addEventListener('DOMContentLoaded', () => {
     const numpad = document.getElementById('numpad');
     const noteToggleButton = document.getElementById('note-toggle-button');
     const timerElement = document.getElementById('timer');
-    const logicStepButton = document.getElementById('logic-step-button');
-    const logicSolveButton = document.getElementById('logic-solve-button');
+    const logicNextStepButton = document.getElementById('logic-next-step-button'); // Кнопка "Next Step"
+    const logicSolveButton = document.getElementById('logic-solve-button');       // Кнопка "Solve"
 
-    // --- Проверка всех элементов ---
-    const essentialElements = { initialScreen, newGameOptionsScreen, gameContainer, startNewGameButton, continueGameButton, gameModeSelectionContainer, difficultyButtonsContainer, themeToggleCheckbox, backToInitialButton, exitGameButton, boardElement, checkButton, hintButton, undoButton, statusMessageElement, numpad, noteToggleButton, timerElement, logicStepButton, logicSolveButton };
-    for (const key in essentialElements) {
-        if (!essentialElements[key]) {
-            const errorMsg = `Критическая ошибка: HTML элемент для '${key}' не найден! Проверьте ID/селектор в index.html.`;
-            console.error(errorMsg);
-            document.body.innerHTML = `<p style='color:red;font-size:18px; padding: 20px;'>${errorMsg}</p>`;
-            return; // Остановить выполнение скрипта
-        }
-    }
-
-    // --- Ключи localStorage ---
-    const SAVE_KEY = 'sudokuGameState';
-    const THEME_KEY = 'sudokuThemePreference';
-
-    // --- Состояние Игры ---
-    let currentMode = "classic";
-    let currentDifficulty = 'medium';
-    let currentPuzzle = null;
-    let currentSolution = null;
-    let currentCageData = null;
-    let currentSolverData = null;
-    let userGrid = [];
-    let currentCandidatesMap = {}; // Карта кандидатов {cellId: Set<number>}
-    let classicPeersMapCache = null; // Кэш для пиров (теперь только для Classic в script.js)
-    let historyStack = [];
+    // --- Состояние игры ---
+    let userGrid = []; // Массив 9x9 объектов {value: 0, isGiven: false, isError: false, notes: Set(), isSolved: false}
+    let solutionGrid = []; // Решение для проверки
+    let currentMode = 'classic'; // 'classic' или 'killer'
+    let currentDifficulty = 'easy';
     let selectedCell = null;
     let selectedRow = -1;
     let selectedCol = -1;
     let isNoteMode = false;
-    let timerInterval = null;
-    let secondsElapsed = 0;
-    const MAX_HINTS = 3;
-    let hintsRemaining = MAX_HINTS;
-    let isLogicSolverRunning = false; // Флаг для кнопки Solve Logic
+    let timerInterval;
+    let timeElapsed = 0;
+    let history = []; // Для функции отмены
+    let hintsRemaining = 3;
 
-    // === Placeholder Рекламы ===
-    let isAdReady = false;
-    let isShowingAd = false;
-    function initializeAds() {
-        console.log("ADS Init...");
-        setTimeout(() => { preloadRewardedAd(); }, 2000);
-    }
-    function preloadRewardedAd() {
-        if (isAdReady || isShowingAd) return;
-        console.log("ADS Load...");
-        isAdReady = false;
-        setTimeout(() => {
-             if (!isShowingAd) {
-                 isAdReady = true; console.log("ADS Ready.");
-             } else { console.log("ADS Load aborted (showing)."); }
-         }, 3000 + Math.random() * 2000);
-     }
-    function showRewardedAd(callbacks) {
-        if (!isAdReady || isShowingAd) {
-            console.log("ADS Not ready/Showing.");
-            if (callbacks.onError) callbacks.onError("Реклама не готова.");
-            preloadRewardedAd();
-            return;
-        }
-        console.log("ADS Show...");
-        isShowingAd = true;
-        isAdReady = false;
-        if(statusMessageElement) {
-            statusMessageElement.textContent = "Показ рекламы...";
-            statusMessageElement.className = '';
-        }
-        document.body.style.pointerEvents = 'none';
-        setTimeout(() => {
-            const success = Math.random() > 0.2;
-            document.body.style.pointerEvents = 'auto';
-            if(statusMessageElement) statusMessageElement.textContent = "";
-            isShowingAd = false;
-            console.log("ADS Show End.");
-            if (success) {
-                console.log("ADS Success!");
-                if (callbacks.onSuccess) callbacks.onSuccess();
-            } else {
-                console.log("ADS Error/Skip.");
-                if (callbacks.onError) callbacks.onError("Реклама не загружена / пропущена.");
-            }
-            preloadRewardedAd();
-         }, 5000);
-     }
+    // --- Killer Sudoku Specifics ---
+    let killerSolverData = null; // Будет содержать {cageDataArray, cellToCageMap}
+    let currentCandidatesMap = {}; // Map: cellId -> Set<number> для кандидатов решателя
+    // (A1: Set(1,2,3), A2: Set(4,5), ...)
 
-
-    // --- Функции Управления Экранами ---
-    function showScreen(screenToShow) {
-        [initialScreen, newGameOptionsScreen, gameContainer].forEach(s => s?.classList.remove('visible'));
-        if (screenToShow) {
-            screenToShow.classList.add('visible');
-            console.log(`Show screen: #${screenToShow.id}`);
-        } else {
-            console.error("showScreen: Попытка показать неопределенный экран!");
-            if(initialScreen) initialScreen.classList.add('visible'); // Fallback
-        }
+    // --- Helper Functions ---
+    function getCellId(r, c) { return "ABCDEFGHI"[r] + (c + 1); }
+    function getCellCoords(cellId) {
+        const r = "ABCDEFGHI".indexOf(cellId[0]);
+        const c = parseInt(cellId[1]) - 1;
+        return { r, c };
     }
 
-    // --- Функции Темы ---
-    function applyTheme(theme) {
-        const isDark = theme === 'dark';
-        document.body.classList.toggle('dark-theme', isDark);
-        if(themeToggleCheckbox) themeToggleCheckbox.checked = isDark;
-        console.log(`Theme set: ${theme}`);
-    }
-    function loadThemePreference() {
+    function saveGameState() {
         try {
-            const savedTheme = localStorage.getItem(THEME_KEY);
-            applyTheme(savedTheme || 'light');
-        } catch(e) {
-            console.error("Error loading theme:", e);
-            applyTheme('light');
+            const gameState = {
+                userGrid: userGrid.map(row => row.map(cell => ({
+                    value: cell.value,
+                    isGiven: cell.isGiven,
+                    notes: Array.from(cell.notes), // Set to Array for JSON
+                    isError: cell.isError,
+                    isSolved: cell.isSolved
+                }))),
+                solutionGrid: solutionGrid,
+                currentMode: currentMode,
+                currentDifficulty: currentDifficulty,
+                timeElapsed: timeElapsed,
+                history: history,
+                hintsRemaining: hintsRemaining,
+                killerSolverData: killerSolverData, // Сохраняем данные по Killer Sudoku
+                // currentCandidatesMap не сохраняем, т.к. она пересчитывается
+            };
+            localStorage.setItem('sudokuGameState', JSON.stringify(gameState));
+            console.log("Game state saved.");
+            checkContinueButton();
+        } catch (e) {
+            console.error("Error saving game state:", e);
         }
     }
-    function handleThemeToggle() {
-        if(!themeToggleCheckbox) return;
-        const newTheme = themeToggleCheckbox.checked ? 'dark' : 'light';
-        applyTheme(newTheme);
-        try { localStorage.setItem(THEME_KEY, newTheme); } catch(e) { console.error("Error saving theme:", e); }
-    }
 
-    // --- Вспомогательные функции ---
-    function showError(msg){ console.error("App Error:", msg); if(statusMessageElement) { statusMessageElement.textContent = msg; statusMessageElement.className = 'incorrect-msg'; } }
-    function showSuccess(msg){ if(statusMessageElement) { statusMessageElement.textContent = msg; statusMessageElement.className = 'correct'; setTimeout(()=>clearErrors(), 3000); } }
-    function clearErrors(){ if(boardElement) boardElement.querySelectorAll('.cell.incorrect').forEach(c=>c.classList.remove('incorrect')); if(statusMessageElement) { statusMessageElement.textContent = ''; statusMessageElement.className = ''; } }
-    function getCellCoords(cellId){ if(!cellId||cellId.length!==2)return null; const r="ABCDEFGHI".indexOf(cellId[0]), c="123456789".indexOf(cellId[1]); if(r===-1||c===-1)return null; return{r,c}; }
-    function getCellId(r,c){ if(r<0||r>8||c<0||c>8)return null; return "ABCDEFGHI"[r]+"123456789"[c]; }
-    function getNeighbors(r,c){ return{top:r>0?getCellId(r-1,c):null,bottom:r<8?getCellId(r+1,c):null,left:c>0?getCellId(r,c-1):null,right:c<8?getCellId(r,c+1):null}; }
-    function isGameSolved(){ if(!userGrid||userGrid.length!==9)return false; return !userGrid.flat().some(c=>!c||c.value===0); }
-    function boardStringToObjectArray(boardString){if(!boardString||typeof boardString!=='string')return[];const g=[];for(let r=0;r<9;r++){g[r]=[];for(let c=0;c<9;c++){const i=r*9+c;const h=boardString[i]||'.';const v=(h==='.'||h==='0'||!"123456789".includes(h))?0:parseInt(h);g[r][c]={value:v,notes:new Set()};}}return g;}
-    function clearSelection(){if(selectedCell)selectedCell.classList.remove('selected');if(boardElement)boardElement.querySelectorAll('.cell.highlighted').forEach(c=>c.classList.remove('highlighted'));selectedCell=null;selectedRow=-1;selectedCol=-1;}
-    function updateNoteToggleButtonState(){if(noteToggleButton){noteToggleButton.classList.toggle('active',isNoteMode);noteToggleButton.title=`Заметки (${isNoteMode?'ВКЛ':'ВЫКЛ'})`;}}
-    function highlightRelatedCells(row, col) {
-         if (!boardElement) return;
-         boardElement.querySelectorAll('.cell.highlighted').forEach(el=>el.classList.remove('highlighted'));
-         if (currentMode === 'killer' && currentSolverData && selectedCell) {
-             const cellId = getCellId(row, col); if (!cellId) return;
-             const cageIndex = currentSolverData.cellToCageMap[cellId];
-             if (cageIndex !== undefined) {
-                 const cage = currentSolverData.cageDataArray[cageIndex];
-                 if (cage?.cells) { cage.cells.forEach(cId => { const coords = getCellCoords(cId); if(coords) boardElement.querySelector(`.cell[data-row='${coords.r}'][data-col='${coords.c}']`)?.classList.add('highlighted'); }); }
-             } else { boardElement.querySelectorAll(`.cell[data-row='${row}'], .cell[data-col='${col}']`).forEach(el=>el.classList.add('highlighted')); }
-         } else { boardElement.querySelectorAll(`.cell[data-row='${row}'], .cell[data-col='${col}']`).forEach(el=>el.classList.add('highlighted')); }
-         const cellValue = userGrid[row]?.[col]?.value;
-         if (cellValue && cellValue !== 0) {
-             for (let r_=0;r_<9;r_++) { for (let c_=0;c_<9;c_++) { if (userGrid[r_]?.[c_]?.value === cellValue) { boardElement.querySelector(`.cell[data-row='${r_}'][data-col='${c_}']`)?.classList.add('highlighted'); }}}}
-     }
-    function updateHintButtonState(){if(!hintButton)return;const s=isGameSolved();let canHint=false,title="";if(currentMode==='classic'){canHint=currentSolution&&!s;if(!currentSolution)title="Н/Д";else if(s)title="Решено";else if(hintsRemaining>0)title="Подсказка";else title=`+${MAX_HINTS}(Ad)`;}else{canHint=false;title="Н/Д(Killer)";}hintButton.disabled=!canHint;hintButton.title=title;hintButton.textContent=`💡 ${hintsRemaining}/${MAX_HINTS}`;if(currentMode==='killer')hintButton.disabled=true;else if(hintsRemaining<=0&&canHint)hintButton.disabled=false;}
-    function getSolutionValue(row, col) {
-         if (currentMode !== 'classic' || !currentSolution) {
-             console.warn(`getSolutionValue called for invalid state: mode=${currentMode}, solutionExists=${!!currentSolution}`);
-             return null;
-         }
-         const index = row * 9 + col;
-         if (index < 0 || index >= currentSolution.length) {
-             console.error(`getSolutionValue: Invalid index ${index} for row=${row}, col=${col}`);
-             return null;
-         }
-         const char = currentSolution[index];
-         if (char === '.' || char === '0' || !"123456789".includes(char)) {
-              console.error(`getSolutionValue: Invalid character '${char}' in solution at index ${index}`);
-              return null;
-         }
-         return parseInt(char);
-     }
-     /**
-      * Получает Set ID всех пиров для ячейки (кэшируется).
-      */
-     function getClassicPeers(r, c) {
-         const cellId = getCellId(r,c);
-         if (!cellId) return new Set();
-         if (classicPeersMapCache === null) {
-             console.log("Initializing classic peers cache for script.js...");
-             classicPeersMapCache = {};
-             for (let r_cache = 0; r_cache < 9; r_cache++) {
-                 for (let c_cache = 0; c_cache < 9; c_cache++) {
-                     const id_cache = getCellId(r_cache, c_cache);
-                     if (id_cache) {
-                         const peers = new Set();
-                         for (let ci = 0; ci < 9; ci++) if (ci !== c_cache) { const pid = getCellId(r_cache, ci); if(pid) peers.add(pid); }
-                         for (let ri = 0; ri < 9; ri++) if (ri !== r_cache) { const pid = getCellId(ri, c_cache); if(pid) peers.add(pid); }
-                         const startRow = Math.floor(r_cache / 3) * 3;
-                         const startCol = Math.floor(c_cache / 3) * 3;
-                         for (let i = 0; i < 3; i++) {
-                             for (let j = 0; j < 3; j++) {
-                                 const peerR = startRow + i;
-                                 const peerC = startCol + j;
-                                 if (peerR !== r_cache || peerC !== c_cache) {
-                                     const pid = getCellId(peerR, peerC);
-                                     if(pid) peers.add(pid);
-                                 }
-                             }
-                         }
-                         classicPeersMapCache[id_cache] = peers;
-                     }
-                 }
-             }
-             console.log("script.js classic peers cache initialized.");
-         }
-         return classicPeersMapCache[cellId] || new Set();
-    }
-    // Вспомогательные функции для индексов/юнитов, нужны в script.js для классического решателя
-    function getRowIndices(r){const i=[];for(let c=0;c<9;c++)i.push([r,c]);return i;}
-    function getColIndices(c){const i=[];for(let r=0;r<9;r++)i.push([r,c]);return i;}
-    function getBlockIndices(b){const sr=Math.floor(b/3)*3,sc=(b%3)*3,i=[];for(let r=0;r<3;r++)for(let c=0;c<3;c++)i.push([sr+r,sc+c]);return i;}
-    function getAllUnitsIndices() { const allUnits = []; for (let i = 0; i < 9; i++) { allUnits.push(getRowIndices(i)); allUnits.push(getColIndices(i)); allUnits.push(getBlockIndices(i)); } return allUnits; }
-    function getUnitType(globalUnitIndex) { if (globalUnitIndex < 9) return 'Row'; if (globalUnitIndex < 18) return 'Col'; return 'Block'; }
-    function getUnitIndexForDisplay(globalUnitIndex) { return (globalUnitIndex % 9) + 1; }
-    function getUnitIndices(globalUnitIndex) {
-        if (globalUnitIndex < 0 || globalUnitIndex > 26) return null;
-        const type = getUnitType(globalUnitIndex);
-        const index = globalUnitIndex % 9;
-        if (type === 'Row') return getRowIndices(index);
-        if (type === 'Col') return getColIndices(index);
-        if (type === 'Block') return getBlockIndices(index);
-        return null;
-    }
-
-
-    // --- Инициализация ИГРЫ ---
-    function initGame(mode = "classic", difficulty = "medium", restoreState = null) {
-        console.log(`%cInitGame START: mode=${mode}, difficulty=${difficulty}, restore=${!!restoreState}`, "color: blue; font-weight: bold;");
-        // Проверка наличия библиотек
-        if (mode === "classic") {
-            if (typeof sudoku === 'undefined') return showError("Ошибка: sudoku.js не найден.");
-        } else if (mode === "killer") {
-            if (typeof killerSudoku === 'undefined') return showError("Ошибка: killerSudoku.js не найден.");
-            if (typeof killerSolverLogic === 'undefined') return showError("Ошибка: killerSolverLogic.js не найден.");
-            if (typeof killerSudoku._initializeSolverData !== 'function') return showError("Ошибка: killerSudoku.js неполный (_initializeSolverData).");
-            if (typeof killerSudoku.generate !== 'function') return showError("Ошибка: killerSudoku.js неполный (generate).");
-        } else {
-             return showError("Ошибка: Неизвестный режим: " + mode);
-        }
-        console.log(`${mode} library OK.`);
-
-        currentMode = mode; currentDifficulty = difficulty;
-        stopTimer(); historyStack = []; updateUndoButtonState(); isNoteMode = false; updateNoteToggleButtonState(); clearSelection(); clearErrors();
-        statusMessageElement.textContent = 'Генерация...'; statusMessageElement.className = '';
-        currentPuzzle = null; currentSolution = null; currentCageData = null; currentSolverData = null; userGrid = [];
-        currentCandidatesMap = {};
-        classicPeersMapCache = null;
-        if (killerSolverLogic && killerSolverLogic.resetPeersCache) {
-             killerSolverLogic.resetPeersCache();
-        }
-        isLogicSolverRunning = false;
-
-        let success = false;
+    function loadGameState() {
         try {
-            if (restoreState) {
-                console.log("Restoring state...");
-                currentMode=restoreState.mode||"classic";currentDifficulty=restoreState.difficulty||'medium';secondsElapsed=restoreState.time||0;hintsRemaining=restoreState.hints??MAX_HINTS;isNoteMode=restoreState.isNoteMode||false;userGrid=restoreState.grid.map(r=>r.map(c=>({value:c.value,notes:new Set(c.notesArray||[])})));
-                if(currentMode==="classic"){
-                    currentPuzzle=restoreState.puzzle;currentSolution=restoreState.solution;
-                    if(!currentPuzzle||!currentSolution) throw new Error("Inv classic save.");
-                } else if(currentMode==="killer"){
-                    currentCageData=restoreState.cageData;
-                    if(!currentCageData?.cages) throw new Error("Inv killer save (cages).");
-                    console.log("Re-init solver data...");
-                    currentSolverData = killerSudoku._initializeSolverData(currentCageData.cages);
-                    if(!currentSolverData) throw new Error("Fail re-init solver data.");
-                    console.log("Solver data re-init OK.");
-                 } else {
-                     throw new Error("Unk save mode:"+currentMode);
-                 }
-                console.log("Restore OK.");
-                success=true;
-            } else { // Новая игра
-                secondsElapsed = 0; hintsRemaining = MAX_HINTS; clearSavedGameState();
-                if (currentMode === "classic") {
-                    console.log(`Gen CLASSIC: ${currentDifficulty}...`);
-                    currentPuzzle = sudoku.generate(currentDifficulty);
-                    console.log(`Generated puzzle: ${currentPuzzle}`);
-                    if (!currentPuzzle) throw new Error("Classic gen failed.");
-                    currentSolution = sudoku.solve(currentPuzzle);
-                    if (!currentSolution) {
-                         console.warn("Solver failed for generated classic puzzle.");
-                    }
-                    userGrid = boardStringToObjectArray(currentPuzzle);
-                    console.log("New classic OK."); success = true;
-                } else if (currentMode === "killer") {
-                    console.log(`Gen KILLER: ${currentDifficulty}...`);
-                    console.log("Call killer.generate...");
-                    const puzzle = killerSudoku.generate(currentDifficulty);
-                    console.log("Killer gen result:", puzzle);
-                    if (!puzzle?.cages) throw new Error("Killer gen failed (no cages).");
-                    currentCageData = puzzle;
-                    console.log("Init solver data...");
-                    currentSolverData = killerSudoku._initializeSolverData(currentCageData.cages);
-                    console.log("Solver init result:", currentSolverData);
-                    if (!currentSolverData) throw new Error("Cage validation/init failed.");
-                    userGrid = boardStringToObjectArray(killerSudoku.BLANK_BOARD);
-                    console.log("New killer OK."); success = true;
-                }
+            const savedState = localStorage.getItem('sudokuGameState');
+            if (savedState) {
+                const gameState = JSON.parse(savedState);
+                userGrid = gameState.userGrid.map(row => row.map(cell => ({
+                    ...cell,
+                    notes: new Set(cell.notes) // Array back to Set
+                })));
+                solutionGrid = gameState.solutionGrid;
+                currentMode = gameState.currentMode;
+                currentDifficulty = gameState.currentDifficulty;
+                timeElapsed = gameState.timeElapsed;
+                history = gameState.history;
+                hintsRemaining = gameState.hintsRemaining;
+                killerSolverData = gameState.killerSolverData;
+
+                startTimer();
+                renderBoard();
+                updateHintsDisplay();
+                updateLogicSolverButtonsState();
+                console.log("Game state loaded.");
+                return true;
             }
-        } catch (error) { console.error("INIT DATA ERR:", error); showError(`Ошибка init (${mode}): ${error.message}`); showScreen(initialScreen); checkContinueButton(); return; }
-
-        if (success) {
-             statusMessageElement.textContent = '';
-             console.log("Calculating initial candidates map and synchronizing notes...");
-             calculateAllCandidates();
-             console.log("Rendering...");
-             updateNoteToggleButtonState(); renderBoard(); updateHintButtonState(); updateUndoButtonState(); updateLogicSolverButtonsState(); updateTimerDisplay(); console.log(`Game initialized. Is solved? ${isGameSolved()}`); showScreen(gameContainer); console.log("Schedule timer..."); setTimeout(() => { console.log("setTimeout: start timer."); startTimer(); }, 50); console.log("InitGame COMPLETE.");
-        } else {
-            console.error("InitGame no success flag."); showError("Ошибка инициализации."); showScreen(initialScreen); checkContinueButton();
-        }
-    }
-
-    // --- Функции сохранения/загрузки состояния ---
-     function saveGameState(){if(!userGrid||userGrid.length!==9)return;try{const g=userGrid.map(r=>r.map(c=>({value:c.value,notesArray:Array.from(c.notes||[])})));const s={mode:currentMode,difficulty:currentDifficulty,grid:g,time:secondsElapsed,hints:hintsRemaining,timestamp:Date.now(),isNoteMode: isNoteMode, puzzle:currentMode==='classic'?currentPuzzle:null,solution:currentMode==='classic'?currentSolution:null,cageData:currentMode==='killer'?currentCageData:null};localStorage.setItem(SAVE_KEY,JSON.stringify(s));}catch(e){console.error("SaveErr:",e);showError("Ошибка сохр.");}}
-     function loadGameState(){const d=localStorage.getItem(SAVE_KEY);if(!d)return null;try{const s=JSON.parse(d);if(s?.mode&&s?.difficulty&&Array.isArray(s.grid)&&typeof s.timestamp==='number'&&(s.mode==='classic'?!(!s.puzzle||!s.solution):true)&&(s.mode==='killer'?!(!s.cageData||!s.cageData.cages):true)){console.log("Save found:",new Date(s.timestamp).toLocaleString(),`M:${s.mode}`,`D:${s.difficulty}`);return s;}else{console.warn("Inv save. Clearing.",s);clearSavedGameState();return null;}}catch(e){console.error("ParseSaveErr:",e);clearSavedGameState();return null;}}
-     function clearSavedGameState(){try{localStorage.removeItem(SAVE_KEY);console.log("Save cleared.");checkContinueButton();}catch(e){console.error("Err clr save:",e);}}
-
-
-    // --- Функции для Undo ---
-     function createHistoryState(){if(!userGrid||userGrid.length!==9)return null;const g=userGrid.map(r=>r.map(c=>({value:c.value,notes:new Set(c.notes||[])})));return{grid:g,hints:hintsRemaining};}
-     function pushHistoryState(){if(isGameSolved()) return; const s=createHistoryState();if(s){historyStack.push(s);updateUndoButtonState();}else{console.warn("Inv hist push");}}
-     function handleUndo(){if(historyStack.length===0||isShowingAd)return;stopTimer();const ps=historyStack.pop();console.log("Undo...");try{userGrid=ps.grid;hintsRemaining=ps.hints;
-         console.log("Recalculating candidates map and notes after undo...");
-         calculateAllCandidates();
-         renderBoard();clearSelection();clearErrors();updateHintButtonState();updateUndoButtonState();updateLogicSolverButtonsState(); saveGameState();console.log("Undo OK.");}catch(e){console.error("Undo Err:",e);showError("Ошибка отмены");historyStack=[];updateUndoButtonState();updateLogicSolverButtonsState();}finally{resumeTimerIfNeeded();}}
-     function updateUndoButtonState(){if(undoButton)undoButton.disabled=historyStack.length===0;}
-
-
-    // --- Функции для таймера ---
-     function startTimer(){const v=gameContainer?.classList.contains('visible');if(timerInterval||!v)return;console.log("Timer start...");updateTimerDisplay();timerInterval=setInterval(()=>{secondsElapsed++;updateTimerDisplay();if(secondsElapsed%10===0)saveGameState();},1000);console.log("Timer started:",timerInterval);}
-     function stopTimer(){if(timerInterval){clearInterval(timerInterval);const o=timerInterval;timerInterval=null;console.log(`Timer stop (${o}).Save.`);saveGameState();}}
-     function updateTimerDisplay(){if(!timerElement)return;const m=Math.floor(secondsElapsed/60),s=secondsElapsed%60;timerElement.textContent=`Время: ${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;}
-     function resumeTimerIfNeeded(){const s=isGameSolved(),v=gameContainer?.classList.contains('visible');if(v&&!s)startTimer();else stopTimer();}
-
-
-    // --- Отрисовка ---
-     function renderBoard() { console.log(`Render board start: mode=${currentMode}`); if (!boardElement) { console.error("Board element missing!"); return; } boardElement.innerHTML = ''; if (!userGrid || userGrid.length !== 9) { showError("Invalid grid data for rendering."); return; } const cellElementsMap = {}; for (let r = 0; r < 9; r++) { if (!userGrid[r] || userGrid[r].length !== 9) continue; for (let c = 0; c < 9; c++) { const cellId = getCellId(r, c); if (!cellId) continue; const cellElement = createCellElement(r, c); boardElement.appendChild(cellElement); cellElementsMap[cellId] = cellElement; } } if (currentMode === "killer" && currentSolverData?.cageDataArray) { currentSolverData.cageDataArray.forEach((cage, cageIndex) => { if (!cage || !Array.isArray(cage.cells) || cage.cells.length === 0) { console.warn(`Skipping invalid cage data at index ${cageIndex}`); return; } const cageCellSet = new Set(cage.cells); let anchorCellId = null; let minRow = 9, minCol = 9; cage.cells.forEach(cellId => { const coords = getCellCoords(cellId); if (coords) { if (coords.r < minRow) { minRow = coords.r; minCol = coords.c; anchorCellId = cellId; } else if (coords.r === minRow && coords.c < minCol) { minCol = coords.c; anchorCellId = cellId; } } }); cage.cells.forEach(cellId => { const cellElement = cellElementsMap[cellId]; if (!cellElement) return; cellElement.classList.add('cage-cell'); if (cellId === anchorCellId) { cellElement.classList.add('cage-sum-anchor'); if (!cellElement.querySelector('.cage-sum')) { const sumSpan = document.createElement('span'); sumSpan.className = 'cage-sum'; sumSpan.textContent = cage.sum; cellElement.appendChild(sumSpan); } } const coords = getCellCoords(cellId); if (!coords) return; const { r, c } = coords; const neighbors = getNeighbors(r, c); if (r === 0 || !neighbors.top || !cageCellSet.has(neighbors.top)) { cellElement.classList.add('cage-inner-border-top'); } if (c === 0 || !neighbors.left || !cageCellSet.has(neighbors.left)) { cellElement.classList.add('cage-inner-border-left'); } if (r === 8 || !neighbors.bottom || !cageCellSet.has(neighbors.bottom)) { cellElement.classList.add('cage-inner-border-bottom'); } if (c === 8 || !neighbors.right || !cageCellSet.has(neighbors.right)) { cellElement.classList.add('cage-inner-border-right'); } }); }); } console.log("Board rendering complete."); }
-     function createCellElement(r, c) { const cell=document.createElement('div');cell.classList.add('cell'); cell.dataset.row=r;cell.dataset.col=c; const cd=userGrid[r]?.[c]; if(!cd){cell.textContent='?';console.warn(`Missing grid data for ${r},${c}`);return cell;} const vc=document.createElement('div');vc.classList.add('cell-value-container'); const nc=document.createElement('div');nc.classList.add('cell-notes-container'); if(cd.value!==0){ vc.textContent=cd.value;vc.style.display='flex';nc.style.display='none'; if(currentMode==='classic'&&currentPuzzle){ const i=r*9+c; if(currentPuzzle[i]&&currentPuzzle[i]!=='.')cell.classList.add('given'); } } else if(cd.notes instanceof Set&&cd.notes.size>0){ vc.style.display='none';nc.style.display='grid';nc.innerHTML=''; for(let n=1;n<=9;n++){const nd=document.createElement('div');nd.classList.add('note-digit');nd.textContent=cd.notes.has(n)?n:'';nc.appendChild(nd);} } else { vc.textContent='';vc.style.display='flex';nc.style.display='none'; } cell.appendChild(vc);cell.appendChild(nc); if((c+1)%3===0&&c<8)cell.classList.add('thick-border-right'); if((r+1)%3===0&&r<8)cell.classList.add('thick-border-bottom'); return cell; }
-     function renderCell(r, c) { if (!boardElement) return; const oldCell = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`); if (oldCell) { try { const newCell = createCellElement(r, c); oldCell.classList.forEach(cls => { if(cls!=='cell' && !cls.startsWith('thick-') && !cls.startsWith('cage-inner-')) newCell.classList.add(cls); }); ['cage-cell', 'cage-sum-anchor', 'cage-inner-border-top', 'cage-inner-border-bottom', 'cage-inner-border-left', 'cage-inner-border-right'].forEach(cls => { if (oldCell.classList.contains(cls)) newCell.classList.add(cls); }); const oldSum = oldCell.querySelector('.cage-sum'); if (oldSum) newCell.appendChild(oldSum.cloneNode(true)); if (selectedRow === r && selectedCol === c) selectedCell = newCell; oldCell.replaceWith(newCell); } catch (error) { console.error(`Error render cell [${r}, ${c}]:`, error); renderBoard(); } } else { console.warn(`renderCell: Cell [${r},${c}] not found? Render full.`); renderBoard(); } }
-
-
-    // --- Логика подсказки ---
-     function provideHintInternal(){if(currentMode!=='classic')return showError("Подсказки только в классике");if(!selectedCell)return showError("Выберите ячейку"); const r=selectedRow,c=selectedCol;if(r<0||c<0||!userGrid[r]?.[c])return showError("Ошибка данных ячейки"); if(userGrid[r][c].value!==0)return showError("Ячейка заполнена");if(selectedCell.classList.contains('given')) return showError("Начальная цифра");pushHistoryState();let hintUsed=false;try{const sv=getSolutionValue(r,c);if(sv===null)throw new Error("Решение недоступно");if(sv>0){console.log(`Hint [${r},${c}]: ${sv}`);userGrid[r][c].value=sv;if(userGrid[r][c].notes)userGrid[r][c].notes.clear();
-         updateCandidatesOnSet(r, c, sv, userGrid);
-         renderCell(r,c);const hEl=boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);if(hEl){hEl.classList.remove('selected');const hc=getComputedStyle(document.documentElement).getPropertyValue('--highlight-hint-flash').trim()||'#fffacd';hEl.style.transition='background-color 0.1s ease-out';hEl.style.backgroundColor=hc;setTimeout(()=>{if(hEl&&hEl.style.backgroundColor!==''){hEl.style.backgroundColor='';hEl.style.transition='';}clearSelection();},500);}else{clearSelection();}hintsRemaining--;hintUsed=true;updateHintButtonState();clearErrors();saveGameState();if(isGameSolved()){checkGame();updateLogicSolverButtonsState();}}else throw new Error(`Некорректное значение решения [${r},${c}]: ${sv}`);}catch(e){console.error("Hint Err:",e.message);showError(e.message);if(!hintUsed&&historyStack.length>0){historyStack.pop();updateUndoButtonState();}}}
-     function offerRewardedAdForHints(){if(currentMode!=='classic'||isShowingAd)return;console.log("Offering ad...");if(confirm(`Подсказки зак-сь! Реклама за ${MAX_HINTS} подсказку?`)){if(!isAdReady){showError("Реклама грузится...");preloadRewardedAd();return;}showRewardedAd({onSuccess:()=>{hintsRemaining+=MAX_HINTS;updateHintButtonState();saveGameState();showSuccess(`+${MAX_HINTS} подсказка!`);},onError:(msg)=>{showError(`Ошибка: ${msg||'Реклама?'} Подсказка не добавлена.`);}});}}
-
-
-    // --- Логика Проверки ---
-     function checkGame(){console.log(`Check: ${currentMode}`);clearErrors();if(!userGrid||userGrid.length!==9)return;let isValid=false;let isComplete=!userGrid.flat().some(c=>!c||c.value===0);if(currentMode==="classic"){if(!currentSolution){showError("Нет решения!");return;}isValid=validateClassicSudoku();}else if(currentMode==="killer"){if(!currentSolverData){showError("Нет данных Killer!");return;}isValid=validateKillerSudoku();}if(isValid&&isComplete){showSuccess("Поздравляем! Решено верно!");stopTimer();clearSelection();updateHintButtonState();updateLogicSolverButtonsState();}else if(!isValid){showError("Найдены ошибки.");}else{if(statusMessageElement){statusMessageElement.textContent="Пока верно, но не закончено.";statusMessageElement.className='';}}}
-     function validateClassicSudoku(){ let ok=true;if(!currentSolution){console.error("Classic valid Err: no solution!");return false;}for(let r=0;r<9;r++){for(let c=0;c<9;c++){const cd=userGrid[r]?.[c];const el=boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);if(!cd||!el||cd.value===0||el.classList.contains('given'))continue;const sv=getSolutionValue(r,c);if(sv===null){console.error(`Classic valid Err: No sol value for ${r},${c}`);ok=false;break;}if(cd.value!==sv){el.classList.add('incorrect');ok=false;}}if(!ok)break;}return ok;}
-     function validateKillerSudoku(){let ok=true;const grid=userGrid.map(r=>r.map(c=>c.value));for(let i=0;i<9;i++){if(!isUnitValid(getRow(grid,i))||!isUnitValid(getCol(grid,i))||!isUnitValid(getBlock(grid,i))){ok=false;break;}}if(!ok){showError("Нарушены правила Судоку.");return false;}if(!currentSolverData?.cageDataArray)return false;for(const cage of currentSolverData.cageDataArray){const vals=[];let sum=0;let complete=true;let els=[];for(const cid of cage.cells){const crds=getCellCoords(cid);if(!crds)continue;const v=grid[crds.r][crds.c];const el=boardElement?.querySelector(`.cell[data-row='${crds.r}'][data-col='${crds.c}']`);if(el)els.push(el);if(v===0){complete=false;}else{vals.push(v);sum+=v;}}if(new Set(vals).size!==vals.length){console.warn(`Cage ${cage.id} unique violation:`,vals);ok=false;els.forEach(e=>e.classList.add('incorrect'));}if(complete&&sum!==cage.sum){console.warn(`Cage ${cage.id} sum violation: got ${sum}, expected ${cage.sum}`);ok=false;els.forEach(e=>e.classList.add('incorrect'));}}return ok;}
-     function isUnitValid(unit){const nums=unit.filter(n=>n!==0);return new Set(nums).size===nums.length;}
-     function getRow(g,r){return g[r];} function getCol(g,c){return g.map(rw=>rw[c]);} function getBlock(g,b){const sr=Math.floor(b/3)*3,sc=(b%3)*3,bl=[];for(let r=0;r<3;r++)for(let c=0;c<3;c++)bl.push(g[sr+r][sc+c]);return bl;}
-
-
-
-    // --- ЛОГИЧЕСКИЙ РЕШАТЕЛЬ ---
-
-    /**
-     * Общая функция для расчета ВСЕХ кандидатов в зависимости от режима.
-     * Обновляет currentCandidatesMap И userGrid.notes.
-     */
-    function calculateAllCandidates() {
-        console.log(`Recalculating all candidates for mode: ${currentMode}`);
-        let newMap = {};
-
-        if (currentMode === 'classic') {
-             newMap = calculateAllClassicCandidates();
-        } else if (currentMode === 'killer') {
-            if (killerSolverLogic && currentSolverData && userGrid.length === 9) {
-                 newMap = killerSolverLogic.calculateAllKillerCandidates(userGrid, currentSolverData);
-            } else {
-                 console.warn("Killer solver logic or data not available for candidate calculation.");
-            }
-        }
-
-        // Синхронизируем карту кандидатов с заметками в userGrid
-        currentCandidatesMap = newMap;
-        if (userGrid.length === 9) {
-            for (let r = 0; r < 9; r++) {
-                for (let c = 0; c < 9; c++) {
-                    if (userGrid[r]?.[c]?.value === 0) {
-                        const cellId = getCellId(r, c);
-                        userGrid[r][c].notes = new Set(currentCandidatesMap[cellId] || []);
-                    } else if (userGrid[r]?.[c]) {
-                        userGrid[r][c].notes = new Set();
-                    }
-                }
-            }
-             console.log("User grid notes synchronized with candidates map.");
-        }
-    }
-
-
-    /**
-     * Вычисляет кандидатов для классического режима.
-     */
-    function calculateAllClassicCandidates() {
-        const newMap = {};
-        for (let r = 0; r < 9; r++) {
-            for (let c = 0; c < 9; c++) {
-                const cellId = getCellId(r, c);
-                if (!cellId) continue;
-                if (userGrid[r]?.[c]?.value === 0) {
-                    newMap[cellId] = calculateClassicCandidatesInternal(r, c);
-                } else {
-                    newMap[cellId] = new Set();
-                }
-            }
-        }
-        console.log("Classic Candidates map recalculated.");
-        return newMap;
-    }
-
-    /**
-     * Внутренняя функция для вычисления классических кандидатов ОДНОЙ ячейки.
-     */
-    function calculateClassicCandidatesInternal(r, c) {
-        if (!userGrid[r]?.[c] || userGrid[r][c].value !== 0) {
-            return new Set();
-        }
-        let cands = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9]);
-        for (let i = 0; i < 9; i++) {
-            if (userGrid[r]?.[i]?.value !== 0) cands.delete(userGrid[r][i].value);
-            if (userGrid[i]?.[c]?.value !== 0) cands.delete(userGrid[i][c].value);
-        }
-        const startRow = Math.floor(r / 3) * 3;
-        const startCol = Math.floor(c / 3) * 3;
-        for (let i = 0; i < 3; i++) {
-            for (let j = 0; j < 3; j++) {
-                if (userGrid[startRow + i]?.[startCol + j]?.value !== 0) {
-                    cands.delete(userGrid[startRow + i][startCol + j].value);
-                }
-            }
-        }
-        return cands;
-    }
-
-    /**
-     * Обновляет карту кандидатов И ЗАМЕТКИ в userGrid после установки цифры.
-     */
-    function updateCandidatesOnSet(r, c, digit, userGridRef) {
-        const grid = userGridRef || userGrid;
-        if (!currentCandidatesMap || !grid ) return;
-        const cellId = getCellId(r, c);
-        if (!cellId) return;
-
-        if (currentCandidatesMap[cellId]) currentCandidatesMap[cellId].clear();
-        else currentCandidatesMap[cellId] = new Set();
-        if (grid[r]?.[c]) grid[r][c].notes = new Set();
-
-        const peers = getClassicPeers(r, c);
-        for (const peerId of peers) {
-            const peerCoords = getCellCoords(peerId);
-            if (peerCoords) {
-                 if (currentCandidatesMap[peerId]) {
-                     currentCandidatesMap[peerId].delete(digit);
-                 }
-                 if(grid[peerCoords.r]?.[peerCoords.c]?.value === 0) {
-                      if (!grid[peerCoords.r][peerCoords.c].notes) grid[peerCoords.r][peerCoords.c].notes = new Set();
-                      grid[peerCoords.r][peerCoords.c].notes.delete(digit);
-                 }
-            }
-        }
-
-        if (currentMode === 'killer' && currentSolverData) {
-             const cageIndex = currentSolverData.cellToCageMap[cellId];
-             if (cageIndex !== undefined) {
-                 const cage = currentSolverData.cageDataArray[cageIndex];
-                 if (cage) {
-                     for (const cageCellId of cage.cells) {
-                         if (cageCellId !== cellId) {
-                             const coords = getCellCoords(cageCellId);
-                             if (coords && grid[coords.r]?.[coords.c]?.value === 0) {
-                                 if(currentCandidatesMap[cageCellId]) {
-                                      currentCandidatesMap[cageCellId].delete(digit);
-                                 }
-                                 if (!grid[coords.r][coords.c].notes) grid[coords.r][coords.c].notes = new Set();
-                                 grid[coords.r][coords.c].notes.delete(digit);
-                             }
-                         }
-                     }
-                 }
-             }
-        }
-        console.log(`Candidates & Notes updated (basic peer/cage check) after setting ${digit} at ${cellId}`);
-    }
-
-
-    /**
-     * Обновляет карту кандидатов и ЗАМЕТКИ после стирания цифры.
-     */
-    function updateCandidatesOnErase(r, c) {
-        calculateAllCandidates();
-        console.log(`Candidates and Notes recalculated after erasing at ${getCellId(r,c)}`);
-    }
-
-    // --- Классические Функции поиска техник (find...) ---
-    function findNakedSingle() {
-        if (currentMode !== 'classic' || !currentCandidatesMap) return null;
-        for (let r = 0; r < 9; r++) { for (let c = 0; c < 9; c++) { const cellId = getCellId(r, c); if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) { const cands = currentCandidatesMap[cellId]; if (cands.size === 1) { const digit = cands.values().next().value; console.log(`Classic Naked Single: ${digit} at [${r}, ${c}] (from map)`); return { r, c, digit, technique: "Naked Single" }; } } } } return null;
-    }
-    function findHiddenSingle() {
-        if (currentMode !== 'classic' || !currentCandidatesMap) return null;
-        for (let i = 0; i < 9; i++) { const rowRes = findHiddenSingleInUnit(getRowIndices(i), currentCandidatesMap); if (rowRes) return rowRes; const colRes = findHiddenSingleInUnit(getColIndices(i), currentCandidatesMap); if (colRes) return colRes; const blkRes = findHiddenSingleInUnit(getBlockIndices(i), currentCandidatesMap); if (blkRes) return blkRes; } return null;
-    }
-    function findHiddenSingleInUnit(unitIndices, candidatesMap) {
-        for (let d = 1; d <= 9; d++) { let places = []; let presentInUnit = false; for (const [r, c] of unitIndices) { if (userGrid[r]?.[c]?.value === d) { presentInUnit = true; break; } if (userGrid[r]?.[c]?.value === 0) { const cellId = getCellId(r, c); if (candidatesMap[cellId]?.has(d)) { places.push([r, c]); } } } if (!presentInUnit && places.length === 1) { const [r, c] = places[0]; console.log(`Classic Hidden Single: ${d} at [${r}, ${c}] (from map)`); return { r, c, digit: d, technique: "Hidden Single" }; } } return null;
-    }
-     function findNakedPair() {
-        if (currentMode !== 'classic' || !currentCandidatesMap) return null;
-        const units = getAllUnitsIndices();
-        for (let i = 0; i < units.length; i++) { const unit = units[i]; const cellsWith2Candidates = []; for (const [r, c] of unit) { const cellId = getCellId(r, c); if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) { const cands = currentCandidatesMap[cellId]; if (cands.size === 2) { cellsWith2Candidates.push({ r, c, cands, cellId }); } } }
-            if (cellsWith2Candidates.length >= 2) { for (let j = 0; j < cellsWith2Candidates.length; j++) { for (let k = j + 1; k < cellsWith2Candidates.length; k++) { const c1 = cellsWith2Candidates[j]; const c2 = cellsWith2Candidates[k]; if (c1.cands.size === 2 && c2.cands.size === 2) { let sameCandidates = true; for (const digit of c1.cands) if (!c2.cands.has(digit)) { sameCandidates = false; break; } if (sameCandidates) for (const digit of c2.cands) if (!c1.cands.has(digit)) { sameCandidates = false; break; } if (sameCandidates) { const pairDigits = Array.from(c1.cands); const pairCells = [c1.cellId, c2.cellId]; let eliminationNeeded = false; const pairCellsSet = new Set(pairCells); for (const [r_unit, c_unit] of unit) { const unitCellId = getCellId(r_unit, c_unit); if (unitCellId && !pairCellsSet.has(unitCellId) && userGrid[r_unit]?.[c_unit]?.value === 0) { const otherCands = currentCandidatesMap[unitCellId]; if (otherCands && (otherCands.has(pairDigits[0]) || otherCands.has(pairDigits[1]))) { eliminationNeeded = true; break; } } } if (eliminationNeeded) { console.log(`Classic Naked Pair found: Digits ${pairDigits.join(',')} in cells ${pairCells.join(',')}`); return { unitType: getUnitType(i), unitIndex: i, cells: pairCells, digits: pairDigits, technique: "Naked Pair" }; } } } } } }
-        }
-        return null;
-    }
-    function findHiddenPair() {
-         if (currentMode !== 'classic' || !currentCandidatesMap) return null;
-         const units = getAllUnitsIndices();
-         for (let i = 0; i < units.length; i++) { const unit = units[i]; const digitLocations = {}; for (const [r, c] of unit) { const cellId = getCellId(r, c); if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) { currentCandidatesMap[cellId].forEach(digit => { if (!digitLocations[digit]) digitLocations[digit] = []; digitLocations[digit].push(cellId); }); } } const digitsIn2Cells = Object.entries(digitLocations).filter(([d, locs]) => locs.length === 2).map(([d, locs]) => ({ digit: parseInt(d), locations: new Set(locs) }));
-             if (digitsIn2Cells.length >= 2) { for (let j = 0; j < digitsIn2Cells.length; j++) { for (let k = j + 1; k < digitsIn2Cells.length; k++) { const d1Info = digitsIn2Cells[j]; const d2Info = digitsIn2Cells[k]; if (d1Info.locations.size === 2 && d1Info.locations.size === d2Info.locations.size) { const loc1Arr = Array.from(d1Info.locations); const loc2Arr = Array.from(d2Info.locations); if ((loc1Arr[0] === loc2Arr[0] && loc1Arr[1] === loc2Arr[1]) || (loc1Arr[0] === loc2Arr[1] && loc1Arr[1] === loc2Arr[0])) { const pairDigits = [d1Info.digit, d2Info.digit]; const pairCells = loc1Arr; let eliminationNeeded = false; for (const cellId of pairCells) { const cellCands = currentCandidatesMap[cellId]; if (cellCands) { for(const cand of cellCands) { if (cand !== pairDigits[0] && cand !== pairDigits[1]) { eliminationNeeded = true; break; } } } if (eliminationNeeded) break; } if (eliminationNeeded) { console.log(`Classic Hidden Pair found: Digits ${pairDigits.join(',')} in cells ${pairCells.join(',')}`); return { unitType: getUnitType(i), unitIndex: i, cells: pairCells, digits: pairDigits, technique: "Hidden Pair" }; } } } } } }
-         }
-         return null;
-     }
-    function findNakedTriple() {
-        if (currentMode !== 'classic' || !currentCandidatesMap) return null;
-        const units = getAllUnitsIndices();
-        for (let i = 0; i < units.length; i++) { const unitIndices = units[i]; const candidateCells = []; for (const [r, c] of unitIndices) { const cellId = getCellId(r, c); if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) { const candidates = currentCandidatesMap[cellId]; if (candidates && (candidates.size === 2 || candidates.size === 3)) { candidateCells.push({ r, c, cands: candidates, cellId }); } } }
-            if (candidateCells.length >= 3) { for (let j = 0; j < candidateCells.length; j++) { for (let k = j + 1; k < candidateCells.length; k++) { for (let l = k + 1; l < candidateCells.length; l++) { const c1 = candidateCells[j], c2 = candidateCells[k], c3 = candidateCells[l]; const combinedCands = new Set([...c1.cands, ...c2.cands, ...c3.cands]); if (combinedCands.size === 3) { const tripleDigits = Array.from(combinedCands); const tripleCells = [c1.cellId, c2.cellId, c3.cellId]; let eliminationNeeded = false; const tripleCellsSet = new Set(tripleCells); for (const [r_unit, c_unit] of unitIndices) { const cellId_unit = getCellId(r_unit, c_unit); if (cellId_unit && !tripleCellsSet.has(cellId_unit) && userGrid[r_unit]?.[c_unit]?.value === 0) { const notes = currentCandidatesMap[cellId_unit]; if (notes && (notes.has(tripleDigits[0]) || notes.has(tripleDigits[1]) || notes.has(tripleDigits[2]))) { eliminationNeeded = true; break; } } } if (eliminationNeeded) { console.log(`Classic Naked Triple found: Digits ${tripleDigits.join(',')} in cells ${tripleCells.join(',')}`); return { unitType: getUnitType(i), unitIndex: i, cells: tripleCells, digits: tripleDigits, technique: "Naked Triple" }; } } } } } }
-        }
-        return null;
-    }
-     function findHiddenTriple() {
-        if (currentMode !== 'classic' || !currentCandidatesMap) return null;
-        const units = getAllUnitsIndices();
-        for (let i = 0; i < units.length; i++) { const unit = units[i]; const digitLocations = {}; for (const [r, c] of unit) { const cellId = getCellId(r, c); if (userGrid[r]?.[c]?.value === 0 && currentCandidatesMap[cellId]) { currentCandidatesMap[cellId].forEach(digit => { if (!digitLocations[digit]) digitLocations[digit] = []; digitLocations[digit].push(cellId); }); } } const potentialTripleDigits = Object.keys(digitLocations).map(d => parseInt(d)).filter(d => digitLocations[d].length === 2 || digitLocations[d].length === 3);
-            if (potentialTripleDigits.length >= 3) { for (let j = 0; j < potentialTripleDigits.length; j++) { for (let k = j + 1; k < potentialTripleDigits.length; k++) { for (let l = k + 1; l < potentialTripleDigits.length; l++) { const d1 = potentialTripleDigits[j]; const d2 = potentialTripleDigits[k]; const d3 = potentialTripleDigits[l]; const tripleDigits = [d1, d2, d3]; const combinedCells = new Set([...digitLocations[d1], ...digitLocations[d2], ...digitLocations[d3]]); if (combinedCells.size === 3) { const tripleCells = Array.from(combinedCells); let eliminationNeeded = false; for (const cellId of tripleCells) { const cellCands = currentCandidatesMap[cellId]; if (cellCands) { for (const cand of cellCands) { if (!tripleDigits.includes(cand)) { eliminationNeeded = true; break; } } } if (eliminationNeeded) break; } if (eliminationNeeded) { console.log(`Classic Hidden Triple found: Digits ${tripleDigits.join(',')} in cells ${tripleCells.join(',')}`); return { unitType: getUnitType(i), unitIndex: i, cells: tripleCells, digits: tripleDigits, technique: "Hidden Triple" }; } } } } } }
-        }
-        return null;
-    }
-    function findPointingCandidates() { if (currentMode !== 'classic' || !currentCandidatesMap) return null; for (let bi = 0; bi < 9; bi++) { const blockIndices = getBlockIndices(bi); const blockCellIds = blockIndices.map(([r, c]) => getCellId(r, c)).filter(id => id !== null); const blockCellIdsSet = new Set(blockCellIds); for (let d = 1; d <= 9; d++) { const possibleCellsInBlock = blockCellIds.filter(cellId => currentCandidatesMap[cellId]?.has(d)); if (possibleCellsInBlock.length >= 2) { const rowsInBlock = new Set(); const colsInBlock = new Set(); possibleCellsInBlock.forEach(cellId => { const coords = getCellCoords(cellId); if (coords) { rowsInBlock.add(coords.r); colsInBlock.add(coords.c); } }); if (rowsInBlock.size === 1) { const targetRowIndex = rowsInBlock.values().next().value; const elimInfo = tryEliminatePointing('Row', targetRowIndex, blockCellIdsSet, d, currentCandidatesMap); if (elimInfo) { console.log(`Classic Pointing (Row): Digit ${d} in block ${bi} points @ row ${targetRowIndex + 1}`); return elimInfo; } } if (colsInBlock.size === 1) { const targetColIndex = colsInBlock.values().next().value; const elimInfo = tryEliminatePointing('Col', targetColIndex, blockCellIdsSet, d, currentCandidatesMap); if (elimInfo) { console.log(`Classic Pointing (Col): Digit ${d} in block ${bi} points @ col ${targetColIndex + 1}`); return elimInfo; } } } } } return null; }
-    function tryEliminatePointing(unitType, unitIndex, blockCellIdsSet, digit, candidatesMap) { const eliminations = []; const unitIndices = unitType === 'Row' ? getRowIndices(unitIndex) : getColIndices(unitIndex); for (const [r, c] of unitIndices) { const cellId = getCellId(r, c); if (cellId && !blockCellIdsSet.has(cellId) && userGrid[r]?.[c]?.value === 0 && candidatesMap[cellId]?.has(digit)) { eliminations.push(cellId); } } return eliminations.length > 0 ? { type: 'pointing', unitType, unitIndex, digit, eliminations, technique: "Pointing Candidates" } : null; }
-    function findBoxLineReduction() { if (currentMode !== 'classic' || !currentCandidatesMap) return null; for (let i = 0; i < 9; i++) { const rowRes = checkReductionInLine('Row', i, getRowIndices(i), currentCandidatesMap); if (rowRes) return rowRes; const colRes = checkReductionInLine('Col', i, getColIndices(i), currentCandidatesMap); if (colRes) return colRes; } return null; }
-    function checkReductionInLine(lineType, lineIndex, lineIndices, candidatesMap) { for (let d = 1; d <= 9; d++) { const possibleCellsInLine = lineIndices.filter(([r, c]) => { const cellId = getCellId(r,c); return cellId && candidatesMap[cellId]?.has(d); }); if (possibleCellsInLine.length >= 2) { let targetBlockIndex = -1; let confinedToBlock = true; for (let idx = 0; idx < possibleCellsInLine.length; idx++) { const [r, c] = possibleCellsInLine[idx]; const currentBlockIndex = Math.floor(r / 3) * 3 + Math.floor(c / 3); if (idx === 0) { targetBlockIndex = currentBlockIndex; } else if (targetBlockIndex !== currentBlockIndex) { confinedToBlock = false; break; } } if (confinedToBlock && targetBlockIndex !== -1) { const elimInfo = tryEliminateBoxLine(targetBlockIndex, lineType, lineIndex, d, candidatesMap); if (elimInfo) { console.log(`Classic Box/Line Reduction: Digit ${d} in ${lineType} ${lineIndex + 1} confined to block ${targetBlockIndex}`); return elimInfo; } } } } return null; }
-     function tryEliminateBoxLine(targetBlockIndex, lineType, lineIndex, digit, candidatesMap) { const eliminations = []; const blockIndices = getBlockIndices(targetBlockIndex); for (const [r, c] of blockIndices) { const isOutsideLine = (lineType === 'Row' && r !== lineIndex) || (lineType === 'Col' && c !== lineIndex); if (isOutsideLine) { const cellId = getCellId(r, c); if (cellId && userGrid[r]?.[c]?.value === 0 && candidatesMap[cellId]?.has(digit)) { eliminations.push(cellId); } } } return eliminations.length > 0 ? { type: 'boxLine', targetBlockIndex, lineType, lineIndex, digit, eliminations, technique: "Box/Line Reduction" } : null; }
-    function findXWing() { if (currentMode !== 'classic' || !currentCandidatesMap) return null; for (let d = 1; d <= 9; d++) { const rowCandidates = []; for (let r = 0; r < 9; r++) { rowCandidates[r] = []; for (let c = 0; c < 9; c++) { const cellId = getCellId(r, c); if (cellId && currentCandidatesMap[cellId]?.has(d)) { rowCandidates[r].push(c); } } } const rowsWith2Candidates = []; for (let r = 0; r < 9; r++) { if (rowCandidates[r].length === 2) { rowsWith2Candidates.push(r); } } if (rowsWith2Candidates.length >= 2) { for (let i = 0; i < rowsWith2Candidates.length; i++) { for (let j = i + 1; j < rowsWith2Candidates.length; j++) { const r1 = rowsWith2Candidates[i]; const r2 = rowsWith2Candidates[j]; const cols1 = rowCandidates[r1]; const cols2 = rowCandidates[r2]; if ((cols1[0] === cols2[0] && cols1[1] === cols2[1]) || (cols1[0] === cols2[1] && cols1[1] === cols2[0])) { const targetCols = [cols1[0], cols1[1]]; const targetRows = [r1, r2]; const eliminations = []; for (const c of targetCols) { for (let r_elim = 0; r_elim < 9; r_elim++) { if (r_elim !== r1 && r_elim !== r2) { const cellId = getCellId(r_elim, c); if (cellId && currentCandidatesMap[cellId]?.has(d)) { eliminations.push(cellId); } } } } if (eliminations.length > 0) { console.log(`Classic X-Wing (Rows) found: Digit ${d} in rows ${r1 + 1}, ${r2 + 1} and cols ${targetCols[0] + 1}, ${targetCols[1] + 1}`); return { technique: "X-Wing (Rows)", digit: d, rows: targetRows, cols: targetCols, eliminations: eliminations }; } } } } } const colCandidates = []; for (let c = 0; c < 9; c++) { colCandidates[c] = []; for (let r = 0; r < 9; r++) { const cellId = getCellId(r, c); if (cellId && currentCandidatesMap[cellId]?.has(d)) { colCandidates[c].push(r); } } } const colsWith2Candidates = []; for (let c = 0; c < 9; c++) { if (colCandidates[c].length === 2) { colsWith2Candidates.push(c); } } if (colsWith2Candidates.length >= 2) { for (let i = 0; i < colsWith2Candidates.length; i++) { for (let j = i + 1; j < colsWith2Candidates.length; j++) { const c1 = colsWith2Candidates[i]; const c2 = colsWith2Candidates[j]; const rows1 = colCandidates[c1]; const rows2 = colCandidates[c2]; if ((rows1[0] === rows2[0] && rows1[1] === rows2[1]) || (rows1[0] === rows2[1] && rows1[1] === rows2[0])) { const targetRows = [rows1[0], rows1[1]]; const targetCols = [c1, c2]; const eliminations = []; for (const r of targetRows) { for (let c_elim = 0; c_elim < 9; c_elim++) { if (c_elim !== c1 && c_elim !== c2) { const cellId = getCellId(r, c_elim); if (cellId && currentCandidatesMap[cellId]?.has(d)) { eliminations.push(cellId); } } } } if (eliminations.length > 0) { console.log(`Classic X-Wing (Cols) found: Digit ${d} in cols ${c1 + 1}, ${c2 + 1} and rows ${targetRows[0] + 1}, ${targetRows[1] + 1}`); return { technique: "X-Wing (Cols)", digit: d, rows: targetRows, cols: targetCols, eliminations: eliminations }; } } } } } } return null; }
-    function findXYWing() { if (currentMode !== 'classic' || !currentCandidatesMap) return null; const bivalueCells = []; for (let r = 0; r < 9; r++) { for (let c = 0; c < 9; c++) { const cellId = getCellId(r, c); if (cellId && userGrid[r][c].value === 0 && currentCandidatesMap[cellId]?.size === 2) { bivalueCells.push({ id: cellId, r, c, cands: currentCandidatesMap[cellId] }); } } } for (const pivot of bivalueCells) { const pivotCands = Array.from(pivot.cands); if (pivotCands.length !== 2) continue; const [X, Y] = pivotCands; const pivotPeers = getClassicPeers(pivot.r, pivot.c); const bivaluePeers = bivalueCells.filter(cell => pivotPeers.has(cell.id)); for (let i = 0; i < bivaluePeers.length; i++) { const pincerA = bivaluePeers[i]; const pincerACands = Array.from(pincerA.cands); if (pincerACands.length !== 2) continue; let Z_A = -1; let pincerAType = ''; if (pincerACands.includes(X) && !pincerACands.includes(Y)) { Z_A = pincerACands.find(d => d !== X); pincerAType = 'XZ'; } else if (pincerACands.includes(Y) && !pincerACands.includes(X)) { Z_A = pincerACands.find(d => d !== Y); pincerAType = 'YZ'; } else { continue; } if (Z_A === undefined || Z_A === -1) continue; for (let j = i + 1; j < bivaluePeers.length; j++) { const pincerB = bivaluePeers[j]; const pincerBCands = Array.from(pincerB.cands); if (pincerBCands.length !== 2) continue; if (getClassicPeers(pincerA.r, pincerA.c).has(pincerB.id)) continue; let pincerXZ = null, pincerYZ = null; let Z = -1; if (pincerAType === 'XZ') { if (pincerBCands.includes(Y) && pincerBCands.includes(Z_A) && !pincerBCands.includes(X)) { pincerXZ = pincerA; pincerYZ = pincerB; Z = Z_A; } } else { if (pincerBCands.includes(X) && pincerBCands.includes(Z_A) && !pincerBCands.includes(Y)) { pincerXZ = pincerB; pincerYZ = pincerA; Z = Z_A; } } if (pincerXZ && pincerYZ && Z !== -1) { const pincerXZ_Peers = getClassicPeers(pincerXZ.r, pincerXZ.c); const pincerYZ_Peers = getClassicPeers(pincerYZ.r, pincerYZ.c); const commonPeers = []; pincerXZ_Peers.forEach(peerId => { if (pincerYZ_Peers.has(peerId)) commonPeers.push(peerId); }); const eliminations = []; for (const commonPeerId of commonPeers) { const coords = getCellCoords(commonPeerId); if (!coords) continue; if (commonPeerId !== pivot.id && commonPeerId !== pincerXZ.id && commonPeerId !== pincerYZ.id && userGrid[coords.r][coords.c].value === 0 && currentCandidatesMap[commonPeerId]?.has(Z)) { eliminations.push(commonPeerId); } } if (eliminations.length > 0) { console.log(`Classic XY-Wing found: Pivot ${pivot.id}(${X},${Y}), Pincer1 ${pincerXZ.id}(${X},${Z}), Pincer2 ${pincerYZ.id}(${Y},${Z}). Eliminating ${Z}.`); return { technique: "XY-Wing", pivot: pivot.id, pincer1: pincerXZ.id, pincer2: pincerYZ.id, digitX: X, digitY: Y, digitZ: Z, eliminations: eliminations }; } } } } } return null; }
-
-
-    // --- Классические Функции применения техник (apply...) ---
-
-    /** Применяет найденный Single (Classic). Возвращает true при успехе. */
-    function applyFoundSingle(foundInfo) {
-        if (!foundInfo) return false;
-        const { r, c, digit } = foundInfo;
-        if (userGrid[r]?.[c]?.value === 0) {
-            userGrid[r][c].value = digit;
-            userGrid[r][c].notes = new Set();
-            updateCandidatesOnSet(r, c, digit, userGrid);
-            renderCell(r, c);
-            const el = boardElement?.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
-            if(el){
-                 clearSelection(); selectedCell = el; selectedRow = r; selectedCol = c; el.classList.add('selected'); highlightRelatedCells(r, c);
-                 const hc=getComputedStyle(document.documentElement).getPropertyValue('--highlight-hint-flash').trim()||'#fffacd'; el.style.transition = 'background-color 0.1s ease-out'; el.style.backgroundColor = hc;
-                 setTimeout(() => { if (selectedCell === el) {el.style.backgroundColor = ''; el.style.transition = '';} }, 600);
-            }
-            return true;
+        } catch (e) {
+            console.error("Error loading game state:", e);
+            clearGameState(); // Очистить, если данные повреждены
+            return false;
         }
         return false;
     }
 
-    /** Применяет элиминацию для Naked Pair/Triple (Classic). Возвращает true, если что-то удалено. */
-    function applyNakedGroupElimination(elimInfo) {
-        if (!elimInfo || !elimInfo.digits || !elimInfo.cells || elimInfo.unitIndex === undefined) return false;
-        const { unitIndex, cells, digits, technique } = elimInfo;
-        const unitIndices = getUnitIndices(unitIndex);
-        if (!unitIndices) return false;
-        const groupCellsSet = new Set(cells);
-        let eliminatedSomething = false;
-        for (const [r, c] of unitIndices) {
-            const cellId = getCellId(r, c);
-            if (cellId && !groupCellsSet.has(cellId) && userGrid[r]?.[c]?.value === 0) {
-                const cellData = userGrid[r][c];
-                const candidatesInMap = currentCandidatesMap[cellId];
-                let cellChanged = false;
-                if (!cellData.notes) cellData.notes = new Set();
-                digits.forEach(digit => {
-                    let removedFromNotes = cellData.notes.delete(digit);
-                    let removedFromMap = candidatesInMap?.delete(digit) || false;
-                    if (removedFromNotes || removedFromMap) {
-                        eliminatedSomething = true;
-                        cellChanged = true;
-                    }
-                });
-                if (cellChanged) renderCell(r, c);
-            }
-        }
-        if (eliminatedSomething) console.log(`Classic ${technique}: Eliminated ${digits.join(',')} from peers of ${cells.join(',')}.`);
-        else console.log(`No *new* eliminations were made for Classic ${technique}.`);
-        return eliminatedSomething;
-    }
-
-     /** Применяет элиминацию для Hidden Pair/Triple (Classic). Возвращает true, если что-то удалено. */
-     function applyHiddenGroupElimination(elimInfo) {
-         if (!elimInfo || !elimInfo.digits || !elimInfo.cells) return false;
-         const { cells, digits, technique } = elimInfo;
-         let eliminatedSomething = false;
-         const digitsToKeep = new Set(digits);
-         for (const cellId of cells) {
-             const coords = getCellCoords(cellId);
-             if (coords && userGrid[coords.r]?.[coords.c]?.value === 0) {
-                 const cellData = userGrid[coords.r][coords.c];
-                 const candidatesInMap = currentCandidatesMap[cellId];
-                 let cellChanged = false;
-                 if (!cellData.notes) cellData.notes = new Set();
-                 const notesBefore = new Set(cellData.notes);
-
-                 cellData.notes.forEach(noteDigit => {
-                     if (!digitsToKeep.has(noteDigit)) {
-                         if(cellData.notes.delete(noteDigit)) { cellChanged = true; eliminatedSomething = true; console.log(`  - Removed candidate ${noteDigit} from notes of ${cellId} (Classic Hidden Group)`);}
-                     }
-                 });
-                 if (candidatesInMap) {
-                     candidatesInMap.forEach(candDigit => {
-                         if (!digitsToKeep.has(candDigit)) { if(candidatesInMap.delete(candDigit)) { cellChanged = true; eliminatedSomething = true; if (!notesBefore.has(candDigit)) { console.log(`  - Removed candidate ${candDigit} from map of ${cellId} (Classic Hidden Group)`); } } }
-                     });
-                 }
-                 if (cellChanged) renderCell(coords.r, coords.c);
-             }
-         }
-         if (!eliminatedSomething) console.log(`No *new* eliminations were made for Classic ${technique}.`);
-         return eliminatedSomething;
-     }
-
-
-    /** Применяет элиминацию для Pointing/Box-Line/X-Wing/XY-Wing (Classic). Возвращает true, если что-то удалено. */
-    function applyElimination(elimInfo) {
-        if (!elimInfo || !elimInfo.eliminations) return false;
-        const { eliminations, technique } = elimInfo;
-        const digit = elimInfo.digit || elimInfo.digitZ;
-        if (!digit) return false;
-        let eliminatedSomething = false;
-        eliminations.forEach(elimDataOrCellId => {
-            let cellId = elimDataOrCellId;
-            let elimDigit = digit;
-            if (typeof elimDataOrCellId === 'object' && elimDataOrCellId.cellId && elimDataOrCellId.digit) {
-                cellId = elimDataOrCellId.cellId;
-                elimDigit = elimDataOrCellId.digit;
-            }
-
-            const coords = getCellCoords(cellId);
-            if (coords && userGrid[coords.r]?.[coords.c]?.value === 0) {
-                const cellData = userGrid[coords.r][coords.c];
-                const candidatesInMap = currentCandidatesMap[cellId];
-                let cellChanged = false;
-                if (!cellData.notes) cellData.notes = new Set();
-                let removedFromNotes = false; let removedFromMap = false;
-                if (cellData.notes.has(elimDigit)) { if(cellData.notes.delete(elimDigit)) { removedFromNotes = true; cellChanged = true; eliminatedSomething = true; } }
-                if (candidatesInMap?.has(elimDigit)) { if (candidatesInMap.delete(elimDigit)) { removedFromMap = true; cellChanged = true; eliminatedSomething = true; } }
-                if (removedFromNotes || removedFromMap) { console.log(`  - Removed candidate ${elimDigit} from ${cellId} (Classic ${technique})`); }
-                if (cellChanged) renderCell(coords.r, coords.c);
-            }
-        });
-        if (!eliminatedSomething) console.log(`No *new* eliminations were made for Classic ${technique}.`);
-        return eliminatedSomething;
-    }
-
-
-    // --- Основные функции решателя ---
-
-    /** Выполняет ОДИН шаг логического решателя в зависимости от режима */
-    function doLogicStep() {
-        console.log(`%c--- Logic Step (${currentMode}) ---`, "color: green; font-weight: bold;");
-        if (isGameSolved()) return showSuccess("Судоку уже решено!");
-        if (isLogicSolverRunning) return;
-        clearErrors();
-
-        let appliedInfo = null;
-        let appliedSuccessfully = false; // Флаг успешного ПРИМЕНЕНИЯ
-        pushHistoryState();
-        let historyKept = true;
-
-        try {
-            if (currentMode === 'classic') {
-                 const singleTechniques = [ { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle }, { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle } ];
-                 const eliminationTechniques = [ { name: "Pointing Candidates", findFunc: findPointingCandidates, applyFunc: applyElimination }, { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyElimination }, { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination }, { name: "Hidden Pair", findFunc: findHiddenPair, applyFunc: applyHiddenGroupElimination }, { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination }, { name: "Hidden Triple", findFunc: findHiddenTriple, applyFunc: applyHiddenGroupElimination }, { name: "X-Wing", findFunc: findXWing, applyFunc: applyElimination }, { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyElimination } ];
-                 for (const tech of singleTechniques) { console.log(`Classic Searching ${tech.name}...`); const found = tech.findFunc(); if (found) { if (tech.applyFunc(found)) { appliedInfo = found; appliedSuccessfully = true; break; } } }
-                 if (!appliedInfo) { for (const tech of eliminationTechniques) { console.log(`Classic Searching ${tech.name}...`); const found = tech.findFunc(); if (found) { if (tech.applyFunc(found)) { appliedInfo = found; appliedSuccessfully = true; break; } } } }
-                 if (!appliedSuccessfully) historyKept = false;
-
-            } else if (currentMode === 'killer') {
-                if (!killerSolverLogic || !currentSolverData) { throw new Error("Killer solver logic or data not available."); }
-                 // <<< doKillerLogicStep возвращает инфо только при успехе >>>
-                 appliedInfo = killerSolverLogic.doKillerLogicStep( userGrid, currentCandidatesMap, currentSolverData, (r, c, digit) => updateCandidatesOnSet(r, c, digit, userGrid), renderCell );
-                 appliedSuccessfully = !!appliedInfo; // <<< Успех, если шаг был применен
-                 if (!appliedSuccessfully) { historyKept = false; }
-                 // <<< УБРАЛИ пересчет и рендер отсюда >>>
-
-            } else {
-                 throw new Error("Unsupported game mode for logic solver.");
-            }
-
-            // Обработка результата
-            if (appliedSuccessfully && appliedInfo) {
-                const tech = appliedInfo.technique || "Unknown";
-                let details = "Неизвестное действие";
-                 if (appliedInfo.digit && appliedInfo.r !== undefined && appliedInfo.c !== undefined) { details = `цифра ${appliedInfo.digit} в [${getCellId(appliedInfo.r, appliedInfo.c)}]`; }
-                 else if (appliedInfo.digits && appliedInfo.cells && appliedInfo.unitIndex !== undefined) { const unitType = getUnitType(appliedInfo.unitIndex); const displayIndex = getUnitIndexForDisplay(appliedInfo.unitIndex); details = `цифры ${appliedInfo.digits.join(',')} в ${unitType} ${displayIndex}`; }
-                 else if (appliedInfo.digits && appliedInfo.cells) { details = `цифры ${appliedInfo.digits.join(',')} в ячейках ${appliedInfo.cells.join(', ')} (Hidden)`;}
-                 else if (appliedInfo.digit && appliedInfo.eliminations) { details = `цифра ${appliedInfo.digit} (убраны кандидаты из ${appliedInfo.eliminations.length} ячеек)`; }
-                 else if (appliedInfo.digitZ && appliedInfo.eliminations) { details = `цифра ${appliedInfo.digitZ} (убраны кандидаты из ${appliedInfo.eliminations.length} ячеек)`; }
-
-                showSuccess(`(${currentMode}) Применено ${tech}: ${details}`);
-                renderBoard(); // <<< Перерисовываем доску ПОСЛЕ успешного шага
-                saveGameState();
-            } else {
-                 showError(`(${currentMode}) Не найдено следующих логических шагов.`);
-            }
-
-        } catch (error) {
-             console.error("Error during logic step:", error);
-             showError(`Ошибка решателя: ${error.message}`);
-             historyKept = false;
-        } finally {
-            if (!historyKept && historyStack.length > 0) {
-                 historyStack.pop();
-             }
-            updateUndoButtonState();
-            updateLogicSolverButtonsState();
-        }
-    }
-
-
-    /** Запускает логический решатель до упора */
-    function runLogicSolver() {
-        console.log(`%c--- Running Full Solver (${currentMode}) ---`, "color: green; font-weight: bold;");
-        if (isGameSolved()) { showSuccess("Судоку уже решено!"); return; }
-        if (isLogicSolverRunning) { console.log("Solver already running."); return; }
-
-        isLogicSolverRunning = true;
+    function clearGameState() {
+        localStorage.removeItem('sudokuGameState');
+        userGrid = [];
+        solutionGrid = [];
+        currentMode = 'classic';
+        selectedCell = null;
+        selectedRow = -1;
+        selectedCol = -1;
+        isNoteMode = false;
+        clearInterval(timerInterval);
+        timeElapsed = 0;
+        history = [];
+        hintsRemaining = 3;
+        killerSolverData = null;
+        currentCandidatesMap = {};
+        updateHintsDisplay();
         updateLogicSolverButtonsState();
-        statusMessageElement.textContent = "Решаю..."; statusMessageElement.className = '';
+        checkContinueButton();
+        console.log("Game state cleared.");
+    }
 
-        let stepsMade = 0;
-        let actionAppliedInLastCycle = true; // <<< Проверяем УСПЕШНОЕ ПРИМЕНЕНИЕ
-        let lastActionType = '';
-        let errorOccurred = false;
+    function startTimer() {
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            timeElapsed++;
+            const minutes = String(Math.floor(timeElapsed / 60)).padStart(2, '0');
+            const seconds = String(timeElapsed % 60).padStart(2, '0');
+            timerElement.textContent = `${minutes}:${seconds}`;
+        }, 1000);
+    }
 
-        // Определяем функцию для выполнения одного шага
-        let stepFunction;
+    function stopTimer() {
+        clearInterval(timerInterval);
+    }
+
+    function renderBoard() {
+        boardElement.innerHTML = ''; // Очистка доски
+        userGrid.forEach((row, rIdx) => {
+            row.forEach((cell, cIdx) => {
+                const cellElement = document.createElement('div');
+                cellElement.classList.add('cell');
+                cellElement.dataset.row = rIdx;
+                cellElement.dataset.col = cIdx;
+                cellElement.id = getCellId(rIdx, cIdx); // Добавляем ID для быстрой выборки
+
+                // Добавляем классы для границ блоков 3х3
+                if (rIdx % 3 === 0 && rIdx !== 0) cellElement.classList.add('border-top');
+                if (cIdx % 3 === 0 && cIdx !== 0) cellElement.classList.add('border-left');
+
+                if (cell.isGiven) {
+                    cellElement.classList.add('given');
+                    cellElement.textContent = cell.value;
+                } else if (cell.value !== 0) {
+                    cellElement.textContent = cell.value;
+                    cellElement.classList.add('user-input');
+                }
+
+                if (cell.isError) {
+                    cellElement.classList.add('error');
+                } else {
+                    cellElement.classList.remove('error');
+                }
+
+                // Отображение заметок/кандидатов
+                // Если ячейка пуста и у нас есть кандидаты, отображаем их
+                if (cell.value === 0 && currentCandidatesMap[cell.id]?.size > 0) {
+                    // Создаем контейнер для заметок
+                    const notesContainer = document.createElement('div');
+                    notesContainer.classList.add('notes-container');
+                    
+                    const notes = Array.from(currentCandidatesMap[cell.id]).sort((a,b) => a-b);
+                    notes.forEach(note => {
+                        const noteSpan = document.createElement('span');
+                        noteSpan.classList.add('note');
+                        noteSpan.textContent = note;
+                        notesContainer.appendChild(noteSpan);
+                    });
+                    cellElement.appendChild(notesContainer);
+                } else if (cell.value === 0 && cell.notes.size > 0 && !cell.isSolved) { // Для пользовательских заметок
+                    const notesContainer = document.createElement('div');
+                    notesContainer.classList.add('notes-container');
+                    Array.from(cell.notes).sort((a,b) => a-b).forEach(note => {
+                        const noteSpan = document.createElement('span');
+                        noteSpan.classList.add('note');
+                        noteSpan.textContent = note;
+                        notesContainer.appendChild(noteSpan);
+                    });
+                    cellElement.appendChild(notesContainer);
+                }
+
+
+                // Добавляем обработчик кликов
+                cellElement.addEventListener('click', () => selectCell(rIdx, cIdx));
+                boardElement.appendChild(cellElement);
+            });
+        });
+        updateSelectionHighlight(); // Обновить подсветку после перерендера
+        console.log("Board rendered.");
+    }
+
+    // Эта функция будет вызываться из killerSolverLogic для обновления одной ячейки
+    function renderCell(r, c, value = null, candidates = null) {
+        const cellElement = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
+        if (!cellElement) return;
+
+        cellElement.textContent = ''; // Очищаем содержимое
+
+        // Удаляем старые заметки
+        const existingNotesContainer = cellElement.querySelector('.notes-container');
+        if (existingNotesContainer) {
+            cellElement.removeChild(existingNotesContainer);
+        }
+
+        if (value !== null) { // Если передано значение, это решенная ячейка
+            userGrid[r][c].value = value;
+            userGrid[r][c].notes.clear(); // Очищаем пользовательские заметки
+            userGrid[r][c].isSolved = true;
+            cellElement.textContent = value;
+            cellElement.classList.remove('user-input', 'error'); // Убираем старые классы
+            if (!userGrid[r][c].isGiven) {
+                 cellElement.classList.add('user-input');
+            } else {
+                 cellElement.classList.add('given'); // Если вдруг была не Given, а стала Given (не должно быть)
+            }
+        } else if (candidates !== null) { // Если переданы кандидаты, это обновление заметок
+            userGrid[r][c].notes = candidates; // Обновляем заметки в userGrid (хотя решатель использует currentCandidatesMap)
+            // Создаем новый контейнер для заметок
+            const notesContainer = document.createElement('div');
+            notesContainer.classList.add('notes-container');
+            Array.from(candidates).sort((a,b) => a-b).forEach(note => {
+                const noteSpan = document.createElement('span');
+                noteSpan.classList.add('note');
+                noteSpan.textContent = note;
+                notesContainer.appendChild(noteSpan);
+            });
+            cellElement.appendChild(notesContainer);
+            // Убеждаемся, что значение в ячейке пусто, если это заметки
+            if (userGrid[r][c].value !== 0) {
+                 // Эта ветка должна быть недоступна, если ячейка уже заполнена
+                 console.warn(`Attempted to render candidates for a filled cell ${getCellId(r,c)}`);
+                 cellElement.textContent = userGrid[r][c].value;
+            }
+        } else { // Если ничего не передано, но ячейка пуста, перерендерим ее (это может случиться)
+            if (userGrid[r][c].value === 0) {
+                 // Использовать currentCandidatesMap, так как это данные решателя
+                 const solverCandidates = currentCandidatesMap[getCellId(r,c)];
+                 if (solverCandidates && solverCandidates.size > 0) {
+                    const notesContainer = document.createElement('div');
+                    notesContainer.classList.add('notes-container');
+                    Array.from(solverCandidates).sort((a,b) => a-b).forEach(note => {
+                        const noteSpan = document.createElement('span');
+                        noteSpan.classList.add('note');
+                        noteSpan.textContent = note;
+                        notesContainer.appendChild(noteSpan);
+                    });
+                    cellElement.appendChild(notesContainer);
+                 }
+            } else {
+                 cellElement.textContent = userGrid[r][c].value;
+            }
+        }
+        updateSelectionHighlight(); // Обновить подсветку
+    }
+
+
+    function selectCell(r, c) {
+        clearSelection();
+        selectedRow = r;
+        selectedCol = c;
+        selectedCell = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
+
+        if (selectedCell && !(currentMode === 'classic' && userGrid[r][c].isGiven)) {
+            selectedCell.classList.add('selected');
+            highlightRelatedCells(r, c);
+        } else {
+            // Если ячейка "given" в классическом режиме, то не выбираем ее
+            selectedCell = null;
+            selectedRow = -1;
+            selectedCol = -1;
+        }
+    }
+
+    function clearSelection() {
+        const allCells = boardElement.querySelectorAll('.cell');
+        allCells.forEach(cell => {
+            cell.classList.remove('selected', 'highlight', 'highlight-value');
+        });
+        selectedCell = null;
+        selectedRow = -1;
+        selectedCol = -1;
+    }
+
+    function highlightRelatedCells(r, c) {
+        const value = userGrid[r][c].value;
+        userGrid.forEach((row, rowIdx) => {
+            row.forEach((cell, colIdx) => {
+                const cellElement = boardElement.querySelector(`.cell[data-row='${rowIdx}'][data-col='${colIdx}']`);
+                if (!cellElement) return;
+
+                // Подсветка строки, столбца и блока
+                const inSameRow = (rowIdx === r);
+                const inSameCol = (colIdx === c);
+                const inSameBlock = (Math.floor(rowIdx / 3) === Math.floor(r / 3) && Math.floor(colIdx / 3) === Math.floor(c / 3));
+                const inSameCage = (currentMode === 'killer' && killerSolverData?.cellToCageMap[getCellId(r, c)] === killerSolverData?.cellToCageMap[getCellId(rowIdx, colIdx)]);
+
+
+                if (inSameRow || inSameCol || inSameBlock || inSameCage) {
+                    cellElement.classList.add('highlight');
+                }
+
+                // Подсветка ячеек с тем же значением
+                if (value !== 0 && cell.value === value) {
+                    cellElement.classList.add('highlight-value');
+                }
+            });
+        });
+    }
+
+    function handleInput(digit) {
+        if (!selectedCell || selectedRow === -1 || selectedCol === -1 || userGrid[selectedRow][selectedCol].isGiven) {
+            return;
+        }
+
+        const currentCell = userGrid[selectedRow][selectedCol];
+        const cellId = getCellId(selectedRow, selectedCol);
+
+        // Сохраняем состояние для "Отмены"
+        history.push({
+            r: selectedRow,
+            c: selectedCol,
+            oldValue: currentCell.value,
+            newNotes: new Set(currentCell.notes), // Копируем заметки
+            oldCandidates: currentCandidatesMap[cellId] ? new Set(currentCandidatesMap[cellId]) : new Set() // Копируем кандидатов решателя
+        });
+
+        if (isNoteMode) {
+            // Режим заметок: добавляем/удаляем цифру из заметок
+            if (currentCell.notes.has(digit)) {
+                currentCell.notes.delete(digit);
+            } else {
+                currentCell.notes.add(digit);
+            }
+            // Удаляем заметки из currentCandidatesMap, если пользователь сам их меняет
+            if (currentCandidatesMap[cellId]) {
+                currentCandidatesMap[cellId].delete(digit);
+            }
+            currentCell.value = 0; // Убедиться, что значение пусто
+            renderCell(selectedRow, selectedCol, null, currentCell.notes); // Обновляем UI заметок
+        } else {
+            // Режим ввода: устанавливаем значение
+            if (currentCell.value === digit) { // Если та же цифра, очищаем
+                currentCell.value = 0;
+                currentCell.notes.clear();
+                currentCell.isError = false;
+                currentCell.isSolved = false;
+            } else {
+                currentCell.value = digit;
+                currentCell.notes.clear(); // Очищаем заметки при вводе значения
+                currentCell.isSolved = true; // Отмечаем как решенную (пользователем)
+            }
+            renderCell(selectedRow, selectedCol, currentCell.value, new Set()); // Обновляем UI значения
+            updateBoardState(); // Пересчитать ошибки и кандидатов
+        }
+        undoButton.disabled = false; // Включаем кнопку отмены
+        saveGameState();
+        checkGameCompletion();
+    }
+
+    function eraseCell() {
+        if (!selectedCell || selectedRow === -1 || selectedCol === -1 || userGrid[selectedRow][selectedCol].isGiven) {
+            return;
+        }
+
+        const currentCell = userGrid[selectedRow][selectedCol];
+        const cellId = getCellId(selectedRow, selectedCol);
+
+        history.push({
+            r: selectedRow,
+            c: selectedCol,
+            oldValue: currentCell.value,
+            newNotes: new Set(currentCell.notes),
+            oldCandidates: currentCandidatesMap[cellId] ? new Set(currentCandidatesMap[cellId]) : new Set()
+        });
+
+        currentCell.value = 0;
+        currentCell.notes.clear();
+        currentCell.isError = false;
+        currentCell.isSolved = false; // Сбрасываем статус решения
+        renderCell(selectedRow, selectedCol, 0, new Set()); // Обновляем UI, устанавливая значение в 0 и очищая заметки
+        updateBoardState();
+        undoButton.disabled = false;
+        saveGameState();
+        checkGameCompletion();
+    }
+
+    function toggleNoteMode() {
+        isNoteMode = !isNoteMode;
+        noteToggleButton.textContent = isNoteMode ? '📝' : '🔢';
+        noteToggleButton.title = isNoteMode ? 'Режим заметок (ВКЛ)' : 'Режим ввода (ВЫКЛ)';
+        numpad.classList.toggle('note-mode-active', isNoteMode); // Для стилей, если нужно
+    }
+
+    function updateBoardState() {
+        let hasErrors = false;
+        userGrid.forEach((row, rIdx) => {
+            row.forEach((cell, cIdx) => {
+                cell.isError = false; // Сброс ошибок
+                const cellElement = boardElement.querySelector(`.cell[data-row='${rIdx}'][data-col='${cIdx}']`);
+                if (cellElement) cellElement.classList.remove('error'); // Сброс визуальных ошибок
+
+                if (cell.value !== 0) {
+                    // Проверка на ошибки (дубликаты)
+                    // Строка
+                    for (let col = 0; col < 9; col++) {
+                        if (col !== cIdx && userGrid[rIdx][col].value === cell.value) {
+                            cell.isError = true;
+                            hasErrors = true;
+                            break;
+                        }
+                    }
+                    if (cell.isError) {
+                        cellElement.classList.add('error');
+                        return; // Если уже есть ошибка в строке, не проверяем дальше
+                    }
+
+                    // Столбец
+                    for (let row = 0; row < 9; row++) {
+                        if (row !== rIdx && userGrid[row][cIdx].value === cell.value) {
+                            cell.isError = true;
+                            hasErrors = true;
+                            break;
+                        }
+                    }
+                    if (cell.isError) {
+                        cellElement.classList.add('error');
+                        return;
+                    }
+
+                    // Блок 3x3
+                    const startRow = Math.floor(rIdx / 3) * 3;
+                    const startCol = Math.floor(cIdx / 3) * 3;
+                    for (let row = 0; row < 3; row++) {
+                        for (let col = 0; col < 3; col++) {
+                            const currR = startRow + row;
+                            const currC = startCol + col;
+                            if ((currR !== rIdx || currC !== cIdx) && userGrid[currR][currC].value === cell.value) {
+                                cell.isError = true;
+                                hasErrors = true;
+                                break;
+                            }
+                        }
+                        if (cell.isError) break;
+                    }
+                    if (cell.isError) {
+                        cellElement.classList.add('error');
+                        return;
+                    }
+
+                    // Killer Sudoku specific: check within cage for duplicates
+                    if (currentMode === 'killer' && killerSolverData?.cellToCageMap) {
+                        const currentCellId = getCellId(rIdx, cIdx);
+                        const cageIndex = killerSolverData.cellToCageMap[currentCellId];
+                        if (cageIndex !== undefined) {
+                            const cage = killerSolverData.cageDataArray[cageIndex];
+                            if (cage) {
+                                for (const cageCellId of cage.cells) {
+                                    const coords = killerSolverLogic.getCellCoords(cageCellId);
+                                    if (coords && (coords.r !== rIdx || coords.c !== cIdx) && userGrid[coords.r][coords.c].value === cell.value) {
+                                        cell.isError = true;
+                                        hasErrors = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (cell.isError) cellElement.classList.add('error');
+                }
+            });
+        });
+
+        // Пересчет и отображение кандидатов (заметок)
+        updateAllCandidates();
+
+        if (hasErrors) {
+            statusMessageElement.textContent = "Есть ошибки на доске!";
+            statusMessageElement.classList.remove('success-msg');
+            statusMessageElement.classList.add('incorrect-msg');
+        } else {
+            statusMessageElement.textContent = ""; // Очищаем сообщение об ошибке
+            statusMessageElement.classList.remove('incorrect-msg');
+        }
+    }
+
+    // НОВАЯ ФУНКЦИЯ: Обновляет currentCandidatesMap и перерисовывает ВСЕ заметки
+    function updateAllCandidates() {
+        if (currentMode === 'killer') {
+            currentCandidatesMap = killerSolverLogic.calculateAllKillerCandidates(userGrid, killerSolverData);
+            // Перерисовать все ячейки, чтобы обновить заметки
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 9; c++) {
+                    const cellId = getCellId(r, c);
+                    // Только для пустых ячеек обновляем заметки
+                    if (userGrid[r][c].value === 0) {
+                        renderCell(r, c, null, currentCandidatesMap[cellId]);
+                    }
+                }
+            }
+            console.log("All candidates updated and rendered.");
+        } else {
+            // Для классического судоку можно тоже реализовать пересчёт,
+            // но пока оставляем пользовательские заметки
+            // currentCandidatesMap = classicSudokuLogic.calculateAllCandidates(userGrid); // Если будет classicSolverLogic
+            // renderBoard(); // Перерисовать все ячейки для классики
+        }
+    }
+
+
+    function checkGameCompletion() {
+        let allCellsFilled = true;
+        let hasErrors = false;
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                if (userGrid[r][c].value === 0) {
+                    allCellsFilled = false;
+                    break;
+                }
+                if (userGrid[r][c].isError) {
+                    hasErrors = true;
+                    break;
+                }
+            }
+            if (!allCellsFilled || hasErrors) break;
+        }
+
+        if (allCellsFilled && !hasErrors) {
+            stopTimer();
+            statusMessageElement.textContent = "Поздравляем! Вы решили судоку!";
+            statusMessageElement.classList.remove('incorrect-msg');
+            statusMessageElement.classList.add('success-msg');
+            disableInput(); // Отключить ввод после решения
+            saveGameState();
+        } else if (allCellsFilled && hasErrors) {
+            statusMessageElement.textContent = "Доска заполнена, но есть ошибки.";
+            statusMessageElement.classList.remove('success-msg');
+            statusMessageElement.classList.add('incorrect-msg');
+        } else {
+            statusMessageElement.textContent = "";
+            statusMessageElement.classList.remove('success-msg', 'incorrect-msg');
+        }
+    }
+
+    function isGameSolved() {
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                if (userGrid[r][c].value === 0 || userGrid[r][c].isError) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    function disableInput() {
+        numpad.querySelectorAll('button').forEach(button => button.disabled = true);
+        boardElement.querySelectorAll('.cell').forEach(cell => cell.style.pointerEvents = 'none');
+        hintButton.disabled = true;
+        checkButton.disabled = true;
+        undoButton.disabled = true;
+        logicNextStepButton.disabled = true;
+        logicSolveButton.disabled = true;
+    }
+
+    function enableInput() {
+        numpad.querySelectorAll('button').forEach(button => button.disabled = false);
+        boardElement.querySelectorAll('.cell').forEach(cell => cell.style.pointerEvents = 'auto');
+        hintButton.disabled = false;
+        checkButton.disabled = false;
+        // undoButton состояние зависит от истории
+        undoButton.disabled = history.length === 0;
+        updateLogicSolverButtonsState(); // Включить кнопки решателя
+    }
+
+    function updateHintsDisplay() {
+        hintButton.textContent = `💡 ${hintsRemaining}/3`;
+        hintButton.disabled = hintsRemaining <= 0;
+    }
+
+    function applyHint() {
+        if (hintsRemaining <= 0 || isGameSolved()) return;
+
+        // Найти первую пустую ячейку
+        let hintApplied = false;
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                if (userGrid[r][c].value === 0) {
+                    const correctValue = solutionGrid[r][c].value; // Получаем значение из решения
+                    handleInput(correctValue); // Используем handleInput для применения (сохранит в историю)
+                    userGrid[r][c].isGiven = true; // Помечаем как "given" (пользователь не может изменить)
+                    hintsRemaining--;
+                    hintApplied = true;
+                    statusMessageElement.textContent = ""; // Очищаем сообщение об ошибке
+                    break;
+                }
+            }
+            if (hintApplied) break;
+        }
+
+        updateHintsDisplay();
+        updateBoardState(); // Обновить состояние доски (пересчет ошибок, заметок)
+        saveGameState();
+        checkGameCompletion();
+    }
+
+
+    function undoLastMove() {
+        if (history.length === 0) return;
+
+        const lastMove = history.pop();
+        const { r, c, oldValue, newNotes, oldCandidates } = lastMove;
+        const cellId = getCellId(r, c);
+
+        userGrid[r][c].value = oldValue;
+        userGrid[r][c].notes = new Set(newNotes); // Восстанавливаем заметки
+        userGrid[r][c].isError = false; // Сбрасываем ошибку
+        userGrid[r][c].isSolved = (oldValue !== 0); // Статус решенной
+
+        // Восстанавливаем кандидатов решателя
+        currentCandidatesMap[cellId] = new Set(oldCandidates);
+
+        // Перерисовываем ячейку
+        if (userGrid[r][c].value !== 0) {
+            renderCell(r, c, userGrid[r][c].value, new Set()); // Перерисовать как заполненную
+        } else {
+            renderCell(r, c, null, userGrid[r][c].notes); // Перерисовать как пустую с заметками
+        }
+
+        updateBoardState(); // Пересчитать ошибки и кандидатов для всей доски
+        undoButton.disabled = history.length === 0;
+        saveGameState();
+        checkGameCompletion();
+    }
+
+
+    function generateNewGame(mode, difficulty) {
+        stopTimer();
+        clearGameState(); // Очистить предыдущее состояние
+
+        currentMode = mode;
+        currentDifficulty = difficulty;
+
+        // 1. Сгенерировать доску
+        let puzzleString;
+        let fullSolutionString;
+        let cages = [];
 
         if (currentMode === 'classic') {
-            stepFunction = () => {
-                 let appliedInfo = null; let appliedSuccessfully = false;
-                 const singleTechs = [ { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle }, { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle } ];
-                 const elimTechs = [ { name: "Pointing Candidates", findFunc: findPointingCandidates, applyFunc: applyElimination }, { name: "Box/Line Reduction", findFunc: findBoxLineReduction, applyFunc: applyElimination }, { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination }, { name: "Hidden Pair", findFunc: findHiddenPair, applyFunc: applyHiddenGroupElimination }, { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination }, { name: "Hidden Triple", findFunc: findHiddenTriple, applyFunc: applyHiddenGroupElimination }, { name: "X-Wing", findFunc: findXWing, applyFunc: applyElimination }, { name: "XY-Wing", findFunc: findXYWing, applyFunc: applyElimination } ];
-                 for(const tech of singleTechs) { const found = tech.findFunc(); if(found) { if(tech.applyFunc(found)) { appliedInfo = found; appliedSuccessfully = true; break; } } }
-                 if (!appliedInfo) { for(const tech of elimTechs) { const found = tech.findFunc(); if(found) { if(tech.applyFunc(found)) { appliedInfo = found; appliedSuccessfully = true; break; } } } }
-                 return { appliedInfo, appliedSuccessfully };
-             };
-        } else if (currentMode === 'killer') {
-            if (!killerSolverLogic || !currentSolverData) { showError("Ошибка: Логика или данные Killer Sudoku недоступны."); isLogicSolverRunning = false; updateLogicSolverButtonsState(); return; }
-            stepFunction = () => {
-                const appliedInfo = killerSolverLogic.doKillerLogicStep( userGrid, currentCandidatesMap, currentSolverData, updateCandidatesOnSet, renderCell );
-                return { appliedInfo, appliedSuccessfully: !!appliedInfo };
-            };
-        } else {
-            showError("Неподдерживаемый режим для решателя.");
-            isLogicSolverRunning = false; updateLogicSolverButtonsState(); return;
-        }
+            const classicPuzzle = sudoku.generate(difficulty);
+            puzzleString = classicPuzzle.puzzle;
+            fullSolutionString = classicPuzzle.solution;
+        } else { // Killer Sudoku
+            // Killer Sudoku generator is more complex.
+            // For now, we'll use a placeholder or a simple generation
+            // if killerSudoku.js doesn't have a fully robust generator.
+            // Assuming killerSudoku.generateKillerBoard exists and returns {grid, cages, solution}
+            try {
+                // You might need to adjust difficulty for killerSudoku.generate
+                const killerBoard = killerSudoku.generateKillerBoard(81, difficulty); // Example call
+                puzzleString = killerBoard.grid; // Grid string like "1.34..."
+                fullSolutionString = killerBoard.solution;
+                cages = killerBoard.cages; // Array of {cells: [], sum: N}
+                console.log("Generated Killer Sudoku with cages:", cages);
 
-        function solverCycle() {
-            // <<< Проверяем флаг УСПЕШНОГО ПРИМЕНЕНИЯ из предыдущего цикла >>>
-            if (errorOccurred || isGameSolved() || !actionAppliedInLastCycle) {
-                isLogicSolverRunning = false;
-                updateLogicSolverButtonsState();
-                saveGameState();
-                if (!errorOccurred) {
-                    if (isGameSolved()) showSuccess(`(${currentMode}) Решено за ${stepsMade} шаг(ов)!`);
-                    else showError(`(${currentMode}) Стоп после ${stepsMade} шагов. ${lastActionType ? ('Последнее: ' + lastActionType + '.') : 'Не найдено следующих действий.'}`);
-                }
-                 // <<< Финальный рендер доски >>>
-                 renderBoard();
+                // Populate killerSolverData
+                killerSolverData = {
+                    cageDataArray: cages,
+                    cellToCageMap: {} // 'A1': cageIndex
+                };
+                cages.forEach((cage, index) => {
+                    cage.cells.forEach(cellId => {
+                        killerSolverData.cellToCageMap[cellId] = index;
+                    });
+                });
+
+            } catch (e) {
+                console.error("Error generating Killer Sudoku:", e);
+                alert("Ошибка при генерации Killer Sudoku. Попробуйте еще раз.");
+                showScreen('initial-screen');
                 return;
             }
+        }
 
-            let appliedInfo = null;
-            let appliedSuccessfully = false; // <<< Флаг успеха для ТЕКУЩЕГО цикла
-            pushHistoryState();
-            let historyKept = true;
+        userGrid = Array(9).fill(null).map(() => Array(9).fill(null));
+        solutionGrid = Array(9).fill(null).map(() => Array(9).fill(null));
 
-            try {
-                const result = stepFunction(); // <<< Выполняем один шаг
-                appliedInfo = result.appliedInfo;
-                appliedSuccessfully = result.appliedSuccessfully; // <<< Получаем флаг успеха
+        // Заполняем userGrid и solutionGrid
+        let charIndex = 0;
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                const puzzleChar = puzzleString[charIndex];
+                const solutionChar = fullSolutionString[charIndex];
 
-                if (appliedSuccessfully && appliedInfo) {
-                    actionAppliedInLastCycle = true; // <<< Отмечаем, что ДЕЙСТВИЕ БЫЛО
-                    lastActionType = appliedInfo.technique || 'Unknown';
-                    stepsMade++;
-                    console.log(`(${currentMode}) Solver Step ${stepsMade}: Applied ${lastActionType}`);
-                     // <<< УБРАЛИ Пересчет кандидатов Killer ОТСЮДА >>>
-                } else {
-                    actionAppliedInLastCycle = false; // <<< Действий НЕ было
-                    historyKept = false;
-                }
-            } catch (error) {
-                console.error("Error during solver cycle:", error);
-                showError(`Ошибка решателя: ${error.message}`);
-                errorOccurred = true;
-                historyKept = false;
-                actionAppliedInLastCycle = false; // <<< Останавливаем цикл при ошибке
-            } finally {
-                 if (!historyKept && historyStack.length > 0) {
-                     historyStack.pop();
-                 }
-                 updateUndoButtonState();
-                 if (!errorOccurred) {
-                     // <<< Рендерим доску после КАЖДОГО успешного шага >>>
-                     if (appliedSuccessfully) {
-                         renderBoard();
-                     }
-                     setTimeout(solverCycle, 5); // Планируем следующий шаг
-                 } else {
-                      isLogicSolverRunning = false;
-                      updateLogicSolverButtonsState();
-                      saveGameState();
-                      renderBoard(); // Отрисовать доску после ошибки
-                 }
+                const value = (puzzleChar === sudoku.BLANK_CHAR || puzzleChar === killerSudoku.BLANK_CHAR) ? 0 : parseInt(puzzleChar);
+                const isGiven = (value !== 0);
+
+                userGrid[r][c] = {
+                    value: value,
+                    isGiven: isGiven,
+                    isError: false,
+                    notes: new Set(),
+                    isSolved: isGiven // Если задано изначально, считаем решенной
+                };
+                solutionGrid[r][c] = { value: parseInt(solutionChar) };
+                charIndex++;
             }
         }
 
-        actionAppliedInLastCycle = true; // Начинаем цикл
-        solverCycle(); // Запускаем
+        // Рендер специфичных для Killer Sudoku элементов (клеток)
+        if (currentMode === 'killer') {
+            renderKillerCages(cages);
+        }
+
+        // Инициализация заметок решателя (currentCandidatesMap)
+        updateAllCandidates(); // Это вызовет calculateAllKillerCandidates и перерендерит заметки
+
+        renderBoard(); // Рендерим доску в целом
+        startTimer();
+        updateHintsDisplay();
+        enableInput();
+        undoButton.disabled = true; // В начале игры отмена недоступна
+        showScreen('game-container');
+        saveGameState();
+        console.log(`New ${currentMode} game started with difficulty ${currentDifficulty}.`);
+    }
+
+    function renderKillerCages(cages) {
+        boardElement.querySelectorAll('.cell').forEach(cellElement => {
+            cellElement.classList.remove('cage-border-top', 'cage-border-bottom', 'cage-border-left', 'cage-border-right');
+            const cageSumDiv = cellElement.querySelector('.cage-sum');
+            if (cageSumDiv) {
+                cellElement.removeChild(cageSumDiv);
+            }
+        });
+
+        cages.forEach(cage => {
+            if (cage.cells.length === 0) return;
+
+            // Находим top-left ячейку для отображения суммы
+            let minR = 9, minC = 9;
+            cage.cells.forEach(cellId => {
+                const { r, c } = killerSolverLogic.getCellCoords(cellId);
+                if (r < minR) minR = r;
+                if (c < minC) minC = c;
+            });
+
+            // Находим элемент для top-left ячейки
+            const topLeftCellElement = boardElement.querySelector(`.cell[data-row='${minR}'][data-col='${minC}']`);
+            if (topLeftCellElement) {
+                const cageSumDiv = document.createElement('div');
+                cageSumDiv.classList.add('cage-sum');
+                cageSumDiv.textContent = cage.sum;
+                topLeftCellElement.prepend(cageSumDiv); // Вставляем в начало, чтобы не перекрывать цифру
+            }
+
+            // Добавляем границы для каждой ячейки в клетке
+            cage.cells.forEach(cellId => {
+                const { r, c } = killerSolverLogic.getCellCoords(cellId);
+                const currentCellElement = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
+                if (!currentCellElement) return;
+
+                // Проверяем соседей, чтобы определить, где нужна граница
+                const neighbors = [
+                    { dr: -1, dc: 0, class: 'cage-border-top' }, // top
+                    { dr: 1, dc: 0, class: 'cage-border-bottom' }, // bottom
+                    { dr: 0, dc: -1, class: 'cage-border-left' }, // left
+                    { dr: 0, dc: 1, class: 'cage-border-right' }  // right
+                ];
+
+                neighbors.forEach(n => {
+                    const neighborR = r + n.dr;
+                    const neighborC = c + n.dc;
+                    const neighborId = killerSolverLogic.getCellId(neighborR, neighborC);
+
+                    // Если соседа нет, или сосед не в этой же клетке, добавляем границу
+                    if (!neighborId || killerSolverData.cellToCageMap[neighborId] !== killerSolverData.cellToCageMap[cellId]) {
+                        currentCellElement.classList.add(n.class);
+                    }
+                });
+            });
+        });
+    }
+
+    function showScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(screen => {
+            screen.classList.remove('active');
+        });
+        document.getElementById(screenId).classList.add('active');
+    }
+
+    function updateLogicSolverButtonsState() {
+        const isKillerMode = currentMode === 'killer';
+        logicNextStepButton.style.display = isKillerMode ? 'block' : 'none';
+        logicSolveButton.style.display = isKillerMode ? 'block' : 'none';
+
+        if (isKillerMode && !isGameSolved()) {
+            logicNextStepButton.disabled = false;
+            logicSolveButton.disabled = false;
+        } else {
+            logicNextStepButton.disabled = true;
+            logicSolveButton.disabled = true;
+        }
     }
 
 
+    // --- Обработчики событий решателя ---
+    logicNextStepButton.addEventListener('click', () => {
+        if (currentMode !== 'killer' || isGameSolved()) return;
 
-     /** Обновляет состояние кнопок решателя */
-     function updateLogicSolverButtonsState() {
-         const enabled = !isGameSolved() && !isLogicSolverRunning;
-         let stepEnabled = false;
-         let solveEnabled = false;
+        // Пересчитать кандидатов перед поиском шага (это важно, чтобы логика работала с актуальными данными)
+        updateAllCandidates(); // Это обновит currentCandidatesMap
 
-         if (enabled) {
-              if (currentMode === 'classic') {
-                   stepEnabled = true;
-                   solveEnabled = true;
-              } else if (currentMode === 'killer') {
-                   if (currentSolverData && killerSolverLogic) {
-                        stepEnabled = true;
-                        solveEnabled = true;
-                   }
-              }
-         }
+        const stepApplied = killerSolverLogic.doKillerLogicStep(
+            userGrid,
+            currentCandidatesMap, // Передаем ссылку на текущую карту кандидатов
+            killerSolverData,
+            updateAllCandidates, // Колбэк для полного пересчёта и ререндера кандидатов
+            renderCell             // Колбэк для обновления одной ячейки (значение или заметки)
+        );
 
-         if(logicStepButton) logicStepButton.disabled = !stepEnabled;
-         if(logicSolveButton) logicSolveButton.disabled = !solveEnabled;
-     }
+        if (stepApplied) {
+            statusMessageElement.textContent = `Применена техника: ${stepApplied.appliedTechnique}!`;
+            statusMessageElement.classList.remove('incorrect-msg');
+            statusMessageElement.classList.add('success-msg');
+            // updateAllCandidates() уже вызвана внутри doKillerLogicStep
+            // renderBoard() вызывается при updateAllCandidates
+            updateBoardState(); // Обновление ошибок, т.к. значение могло быть проставлено
+            saveGameState();
+            checkGameCompletion();
+        } else {
+            statusMessageElement.textContent = "Не найдено новых логических шагов.";
+            statusMessageElement.classList.remove('success-msg');
+            statusMessageElement.classList.add('incorrect-msg');
+        }
+        updateLogicSolverButtonsState();
+    });
 
+    logicSolveButton.addEventListener('click', () => {
+        if (currentMode !== 'killer' || isGameSolved()) return;
 
-    // --- Вспомогательные для логического решателя ---
-     function getRowIndices(r){const i=[];for(let c=0;c<9;c++)i.push([r,c]);return i;}
-     function getColIndices(c){const i=[];for(let r=0;r<9;r++)i.push([r,c]);return i;}
-     function getBlockIndices(b){const sr=Math.floor(b/3)*3,sc=(b%3)*3,i=[];for(let r=0;r<3;r++)for(let c=0;c<3;c++)i.push([sr+r,sc+c]);return i;}
-     function getAllUnitsIndices() { const allUnits = []; for (let i = 0; i < 9; i++) { allUnits.push(getRowIndices(i)); allUnits.push(getColIndices(i)); allUnits.push(getBlockIndices(i)); } return allUnits; }
-     function getUnitType(globalUnitIndex) { if (globalUnitIndex < 9) return 'Row'; if (globalUnitIndex < 18) return 'Col'; return 'Block'; }
-     function getUnitIndexForDisplay(globalUnitIndex) { return (globalUnitIndex % 9) + 1; }
-     function getUnitIndices(globalUnitIndex) {
-         if (globalUnitIndex < 0 || globalUnitIndex > 26) return null;
-         const type = getUnitType(globalUnitIndex);
-         const index = globalUnitIndex % 9;
-         if (type === 'Row') return getRowIndices(index);
-         if (type === 'Col') return getColIndices(index);
-         if (type === 'Block') return getBlockIndices(index);
-         return null;
-     }
+        let stepsCount = 0;
+        let maxIterations = 200; // Ограничение на количество шагов, чтобы избежать бесконечного цикла
+        let somethingAppliedInIteration;
 
+        do {
+            somethingAppliedInIteration = false;
+            updateAllCandidates(); // Всегда пересчитываем кандидатов перед поиском нового шага
+            const stepApplied = killerSolverLogic.doKillerLogicStep(
+                userGrid,
+                currentCandidatesMap,
+                killerSolverData,
+                updateAllCandidates,
+                renderCell
+            );
 
+            if (stepApplied) {
+                stepsCount++;
+                somethingAppliedInIteration = true;
+                // updateAllCandidates() и renderCell() уже вызваны внутри doKillerLogicStep
+                updateBoardState(); // Обновление ошибок
+            }
 
-    // --- Обработчики Событий ---
-     function addEventListeners() {
-        console.log("Adding event listeners...");
-        startNewGameButton?.addEventListener('click', () => { console.log("New Game btn"); showScreen(newGameOptionsScreen); });
-        continueGameButton?.addEventListener('click', () => { console.log("Continue btn"); const s=loadGameState(); if(s){ initGame(s.mode, s.difficulty, s); } else { showError("Нет сохраненной игры."); continueGameButton.disabled = true; } });
-        gameModeSelectionContainer?.addEventListener('click', (event) => { const button = event.target.closest('button[data-mode]'); if (button && !button.classList.contains('selected')) { gameModeSelectionContainer.querySelectorAll('.selected').forEach(btn => btn.classList.remove('selected')); button.classList.add('selected'); const selectedMode = button.dataset.mode; const selectedDifficulty = difficultyButtonsContainer?.querySelector('button.selected')?.dataset.difficulty || 'medium'; console.log(`MODE selected: ${selectedMode}. Starting with diff: ${selectedDifficulty}`); initGame(selectedMode, selectedDifficulty); } });
-        difficultyButtonsContainer?.addEventListener('click', (event) => { const target = event.target.closest('button.difficulty-button'); if (target && !target.classList.contains('selected')) { difficultyButtonsContainer.querySelectorAll('.selected').forEach(btn => btn.classList.remove('selected')); target.classList.add('selected'); const selectedDifficulty = target.dataset.difficulty; const selectedMode = gameModeSelectionContainer?.querySelector('button.selected')?.dataset.mode || 'classic'; console.log(`DIFFICULTY selected: ${selectedDifficulty}. Starting with mode: ${selectedMode}`); initGame(selectedMode, selectedDifficulty); } });
-        themeToggleCheckbox?.addEventListener('change', handleThemeToggle);
-        backToInitialButton?.addEventListener('click', () => { console.log("Back btn"); showScreen(initialScreen); checkContinueButton(); });
-        boardElement?.addEventListener('click', (e)=>{ try { const target = e.target.closest('.cell'); if (!target || isShowingAd || isGameSolved()) return; const r = parseInt(target.dataset.row); const c = parseInt(target.dataset.col); if (isNaN(r) || isNaN(c)) return; if (target === selectedCell) { clearSelection(); } else { clearSelection(); selectedCell = target; selectedRow = r; selectedCol = c; if (!(currentMode === 'classic' && target.classList.contains('given'))) { selectedCell.classList.add('selected'); } highlightRelatedCells(r, c); } clearErrors(); } catch (error) { console.error("!!!! BOARD CLICK HANDLER ERROR !!!!", error); showError(`Ошибка клика: ${error.message}`); } });
-        // NUMPAD Handler
-        numpad?.addEventListener('click', (e)=>{
-            const b=e.target.closest('button');
-            if (!b || isShowingAd || isGameSolved() || !selectedCell) return;
-            if (currentMode === 'classic' && selectedCell.classList.contains('given')) return;
-            if (b.id === 'note-toggle-button') { isNoteMode = !isNoteMode; updateNoteToggleButtonState(); return; }
+            maxIterations--;
+        } while (somethingAppliedInIteration && !isGameSolved() && maxIterations > 0);
 
-            clearErrors();
-            if (!userGrid[selectedRow]?.[selectedCol]) return;
+        if (isGameSolved()) {
+            statusMessageElement.textContent = `Головоломка решена за ${stepsCount} логических шагов!`;
+            statusMessageElement.classList.remove('incorrect-msg');
+            statusMessageElement.classList.add('success-msg');
+        } else if (stepsCount > 0) {
+            statusMessageElement.textContent = `Применено ${stepsCount} логических шагов. Дальнейшие шаги не найдены или требуется более сложная логика.`;
+            statusMessageElement.classList.remove('success-msg');
+            statusMessageElement.classList.add('incorrect-msg');
+        } else {
+            statusMessageElement.textContent = "Не найдено логических шагов для применения.";
+            statusMessageElement.classList.remove('success-msg');
+            statusMessageElement.classList.add('incorrect-msg');
+        }
+        saveGameState();
+        checkGameCompletion();
+        updateLogicSolverButtonsState();
+    });
 
-            const cd = userGrid[selectedRow][selectedCol];
-            let rerenderNeeded = false;
-            let candidatesChanged = false;
-            let pushHistoryNeeded = false;
+    // --- Инициализация и слушатели событий ---
+    function addEventListeners() {
+        startNewGameButton.addEventListener('click', () => showScreen('new-game-options'));
+        continueGameButton.addEventListener('click', () => {
+            if (loadGameState()) {
+                showScreen('game-container');
+            } else {
+                alert("Не удалось загрузить сохраненную игру.");
+            }
+        });
 
-            if (b.id === 'erase-button') { pushHistoryNeeded = (cd.value !== 0) || (cd.notes?.size > 0); }
-            else if (b.dataset.num) { const n = parseInt(b.dataset.num); if (!isNoteMode) { pushHistoryNeeded = (cd.value !== n); } else { pushHistoryNeeded = (cd.value === 0); } }
+        document.querySelectorAll('#game-mode-selection .mode-button').forEach(button => {
+            button.addEventListener('click', (e) => {
+                document.querySelectorAll('#game-mode-selection .mode-button').forEach(btn => btn.classList.remove('selected'));
+                e.target.classList.add('selected');
+                currentMode = e.target.dataset.mode;
+                const killerSolverControls = document.getElementById('killer-solver-controls');
+                if (killerSolverControls) {
+                    killerSolverControls.style.display = (currentMode === 'killer' ? 'block' : 'none');
+                }
+            });
+        });
 
-            if (pushHistoryNeeded && !isGameSolved()) { pushHistoryState(); }
+        difficultyButtonsContainer.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON') {
+                document.querySelectorAll('.difficulty-selection button').forEach(btn => btn.classList.remove('selected'));
+                e.target.classList.add('selected');
+                currentDifficulty = e.target.dataset.difficulty;
+            }
+        });
 
-            if (b.id === 'erase-button') {
-                if (cd.value !== 0) { cd.value = 0; rerenderNeeded = true; candidatesChanged = true; updateCandidatesOnErase(selectedRow, selectedCol); }
-                else if (cd.notes?.size > 0) { cd.notes.clear(); rerenderNeeded = true; }
-            } else if (b.dataset.num) {
-                const n = parseInt(b.dataset.num);
-                if (isNoteMode) {
-                    if (cd.value === 0) { if (!(cd.notes instanceof Set)) cd.notes = new Set(); if (cd.notes.has(n)) cd.notes.delete(n); else cd.notes.add(n); rerenderNeeded = true; }
-                } else {
-                    if (cd.value !== n) { cd.value = n; if (cd.notes) cd.notes.clear(); rerenderNeeded = true; candidatesChanged = true; updateCandidatesOnSet(selectedRow, selectedCol, n, userGrid); }
-                    else { cd.value = 0; rerenderNeeded = true; candidatesChanged = true; updateCandidatesOnErase(selectedRow, selectedCol); }
+        document.getElementById('generate-game-button').addEventListener('click', () => {
+            // Убедитесь, что выбран режим и сложность
+            const selectedModeButton = document.querySelector('#game-mode-selection .mode-button.selected');
+            const selectedDifficultyButton = document.querySelector('.difficulty-selection button.selected');
+
+            if (!selectedModeButton || !selectedDifficultyButton) {
+                alert('Пожалуйста, выберите режим и сложность.');
+                return;
+            }
+            generateNewGame(selectedModeButton.dataset.mode, selectedDifficultyButton.dataset.difficulty);
+        });
+
+        backToInitialButton.addEventListener('click', () => showScreen('initial-screen'));
+        exitGameButton.addEventListener('click', () => {
+            // Возможно, запрос на подтверждение сохранения или очистки
+            if (confirm("Вы уверены, что хотите выйти? Прогресс будет сохранен.")) {
+                saveGameState(); // Сохраняем перед выходом
+                showScreen('initial-screen');
+                stopTimer();
+                clearSelection();
+            }
+        });
+
+        numpad.querySelectorAll('button[data-num]').forEach(button => {
+            button.addEventListener('click', (e) => handleInput(parseInt(e.target.dataset.num)));
+        });
+
+        eraseButton.addEventListener('click', eraseCell);
+        noteToggleButton.addEventListener('click', toggleNoteMode);
+        checkButton.addEventListener('click', updateBoardState); // Просто перепроверить ошибки
+        hintButton.addEventListener('click', applyHint);
+        undoButton.addEventListener('click', undoLastMove);
+
+        // Обработка клавиш клавиатуры
+        document.addEventListener('keydown', (e) => {
+            if (gameContainer.classList.contains('active') && selectedCell) {
+                const digit = parseInt(e.key);
+                if (digit >= 1 && digit <= 9) {
+                    handleInput(digit);
+                    return; // Предотвратить дальнейшую обработку, чтобы не сбрасывать выделение
+                } else if (e.key === 'Backspace' || e.key === 'Delete') {
+                    eraseCell();
+                    return;
+                } else if (e.key === ' ' || e.key === 'Enter') { // Space or Enter for toggling notes
+                    toggleNoteMode();
+                    e.preventDefault(); // Предотвратить прокрутку для пробела
+                    return;
                 }
             }
 
-            if (rerenderNeeded) {
-                renderCell(selectedRow, selectedCol);
-                 if(isNoteMode && currentMode === 'killer') {
-                     renderBoard();
-                     if(selectedRow!==-1 && selectedCol!==-1){ selectedCell = boardElement?.querySelector(`.cell[data-row='${selectedRow}'][data-col='${selectedCol}']`); if(selectedCell && !(currentMode === 'classic' && selectedCell.classList.contains('given'))){ selectedCell.classList.add('selected'); highlightRelatedCells(selectedRow, selectedCol); } else { clearSelection(); } }
-                 }
-            }
-            if ((rerenderNeeded || candidatesChanged) && !isGameSolved()){ saveGameState(); updateLogicSolverButtonsState(); }
-        });
-        checkButton?.addEventListener('click', checkGame);
-        undoButton?.addEventListener('click', handleUndo);
-        hintButton?.addEventListener('click', ()=>{if(isShowingAd||isGameSolved())return;if(currentMode==='classic'&&hintsRemaining>0)provideHintInternal();else if(currentMode==='classic')offerRewardedAdForHints();else showError("Подсказки недоступны");});
-        exitGameButton?.addEventListener('click', ()=>{console.log("Exit btn");stopTimer();showScreen(initialScreen);checkContinueButton();});
-        logicStepButton?.addEventListener('click', doLogicStep);
-        logicSolveButton?.addEventListener('click', runLogicSolver);
-        // KEYDOWN Handler
-        document.addEventListener('keydown', (e)=>{
-            if(document.activeElement.tagName==='INPUT'||isShowingAd||!gameContainer?.classList.contains('visible')||isGameSolved())return;
+            // Навигация по доске стрелками
+            if (gameContainer.classList.contains('active') && selectedRow !== -1 && selectedCol !== -1) {
+                let newR = selectedRow;
+                let newC = selectedCol;
+                let moved = false;
 
-            if(e.key.toLowerCase()==='n'||e.key.toLowerCase()==='т'){ console.log("N/T key pressed"); isNoteMode=!isNoteMode; updateNoteToggleButtonState(); e.preventDefault(); return; }
-            if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault();handleUndo();return; }
-            if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){
-                 if(!selectedCell){ const firstCell=boardElement?.querySelector(`.cell[data-row='0'][data-col='0']`); if(firstCell) firstCell.click(); else return; }
-                 else { let nr=selectedRow,nc=selectedCol; const move = (cur, d, m) => Math.min(m, Math.max(0, cur + d)); if(e.key==='ArrowUp') nr = move(selectedRow, -1, 8); if(e.key==='ArrowDown') nr = move(selectedRow, 1, 8); if(e.key==='ArrowLeft') nc = move(selectedCol, -1, 8); if(e.key==='ArrowRight') nc = move(selectedCol, 1, 8); if(nr !== selectedRow || nc !== selectedCol){ const nextEl = boardElement?.querySelector(`.cell[data-row='${nr}'][data-col='${nc}']`); if(nextEl) nextEl.click(); } }
-                 e.preventDefault(); return;
+                if (e.key === 'ArrowUp') { newR--; moved = true; }
+                else if (e.key === 'ArrowDown') { newR++; moved = true; }
+                else if (e.key === 'ArrowLeft') { newC--; moved = true; }
+                else if (e.key === 'ArrowRight') { newC++; moved = true; }
+
+                if (moved) {
+                    e.preventDefault(); // Предотвратить прокрутку страницы
+                    newR = Math.max(0, Math.min(8, newR));
+                    newC = Math.max(0, Math.min(8, newC));
+                    selectCell(newR, newC);
+                }
             }
 
-            if(!selectedCell||(currentMode==='classic'&&selectedCell.classList.contains('given')))return;
-            if (!userGrid[selectedRow]?.[selectedCol]) return;
-
-            const cd = userGrid[selectedRow][selectedCol];
-            let rerenderNeeded = false;
-            let candidatesChanged = false;
-            let pushHistoryNeeded = false;
-
-            if (e.key >= '1' && e.key <= '9') { const n = parseInt(e.key); if (!isNoteMode) pushHistoryNeeded = (cd.value !== n); else pushHistoryNeeded = (cd.value === 0); }
-            else if (e.key === 'Backspace' || e.key === 'Delete') { pushHistoryNeeded = (cd.value !== 0) || (cd.notes?.size > 0); }
-
-            if (pushHistoryNeeded && !isGameSolved()) { pushHistoryState(); }
-
-            if (e.key >= '1' && e.key <= '9') {
-                clearErrors(); const n = parseInt(e.key);
-                if (isNoteMode) { if (cd.value === 0) { if (!(cd.notes instanceof Set)) cd.notes = new Set(); if (cd.notes.has(n)) cd.notes.delete(n); else cd.notes.add(n); rerenderNeeded = true; } }
-                else { if (cd.value !== n) { cd.value = n; if (cd.notes) cd.notes.clear(); rerenderNeeded = true; candidatesChanged = true; updateCandidatesOnSet(selectedRow, selectedCol, n, userGrid); } else { cd.value = 0; rerenderNeeded = true; candidatesChanged = true; updateCandidatesOnErase(selectedRow, selectedCol); } }
-                e.preventDefault();
-            }
-            else if (e.key === 'Backspace' || e.key === 'Delete') {
-                clearErrors();
-                if (cd.value !== 0) { cd.value = 0; rerenderNeeded = true; candidatesChanged = true; updateCandidatesOnErase(selectedRow, selectedCol); }
-                else if (cd.notes?.size > 0) { cd.notes.clear(); rerenderNeeded = true; }
+            // Горячие клавиши для отмены (Ctrl+Z или Cmd+Z)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                undoLastMove();
                 e.preventDefault();
             }
 
-            if (rerenderNeeded) {
-                 renderCell(selectedRow, selectedCol);
-                 if(isNoteMode && currentMode === 'killer') {
-                     renderBoard();
-                     if(selectedRow!==-1 && selectedCol!==-1){ selectedCell = boardElement?.querySelector(`.cell[data-row='${selectedRow}'][data-col='${selectedCol}']`); if(selectedCell && !(currentMode === 'classic' && selectedCell.classList.contains('given'))){ selectedCell.classList.add('selected'); highlightRelatedCells(selectedRow, selectedCol); } else { clearSelection(); } }
-                 }
+            // Горячие клавиши для "Next Step" (Ctrl+N или Cmd+N)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+                if (currentMode === 'killer' && !logicNextStepButton.disabled) {
+                    logicNextStepButton.click();
+                }
+                e.preventDefault();
             }
-            if ((rerenderNeeded || candidatesChanged) && !isGameSolved()){ saveGameState(); updateLogicSolverButtonsState(); }
+            // Горячие клавиши для "Solve" (Ctrl+S или Cmd+S)
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                if (currentMode === 'killer' && !logicSolveButton.disabled) {
+                    logicSolveButton.click();
+                }
+                e.preventDefault();
+            }
         });
 
 
@@ -1013,8 +1031,67 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- Инициализация Приложения ---
-    function initializeApp(){console.log("Init app...");try{loadThemePreference();checkContinueButton();addEventListeners();showScreen(initialScreen);initializeAds();try{if(window.Telegram?.WebApp)Telegram.WebApp.ready();else console.log("TG SDK not found.");}catch(e){console.error("TG SDK Err:",e);}}catch(e){console.error("CRITICAL INIT ERR:",e);document.body.innerHTML=`<div style='padding:20px;color:red;'><h1>Ошибка!</h1><p>${e.message}</p><pre>${e.stack}</pre></div>`;}}
-    function checkContinueButton(){if(!continueGameButton)return;try{const s=loadGameState();continueGameButton.disabled=!s;console.log(`Continue btn state:${!continueGameButton.disabled}`);}catch(e){console.error("Err check cont:",e);continueGameButton.disabled=true;}}
+    function initializeApp(){
+        console.log("Init app...");
+        try{
+            loadThemePreference();
+            checkContinueButton();
+            addEventListeners();
+            showScreen('initial-screen'); // Показать начальный экран
+            // initializeAds(); // Если есть функция инициализации рекламы
+            try{
+                if(window.Telegram?.WebApp) Telegram.WebApp.ready();
+                else console.log("TG SDK not found.");
+            }catch(e){
+                console.error("TG SDK Err:",e);
+            }
+        }catch(e){
+            console.error("CRITICAL INIT ERR:",e);
+            document.body.innerHTML=`<div style='padding:20px;color:red;'><h1>Ошибка!</h1><p>${e.message}</p><pre>${e.stack}</pre></div>`;
+        }
+    }
+    function checkContinueButton(){
+        if(!continueGameButton) return;
+        try{
+            const s = localStorage.getItem('sudokuGameState');
+            continueGameButton.disabled = !s;
+            console.log(`Continue btn state:${!continueGameButton.disabled}`);
+        }catch(e){
+            console.error("Err check cont:",e);
+            continueGameButton.disabled = true;
+        }
+    }
+
+    // --- Theme Toggling ---
+    const themeStylesheet = document.getElementById('theme-stylesheet');
+    const THEME_KEY = 'sudokuTheme';
+
+    function loadThemePreference() {
+        const savedTheme = localStorage.getItem(THEME_KEY);
+        if (savedTheme === 'dark') {
+            document.body.classList.add('dark-theme');
+            if (themeToggleCheckbox) {
+                themeToggleCheckbox.checked = true;
+            }
+        } else {
+            document.body.classList.remove('dark-theme');
+            if (themeToggleCheckbox) {
+                themeToggleCheckbox.checked = false;
+            }
+        }
+    }
+
+    if (themeToggleCheckbox) {
+        themeToggleCheckbox.addEventListener('change', () => {
+            if (themeToggleCheckbox.checked) {
+                document.body.classList.add('dark-theme');
+                localStorage.setItem(THEME_KEY, 'dark');
+            } else {
+                document.body.classList.remove('dark-theme');
+                localStorage.setItem(THEME_KEY, 'light');
+            }
+        });
+    }
 
     // --- Запуск ---
     initializeApp();
