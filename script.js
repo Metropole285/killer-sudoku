@@ -35,6 +35,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let timerInterval; let timeElapsed = 0; let history = []; let hintsRemaining = 3;
     let killerSolverData = null; let currentCandidatesMap = {}; let logStepCounter = 1;
 
+    // Убедимся, что killerSolverLogic доступен глобально, когда этот скрипт выполняется
+    // Если killerSolverLogic.js загружается асинхронно или с defer, могут быть проблемы.
+    // Но при обычной последовательной загрузке <script> тегов, он должен быть доступен.
+
     function getCellId(r, c) { return "ABCDEFGHI"[r] + (c + 1); }
 
     function addSolverLog(message, isError = false) {
@@ -127,7 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const notesContainerElement = cellElement.querySelector('.notes-container');
         if (notesContainerElement) cellElement.removeChild(notesContainerElement);
         Array.from(cellElement.childNodes).forEach(node => {
-            if (node.nodeType === Node.TEXT_NODE || (node.classList && node.classList.contains('cell-value'))) { // cell-value не используется, но на всякий случай
+            if (node.nodeType === Node.TEXT_NODE || (node.classList && node.classList.contains('cell-value'))) {
                 cellElement.removeChild(node); } });
         if (cageSumElement && !cellElement.contains(cageSumElement)) cellElement.prepend(cageSumElement);
         cellElement.classList.remove('user-input', 'error', 'given');
@@ -159,7 +163,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const valueInSelectedCell = userGrid[r][c].value;
         const selectedCellId = getCellId(r, c);
 
-        if (currentMode === 'killer' && killerSolverData?.cellToCageMap && killerSolverData?.cageDataArray) {
+        // ИСПРАВЛЕНИЕ: Проверяем, определен ли killerSolverLogic
+        if (currentMode === 'killer' && typeof killerSolverLogic !== 'undefined' && killerSolverData?.cellToCageMap && killerSolverData?.cageDataArray) {
             const selectedCageId = killerSolverData.cellToCageMap[selectedCellId];
             if (DEBUG_HIGHLIGHT) console.log(`Highlighting Killer - Selected: ${selectedCellId}, Mapped Cage ID: ${selectedCageId}`);
 
@@ -254,8 +259,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if(!cell.isError){const sr=Math.floor(rIdx/3)*3,sc=Math.floor(cIdx/3)*3;
                         for(let br=0;br<3;br++){for(let bc=0;bc<3;bc++){const R=sr+br,C=sc+bc;
                             if((R!==rIdx||C!==cIdx)&&userGrid[R]?.[C]?.value===cell.value){cell.isError=true;break;}}if(cell.isError)break;}}
-                    // ИСПРАВЛЕНА ОПЕЧАТКА ЗДЕСЬ (удален символ & curren)
-                    if(!cell.isError && currentMode==='killer' && killerSolverData?.cellToCageMap && killerSolverData?.cageDataArray){
+                    // ИСПРАВЛЕНА ОПЕЧАТКА, как в предыдущем ответе (удален символ ¤) + проверка killerSolverLogic
+                    if(!cell.isError && currentMode==='killer' && typeof killerSolverLogic !== 'undefined' && killerSolverData?.cellToCageMap && killerSolverData?.cageDataArray){
                         const cId=getCellId(rIdx,cIdx),cageId=killerSolverData.cellToCageMap[cId];
                         const cage=killerSolverData.cageDataArray.find(cd=>cd.id===cageId);
                         if(cage){for(const cCId of cage.cells){if(cCId!==cId){const crds=killerSolverLogic.getCellCoords(cCId);
@@ -270,11 +275,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateAllCandidates() {
         if (!userGrid || userGrid.length === 0) { if (DEBUG_GENERATION) console.log("updateAllCandidates: userGrid not ready."); return;}
         if (DEBUG_GENERATION) console.log("updateAllCandidates: Starting.");
-        if (currentMode === 'killer' && killerSolverData) currentCandidatesMap = killerSolverLogic.calculateAllKillerCandidates(userGrid, killerSolverData);
-        else currentCandidatesMap = {};
+        // ИСПРАВЛЕНИЕ: Проверяем, определен ли killerSolverLogic
+        if (currentMode === 'killer' && typeof killerSolverLogic !== 'undefined' && killerSolverData) {
+            currentCandidatesMap = killerSolverLogic.calculateAllKillerCandidates(userGrid, killerSolverData);
+        } else {
+            currentCandidatesMap = {};
+        }
         for (let r=0;r<9;r++) { if(!userGrid[r])continue; for (let c=0;c<9;c++) { if(!userGrid[r][c])continue;
             const cellData = userGrid[r][c];
-            const notesToDraw = (cellData.value===0)?((currentMode==='killer'&& currentCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:cellData.notes):null;
+            const notesToDraw = (cellData.value===0)?((currentMode==='killer'&¤tCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:cellData.notes):null;
             renderCell(r,c,cellData.value,notesToDraw); } }
         if (DEBUG_GENERATION) console.log("updateAllCandidates: Finished.");
     }
@@ -315,8 +324,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const lastMove = history.pop(); const {r,c,oldValue,newNotes,oldCandidates} = lastMove;
         if (!userGrid?.[r]?.[c]) return; userGrid[r][c].value = oldValue; userGrid[r][c].notes = new Set(newNotes);
         userGrid[r][c].isError = false; userGrid[r][c].isSolved = (oldValue !== 0);
-        if (currentMode === 'killer') currentCandidatesMap[getCellId(r,c)] = new Set(oldCandidates);
-        const notesToDraw = (userGrid[r][c].value===0)?((currentMode==='killer'&& currentCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:userGrid[r][c].notes):null;
+        if (currentMode === 'killer' && typeof killerSolverLogic !== 'undefined') currentCandidatesMap[getCellId(r,c)] = new Set(oldCandidates);
+        const notesToDraw = (userGrid[r][c].value===0)?((currentMode==='killer'&¤tCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:userGrid[r][c].notes):null;
         renderCell(r,c,userGrid[r][c].value, notesToDraw);
         undoButton.disabled = history.length===0; updateBoardState(); saveGameState(); checkGameCompletion(); enableInput(); }
 
@@ -386,10 +395,17 @@ document.addEventListener('DOMContentLoaded', () => {
             cellEl.classList.remove('cage-border-top','cage-border-bottom','cage-border-left','cage-border-right');
             const sumDiv = cellEl.querySelector('.cage-sum'); if (sumDiv) cellEl.removeChild(sumDiv); });
         if (!cages || !killerSolverData?.cellToCageMap) { if (DEBUG_GENERATION) console.log("renderKillerCages: No cages or cellToCageMap, exiting."); return; }
+        
+        // ИСПРАВЛЕНИЕ: Проверяем, определен ли killerSolverLogic
+        if (typeof killerSolverLogic === 'undefined') {
+            console.error("renderKillerCages: killerSolverLogic is not defined!");
+            return;
+        }
+
         cages.forEach((cage, cageIndex) => { if (!cage.cells?.length) { if (DEBUG_GENERATION) console.warn(`Cage at index ${cageIndex} (ID: ${cage.id}) has no cells.`); return; }
             if (DEBUG_GENERATION && cageIndex < 2) console.log(`Processing cage ID ${cage.id} with sum ${cage.sum} and cells ${cage.cells.join(', ')}`);
             let topLeftId = cage.cells[0], minR=10, minC=10;
-            cage.cells.forEach(cId => { const crds = killerSolverLogic.getCellCoords(cId);
+            cage.cells.forEach(cId => { const crds = killerSolverLogic.getCellCoords(cId); // Используем killerSolverLogic.
                 if(crds) { if(crds.r<minR){minR=crds.r;minC=crds.c;topLeftId=cId;}
                            else if(crds.r===minR && crds.c<minC){minC=crds.c;topLeftId=cId;}}});
             const tlCellEl = document.getElementById(topLeftId);
@@ -400,7 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (cage.sum <= 0) console.log(`Sum for cage ID ${cage.id} is ${cage.sum}, not adding to DOM.`); }
             const cageIdent = killerSolverData.cellToCageMap[cage.cells[0]];
             if (cageIdent === undefined && DEBUG_GENERATION) console.warn(`Cage ID for first cell of cage ${cage.id} is undefined in cellToCageMap.`);
-            cage.cells.forEach(cellId => { const crds = killerSolverLogic.getCellCoords(cellId); if (!crds) return;
+            cage.cells.forEach(cellId => { const crds = killerSolverLogic.getCellCoords(cellId); if (!crds) return; // Используем killerSolverLogic.
                 const {r,c} = crds; const curEl = document.getElementById(cellId); if (!curEl) return;
                 const tN=(r>0)?getCellId(r-1,c):null; if(!tN||killerSolverData.cellToCageMap[tN]!==cageIdent) curEl.classList.add('cage-border-top');
                 const bN=(r<8)?getCellId(r+1,c):null; if(!bN||killerSolverData.cellToCageMap[bN]!==cageIdent) curEl.classList.add('cage-border-bottom');
@@ -417,7 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
         logicNextStepButton.style.display=iK?'inline-block':'none'; logicSolveButton.style.display=iK?'inline-block':'none';
         if(iK){logicNextStepButton.disabled=slv;logicSolveButton.disabled=slv;} }
 
-    if(logicNextStepButton){ logicNextStepButton.addEventListener('click',()=>{ if(currentMode!=='killer'||isGameEffectivelySolved())return;
+    if(logicNextStepButton){ logicNextStepButton.addEventListener('click',()=>{ if(currentMode!=='killer'||isGameEffectivelySolved()||typeof killerSolverLogic === 'undefined')return; // Проверка
         addSolverLog("<i>Поиск следующего шага...</i>"); updateAllCandidates();
         const stepResult = killerSolverLogic.doKillerLogicStep(userGrid,currentCandidatesMap,killerSolverData,updateAllCandidates,renderCell,addSolverLog);
         if(stepResult && stepResult.applied){
@@ -427,7 +443,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }else{ addSolverLog("Не найдено новых логических шагов для применения.", true);
             statusMessageElement.textContent="Не найдено новых логических шагов."; statusMessageElement.classList.remove('success-msg');statusMessageElement.classList.add('incorrect-msg');
         } updateLogicSolverButtonsState(); });}
-    if(logicSolveButton){ logicSolveButton.addEventListener('click',()=>{ if(currentMode!=='killer'||isGameEffectivelySolved())return;
+    if(logicSolveButton){ logicSolveButton.addEventListener('click',()=>{ if(currentMode!=='killer'||isGameEffectivelySolved()||typeof killerSolverLogic === 'undefined')return; // Проверка
         addSolverLog("--- <b>Запуск полного решения (Solve)</b> ---"); let st=0,maxIt=200,apl;
         do{apl=false; updateAllCandidates();
             const stepResult = killerSolverLogic.doKillerLogicStep(userGrid,currentCandidatesMap,killerSolverData,updateAllCandidates,renderCell,addSolverLog);
