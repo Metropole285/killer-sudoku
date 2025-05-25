@@ -94,15 +94,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 hintsRemaining = gameState.hintsRemaining;
                 killerSolverData = gameState.killerSolverData;
 
-                if (currentMode === 'killer' && killerSolverData) {
-                    updateAllCandidates();
+                createEmptyBoardCells(); // 1. Создаем пустые div'ы ячеек
+
+                if (currentMode === 'killer' && killerSolverData && killerSolverData.cageDataArray) {
+                    renderKillerCages(killerSolverData.cageDataArray); // 2. Рендерим клетки (суммы и границы)
+                    updateAllCandidates(); // 3. Это создаст currentCandidatesMap и вызовет renderCell для всех
+                } else {
+                     updateAllCandidates(); // Для классики тоже нужно (вызовет renderCell)
                 }
 
                 startTimer();
-                if (currentMode === 'killer' && killerSolverData) {
-                    renderKillerCages(killerSolverData.cageDataArray);
-                }
-                renderBoard();
                 updateHintsDisplay();
                 updateLogicSolverButtonsState();
                 undoButton.disabled = history.length === 0;
@@ -110,11 +111,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (e) {
             console.error("Error loading game state:", e);
-            clearGameState();
+            clearGameState(); // Очистить, если данные повреждены
             return false;
         }
         return false;
     }
+
 
     function clearGameState() {
         localStorage.removeItem('sudokuGameState');
@@ -131,6 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
         hintsRemaining = 3;
         killerSolverData = null;
         currentCandidatesMap = {};
+        boardElement.innerHTML = ''; // Очищаем доску от старых ячеек
         updateHintsDisplay();
         updateLogicSolverButtonsState();
         checkContinueButtonState();
@@ -155,96 +158,68 @@ document.addEventListener('DOMContentLoaded', () => {
         clearInterval(timerInterval);
     }
 
-    function renderBoard() {
+    function createEmptyBoardCells() {
         boardElement.innerHTML = '';
-        if (!userGrid || userGrid.length === 0) return;
-
-        userGrid.forEach((row, rIdx) => {
-            if (!row) return;
-            row.forEach((cellData, cIdx) => {
-                if (!cellData) return;
-
+        for (let rIdx = 0; rIdx < 9; rIdx++) {
+            for (let cIdx = 0; cIdx < 9; cIdx++) {
                 const cellElement = document.createElement('div');
                 cellElement.classList.add('cell');
                 cellElement.dataset.row = rIdx;
                 cellElement.dataset.col = cIdx;
                 cellElement.id = getCellId(rIdx, cIdx);
-
                 if (rIdx % 3 === 0 && rIdx !== 0) cellElement.classList.add('border-top');
                 if (cIdx % 3 === 0 && cIdx !== 0) cellElement.classList.add('border-left');
-
-                // Применение классов границ клеток УЖЕ ДОЛЖНО БЫТЬ сделано в renderKillerCages ПЕРЕД этим вызовом
-                // Если классы cage-border-* установлены, CSS позаботится об остальном.
-
-                if (cellData.isGiven) {
-                    cellElement.classList.add('given');
-                    cellElement.textContent = cellData.value;
-                } else if (cellData.value !== 0) {
-                    cellElement.classList.add('user-input');
-                    cellElement.textContent = cellData.value;
-                } else {
-                    const notesSource = (currentMode === 'killer' && currentCandidatesMap[cellElement.id]?.size > 0)
-                                      ? currentCandidatesMap[cellElement.id]
-                                      : cellData.notes;
-                    if (notesSource && notesSource.size > 0) {
-                        const notesContainer = document.createElement('div');
-                        notesContainer.classList.add('notes-container');
-                        Array.from(notesSource).sort((a, b) => a - b).forEach(noteNum => {
-                            const noteSpan = document.createElement('span');
-                            noteSpan.classList.add('note'); // Этот класс теперь стилизует маленькие заметки
-                            noteSpan.textContent = noteNum;
-                            notesContainer.appendChild(noteSpan);
-                        });
-                        cellElement.appendChild(notesContainer);
-                    }
-                }
-
-                if (cellData.isError) cellElement.classList.add('error');
-
-                // Суммы клеток должны быть добавлены ОДИН РАЗ функцией renderKillerCages
-                // и не должны удаляться/добавляться здесь при каждом рендере доски.
-                // Если они уже есть, этот код их не тронет.
-
                 cellElement.addEventListener('click', () => selectCell(rIdx, cIdx));
                 boardElement.appendChild(cellElement);
-            });
-        });
-        updateSelectionHighlight();
+            }
+        }
     }
 
     function renderCell(r, c, valueToSet = null, candidatesToSet = null) {
-        const cellElement = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
+        const cellElement = document.getElementById(getCellId(r,c));
         if (!cellElement || !userGrid || !userGrid[r] || !userGrid[r][c]) return;
 
         const cellData = userGrid[r][c];
         const cellId = getCellId(r, c);
 
-        const cageSumElement = cellElement.querySelector('.cage-sum'); // Сохраняем сумму
+        let cageSumElement = cellElement.querySelector('.cage-sum');
         const notesContainerElement = cellElement.querySelector('.notes-container');
         if (notesContainerElement) cellElement.removeChild(notesContainerElement);
-        cellElement.textContent = '';
-        if (cageSumElement) cellElement.prepend(cageSumElement);
+        
+        // Очищаем только текстовое содержимое, кроме .cage-sum
+        Array.from(cellElement.childNodes).forEach(node => {
+            if (node.nodeType === Node.TEXT_NODE || (node.classList && node.classList.contains('cell-value'))) {
+                cellElement.removeChild(node);
+            }
+        });
+        // Если cageSumElement был и удалился, добавляем его обратно в начало
+        if (cageSumElement && !cellElement.contains(cageSumElement)) {
+             cellElement.prepend(cageSumElement);
+        }
 
         cellElement.classList.remove('user-input', 'error', 'given');
 
         if (valueToSet !== null && valueToSet !== 0) {
             cellData.value = valueToSet;
-            cellData.isSolved = true;
-            cellElement.textContent = valueToSet;
+            cellData.isSolved = true; // Может быть решена пользователем или логикой
+            cellElement.textContent = valueToSet; // Показываем цифру
+            if (cageSumElement) cellElement.prepend(cageSumElement); // Убеждаемся, что сумма спереди
+
             if (cellData.isGiven) {
                 cellElement.classList.add('given');
             } else {
-                cellElement.classList.add('user-input');
+                cellElement.classList.add('user-input'); // Стиль для введенных/решенных цифр
             }
-        } else {
+        } else { // valueToSet === 0 или null
             cellData.value = 0;
             cellData.isSolved = false;
-            let notesSource = candidatesToSet;
-            if (!notesSource && cellData.notes.size > 0) {
+            let notesSource = candidatesToSet; // Приоритет у переданных (от решателя)
+            if (!notesSource && cellData.notes.size > 0) { // Иначе пользовательские
                  notesSource = cellData.notes;
-            } else if (!notesSource && currentCandidatesMap[cellId]?.size > 0 && currentMode === 'killer') {
+            } else if (!notesSource && currentMode === 'killer' && currentCandidatesMap[cellId]?.size > 0) { // Иначе общие от решателя
                  notesSource = currentCandidatesMap[cellId];
             }
+
             if (notesSource && notesSource.size > 0) {
                 const notesContainer = document.createElement('div');
                 notesContainer.classList.add('notes-container');
@@ -255,17 +230,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     notesContainer.appendChild(noteSpan);
                 });
                 cellElement.appendChild(notesContainer);
+                if (cageSumElement) cellElement.prepend(cageSumElement); // Сумма спереди
             }
         }
         if (cellData.isError) cellElement.classList.add('error');
-        updateSelectionHighlight();
+        // updateSelectionHighlight(); // Не здесь, а после полного обновления доски или при выборе ячейки
     }
+
 
     function selectCell(r, c) {
         clearSelectionHighlights();
         selectedRow = r;
         selectedCol = c;
-        selectedCell = boardElement.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
+        selectedCell = document.getElementById(getCellId(r,c));
         if (selectedCell) {
             selectedCell.classList.add('selected');
             highlightRelatedCells(r, c);
@@ -278,10 +255,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ИЗМЕНЕНА ЛОГИКА ПОДСВЕТКИ
     function highlightRelatedCells(r, c) {
-        if (!userGrid || userGrid.length === 0 || !userGrid[r] || !userGrid[r][c]) return;
-
+        if (!userGrid || userGrid.length === 0 || !userGrid[r]?.[c]) return;
         const valueInSelectedCell = userGrid[r][c].value;
         const selectedCellId = getCellId(r, c);
 
@@ -292,49 +267,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (cage) {
                     cage.cells.forEach(cellIdInCage => {
                         const cellElement = document.getElementById(cellIdInCage);
-                        if (cellElement && cellIdInCage !== selectedCellId) {
-                            cellElement.classList.add('highlight-cage'); // Специальный класс для подсветки клетки
+                        if (cellElement && cellIdInCage !== selectedCellId) { // Не подсвечивать саму выбранную ячейку
+                            cellElement.classList.add('highlight-cage');
                         }
                     });
                 }
             }
-        } else { // Классический режим или если клетка не найдена
+        } else { // Классический режим
             userGrid.forEach((row, rowIdx) => {
                 if (!row) return;
                 row.forEach((cellData, colIdx) => {
                     if (!cellData) return;
-                    const cellElement = boardElement.querySelector(`.cell[data-row='${rowIdx}'][data-col='${colIdx}']`);
-                    if (!cellElement || (rowIdx === r && colIdx === c)) return; // Пропускаем саму выбранную ячейку
-
+                    const cellElement = document.getElementById(getCellId(rowIdx,colIdx));
+                    if (!cellElement || (rowIdx === r && colIdx === c)) return;
                     const inSameRow = (rowIdx === r);
                     const inSameCol = (colIdx === c);
-                    const inSameBlock = (Math.floor(rowIdx / 3) === Math.floor(r / 3) && Math.floor(colIdx / 3) === Math.floor(c / 3));
-
-                    if (inSameRow || inSameCol || inSameBlock) {
-                        cellElement.classList.add('highlight'); // Обычная подсветка
-                    }
+                    const inSameBlock = (Math.floor(rowIdx/3)===Math.floor(r/3) && Math.floor(colIdx/3)===Math.floor(c/3));
+                    if (inSameRow || inSameCol || inSameBlock) cellElement.classList.add('highlight');
                 });
             });
         }
 
-        // Общая подсветка для ячеек с таким же значением (для обоих режимов)
         if (valueInSelectedCell !== 0) {
-            userGrid.forEach((row, rowIdx) => {
-                if (!row) return;
-                row.forEach((cellData, colIdx) => {
-                    if (!cellData) return;
+            userGrid.forEach((row, rowIdx) => { if (!row) return;
+                row.forEach((cellData, colIdx) => { if (!cellData) return;
                     if (cellData.value === valueInSelectedCell && !(rowIdx === r && colIdx === c)) {
-                        const cellElement = boardElement.querySelector(`.cell[data-row='${rowIdx}'][data-col='${colIdx}']`);
+                        const cellElement = document.getElementById(getCellId(rowIdx,colIdx));
                         if (cellElement) cellElement.classList.add('highlight-value');
                     }
                 });
             });
         }
     }
-
     function updateSelectionHighlight() {
         if (selectedRow !== -1 && selectedCol !== -1) {
-            // Сначала очищаем ВСЕ подсветки, КРОМЕ 'selected' на текущей ячейке
             boardElement.querySelectorAll('.cell.highlight, .cell.highlight-cage, .cell.highlight-value').forEach(c => {
                 if (!c.classList.contains('selected')) {
                     c.classList.remove('highlight', 'highlight-cage', 'highlight-value');
@@ -343,7 +309,6 @@ document.addEventListener('DOMContentLoaded', () => {
             highlightRelatedCells(selectedRow, selectedCol);
         }
     }
-
 
     function handleInput(digit) {
         if (!selectedCell || selectedRow === -1 || selectedCol === -1 || !userGrid[selectedRow]?.[selectedCol] || userGrid[selectedRow][selectedCol].isGiven) return;
@@ -392,57 +357,107 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!row) return;
             row.forEach((cell, cIdx) => {
                 if (!cell) return;
-                cell.isError = false;
-                const cellElement = boardElement.querySelector(`.cell[data-row='${rIdx}'][data-col='${cIdx}']`);
+                cell.isError = false; // Сброс перед проверкой
+                const cellElement = document.getElementById(getCellId(rIdx, cIdx));
                 if(cellElement) cellElement.classList.remove('error');
+
                 if (cell.value !== 0) {
-                    for (let col = 0; col < 9; col++) { if (col !== cIdx && userGrid[rIdx]?.[col]?.value === cell.value) { cell.isError = true; break; } }
-                    if (!cell.isError) { for (let r_c = 0; r_c < 9; r_c++) { if (r_c !== rIdx && userGrid[r_c]?.[cIdx]?.value === cell.value) { cell.isError = true; break; } } }
-                    if (!cell.isError) { const sr = Math.floor(rIdx/3)*3, sc = Math.floor(cIdx/3)*3;
-                        for (let br=0; br<3; br++) { for (let bc=0; bc<3; bc++) { const R=sr+br, C=sc+bc;
-                            if ((R!==rIdx||C!==cIdx) && userGrid[R]?.[C]?.value===cell.value) {cell.isError=true; break;} } if (cell.isError) break; } }
+                    // Проверка по строке
+                    for (let col = 0; col < 9; col++) {
+                        if (col !== cIdx && userGrid[rIdx]?.[col]?.value === cell.value) { cell.isError = true; break; }
+                    }
+                    // Проверка по столбцу
+                    if (!cell.isError) {
+                        for (let r_check = 0; r_check < 9; r_check++) {
+                            if (r_check !== rIdx && userGrid[r_check]?.[cIdx]?.value === cell.value) { cell.isError = true; break; }
+                        }
+                    }
+                    // Проверка по блоку 3x3
+                    if (!cell.isError) {
+                        const startRow = Math.floor(rIdx/3)*3, startCol = Math.floor(cIdx/3)*3;
+                        for (let br=0; br<3; br++) { for (let bc=0; bc<3; bc++) {
+                            const R=startRow+br, C=startCol+bc;
+                            if ((R!==rIdx||C!==cIdx) && userGrid[R]?.[C]?.value === cell.value) {cell.isError=true; break;}
+                        } if (cell.isError) break; }
+                    }
+                    // Проверка внутри клетки (Killer Sudoku)
                     if (!cell.isError && currentMode === 'killer' && killerSolverData?.cellToCageMap && killerSolverData?.cageDataArray) {
-                        const cId = getCellId(rIdx,cIdx), cageId = killerSolverData.cellToCageMap[cId];
+                        const currentCellId = getCellId(rIdx,cIdx);
+                        const cageId = killerSolverData.cellToCageMap[currentCellId];
                         const cage = killerSolverData.cageDataArray.find(cd => cd.id === cageId);
-                        if (cage) { for (const cCId of cage.cells) { if (cCId !== cId) { const crds = killerSolverLogic.getCellCoords(cCId);
-                            if (crds && userGrid[crds.r]?.[crds.c]?.value === cell.value) { cell.isError = true; break; } } } } }
-                    if (cell.isError) { hasAnyErrors = true; if(cellElement) cellElement.classList.add('error'); }
+                        if (cage) {
+                            for (const cageCellId of cage.cells) {
+                                if (cageCellId !== currentCellId) {
+                                    const coords = killerSolverLogic.getCellCoords(cageCellId);
+                                    if (coords && userGrid[coords.r]?.[coords.c]?.value === cell.value) { cell.isError = true; break; }
+                                }
+                            }
+                        }
+                    }
+                    if (cell.isError) {
+                        hasAnyErrors = true;
+                        if(cellElement) cellElement.classList.add('error');
+                    }
                 }
             });
         });
-        updateAllCandidates();
-        if (hasAnyErrors) { statusMessageElement.textContent = "Есть ошибки!"; statusMessageElement.classList.remove('success-msg'); statusMessageElement.classList.add('incorrect-msg');
-        } else { statusMessageElement.textContent = ""; statusMessageElement.classList.remove('incorrect-msg'); }
-        updateSelectionHighlight();
+
+        updateAllCandidates(); // Это вызовет renderCell для обновления заметок/значений
+
+        if (hasAnyErrors) {
+            statusMessageElement.textContent = "Есть ошибки на доске!";
+            statusMessageElement.classList.remove('success-msg'); statusMessageElement.classList.add('incorrect-msg');
+        } else {
+            if (!isGameEffectivelySolved()) { // Если не решена и нет ошибок
+                statusMessageElement.textContent = "";
+            } // Иначе (если решена), checkGameCompletion установит "Поздравляем"
+            statusMessageElement.classList.remove('incorrect-msg');
+        }
+        updateSelectionHighlight(); // Обновить подсветку, т.к. классы ошибок могли измениться
     }
+
 
     function updateAllCandidates() {
         if (!userGrid || userGrid.length === 0) return;
         if (currentMode === 'killer' && killerSolverData) {
             currentCandidatesMap = killerSolverLogic.calculateAllKillerCandidates(userGrid, killerSolverData);
-        } else currentCandidatesMap = {};
+        } else {
+            currentCandidatesMap = {}; // Для классики пока не используем общие кандидаты активно
+        }
+        
         for (let r = 0; r < 9; r++) { if (!userGrid[r]) continue;
             for (let c = 0; c < 9; c++) { if (!userGrid[r][c]) continue;
-                if (userGrid[r][c].value === 0) {
-                    const notes = (currentMode==='killer') ? currentCandidatesMap[getCellId(r,c)] : userGrid[r][c].notes;
-                    renderCell(r, c, 0, notes || new Set());
-                } else { const cellEl = document.getElementById(getCellId(r,c));
-                    const notesEl = cellEl?.querySelector('.notes-container'); if(notesEl) cellEl.removeChild(notesEl); }
+                const cellData = userGrid[r][c];
+                const notesToDraw = (cellData.value === 0)
+                    ? ((currentMode === 'killer' && currentCandidatesMap[getCellId(r,c)]?.size > 0)
+                        ? currentCandidatesMap[getCellId(r,c)]
+                        : cellData.notes)
+                    : null;
+                renderCell(r, c, cellData.value, notesToDraw);
             }
         }
     }
 
     function checkGameCompletion() {
         const solved = isGameEffectivelySolved();
-        if (solved) { stopTimer(); statusMessageElement.textContent = "Поздравляем! Вы решили судоку!";
+        if (solved) {
+            stopTimer(); statusMessageElement.textContent = "Поздравляем! Вы решили судоку!";
             statusMessageElement.classList.remove('incorrect-msg'); statusMessageElement.classList.add('success-msg');
             disableInput(); saveGameState();
-        } else { let allFilled = true; if (userGrid?.length > 0) { for (let r=0;r<9;r++) { if(!userGrid[r]) {allFilled=false; break;}
-            for (let c=0;c<9;c++) { if(!userGrid[r][c]||userGrid[r][c].value===0) {allFilled=false;break;}} if(!allFilled)break;}} else allFilled=false;
-            if (allFilled) { statusMessageElement.textContent = "Доска заполнена, но есть ошибки.";
+        } else {
+            let allFilled = true;
+            if (userGrid?.length > 0) { for (let r=0;r<9;r++) { if(!userGrid[r]) {allFilled=false; break;}
+                for (let c=0;c<9;c++) { if(!userGrid[r][c]||userGrid[r][c].value===0) {allFilled=false;break;}} if(!allFilled)break;}}
+            else allFilled = false;
+
+            if (allFilled) { // Все заполнено, но есть ошибки (т.к. solved === false)
+                statusMessageElement.textContent = "Доска заполнена, но есть ошибки.";
                 statusMessageElement.classList.remove('success-msg');statusMessageElement.classList.add('incorrect-msg');
-            } else if (statusMessageElement.textContent.startsWith("Поздравляем")) statusMessageElement.textContent = "";
-        } updateLogicSolverButtonsState();
+            } else if (statusMessageElement.textContent.startsWith("Поздравляем")) {
+                 statusMessageElement.textContent = ""; // Очистить, если было поздравление, а игра уже не решена
+            }
+        }
+        updateLogicSolverButtonsState();
     }
 
     function isGameEffectivelySolved() {
@@ -493,7 +508,13 @@ document.addEventListener('DOMContentLoaded', () => {
         userGrid[r][c].value = oldValue; userGrid[r][c].notes = new Set(newNotes);
         userGrid[r][c].isError = false; userGrid[r][c].isSolved = (oldValue !== 0);
         if (currentMode === 'killer') currentCandidatesMap[getCellId(r,c)] = new Set(oldCandidates);
-        renderCell(r,c,userGrid[r][c].value, userGrid[r][c].value===0?(currentCandidatesMap[getCellId(r,c)]||userGrid[r][c].notes):null);
+        // renderCell теперь правильно обработает заметки или значение
+        const notesToDraw = (userGrid[r][c].value === 0)
+            ? ((currentMode === 'killer' && currentCandidatesMap[getCellId(r,c)]?.size > 0)
+                ? currentCandidatesMap[getCellId(r,c)]
+                : userGrid[r][c].notes)
+            : null;
+        renderCell(r,c,userGrid[r][c].value, notesToDraw);
         undoButton.disabled = history.length===0; updateBoardState(); saveGameState(); checkGameCompletion(); enableInput();
     }
 
@@ -507,16 +528,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!puzzleGenData?.puzzle || !puzzleGenData?.solution) {
                 alert("Ошибка генерации судоку."); showScreen('initial-screen'); return; }
             puzzleGenData.cages = [];
-        } else {
+        } else { // Killer Sudoku
             try { puzzleGenData = killerSudoku.generate(difficulty);
                 if (!puzzleGenData?.cages || !puzzleGenData?.grid || !puzzleGenData?.solution) throw new Error("gen invalid data");
                 killerSolverData = { cageDataArray: puzzleGenData.cages, cellToCageMap: {} };
                 let tempMap = {}; puzzleGenData.cages.forEach((cg, idx) => {
-                    if (cg.id === undefined) cg.id = idx; // Простой ID, если отсутствует
+                    // ID клетки должен быть уникальным. Если генератор не присвоил, используем индекс.
+                    if (cg.id === undefined) cg.id = idx;
                     cg.cells.forEach(cid => { tempMap[cid] = cg.id; }); });
                 killerSolverData.cellToCageMap = tempMap;
             } catch (e) { console.error("Error Killer Gen:", e); alert("Ошибка генерации Killer Sudoku."); showScreen('initial-screen'); return; }
         }
+
         userGrid = Array(9).fill(null).map(() => Array(9).fill(null).map(() => ({})));
         solutionGrid = Array(9).fill(null).map(() => Array(9).fill(null).map(() => ({})));
         let charIdx = 0; const blank = currentMode==='classic'?(sudoku.BLANK_CHAR||'.'):(killerSudoku.BLANK_CHAR||'.');
@@ -526,9 +549,13 @@ document.addEventListener('DOMContentLoaded', () => {
             userGrid[r][c]={value:val,isGiven:isGiv,isError:false,notes:new Set(),isSolved:isGiv};
             solutionGrid[r][c]={value:parseInt(solChar)}; charIdx++; } }
 
-        if (currentMode === 'killer') renderKillerCages(puzzleGenData.cages); // Рендер клеток ДО доски
-        updateAllCandidates(); // Обновит currentCandidatesMap и вызовет renderCell для пустых
-        renderBoard(); // Основной рендер доски
+        createEmptyBoardCells(); // 1. Создаем пустые div'ы ячеек
+
+        if (currentMode === 'killer' && puzzleGenData.cages) {
+            renderKillerCages(puzzleGenData.cages); // 2. Рендерим клетки (суммы и границы) НА пустые ячейки
+        }
+        
+        updateAllCandidates(); // 3. Это рассчитает кандидатов и вызовет renderCell для КАЖДОЙ ячейки
 
         timeElapsed=0; startTimer(); updateHintsDisplay(); enableInput();
         history=[]; undoButton.disabled=true; statusMessageElement.textContent="";
@@ -541,15 +568,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const sumDiv = cellEl.querySelector('.cage-sum'); if (sumDiv) cellEl.removeChild(sumDiv);
         });
         if (!cages || !killerSolverData?.cellToCageMap) return;
+
         cages.forEach(cage => {
             if (!cage.cells?.length) return;
             let topLeftId = cage.cells[0], minR=10, minC=10;
             cage.cells.forEach(cId => { const crds = killerSolverLogic.getCellCoords(cId);
                 if(crds) { if(crds.r<minR){minR=crds.r;minC=crds.c;topLeftId=cId;}
                            else if(crds.r===minR && crds.c<minC){minC=crds.c;topLeftId=cId;}}});
+            
             const tlCellEl = document.getElementById(topLeftId);
-            if (tlCellEl) { const sumDiv = document.createElement('div'); sumDiv.classList.add('cage-sum');
-                sumDiv.textContent = cage.sum; tlCellEl.prepend(sumDiv); }
+            if (tlCellEl && cage.sum > 0) {
+                const sumDiv = document.createElement('div'); sumDiv.classList.add('cage-sum');
+                sumDiv.textContent = cage.sum; tlCellEl.prepend(sumDiv);
+            }
 
             const cageIdent = killerSolverData.cellToCageMap[cage.cells[0]];
             cage.cells.forEach(cellId => {
