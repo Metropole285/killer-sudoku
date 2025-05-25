@@ -315,4 +315,4 @@ const killerSolverLogic = (() => {
     }
 
     return { calculateAllKillerCandidates, doKillerLogicStep, resetPeersCache, getCellCoords, getCellId };
-});
+};
