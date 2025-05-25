@@ -349,43 +349,48 @@
             var startCell;
 
             if (unassignedCells.size <= maxCageSize * 2 && unassignedCells.size > 0 && unassignedCells.size < killerSudoku.NR_SQUARES / 2) {
-                if (DEBUG_PARTITION) console.log(`Handling ${unassignedCells.size} remaining cells.`);
-                let remainingToProcess = Array.from(unassignedCells);
+                if (DEBUG_PARTITION) console.log(`Handling ${unassignedCells.size} remaining cells (aggressive remainder processing).`);
+                let remainingToProcessAggressive = Array.from(unassignedCells);
                 
-                while (remainingToProcess.length > 0) {
-                    let currentNewCageCells = [];
-                    let currentNewCageDigits = new Set();
-                    let initialCellForNewCage = remainingToProcess[0];
+                while (remainingToProcessAggressive.length > 0) {
+                    let cellsForThisNewCage = [];
+                    let digitsInThisNewCage = new Set();
                     
-                    currentNewCageCells.push(initialCellForNewCage);
-                    currentNewCageDigits.add(solvedGridMap[initialCellForNewCage]);
+                    let initialCellForNewAggressiveCage = remainingToProcessAggressive.shift();
+                    if (!unassignedCells.has(initialCellForNewAggressiveCage)) continue;
 
-                    for (let j = 1; j < remainingToProcess.length && currentNewCageCells.length < maxCageSize; j++) {
-                        const potentialCell = remainingToProcess[j];
-                        if(!unassignedCells.has(potentialCell)) continue;
+                    cellsForThisNewCage.push(initialCellForNewAggressiveCage);
+                    digitsInThisNewCage.add(solvedGridMap[initialCellForNewAggressiveCage]);
 
-                        if (!currentNewCageDigits.has(solvedGridMap[potentialCell])) {
-                            let isNeighbor = false;
-                            for(const cInCage of currentNewCageCells){
-                                if(SQUARE_NEIGHBORS[cInCage]?.includes(potentialCell)){ isNeighbor = true; break; }
+                    let tempRemaining = [...remainingToProcessAggressive];
+                    for (const potentialCell of tempRemaining) {
+                        if (cellsForThisNewCage.length >= maxCageSize) break;
+                        if (unassignedCells.has(potentialCell) && !digitsInThisNewCage.has(solvedGridMap[potentialCell])) {
+                            let isNeighborToCurrentCage = false;
+                            for (const cellInCurrentAggressiveCage of cellsForThisNewCage) {
+                                if (SQUARE_NEIGHBORS[cellInCurrentAggressiveCage]?.includes(potentialCell)) {
+                                    isNeighborToCurrentCage = true;
+                                    break;
+                                }
                             }
-                            if(isNeighbor){
-                                currentNewCageCells.push(potentialCell);
-                                currentNewCageDigits.add(solvedGridMap[potentialCell]);
+                            if (isNeighborToCurrentCage) {
+                                cellsForThisNewCage.push(potentialCell);
+                                digitsInThisNewCage.add(solvedGridMap[potentialCell]);
+                                remainingToProcessAggressive = remainingToProcessAggressive.filter(c => c !== potentialCell);
                             }
                         }
                     }
                     
-                    if (currentNewCageCells.length >= minCageSize) {
-                        const newCage = { id: currentCageIdCounter++, cells: [...currentNewCageCells], sum: 0 };
+                    if (cellsForThisNewCage.length >= minCageSize) {
+                        const newCage = { id: currentCageIdCounter++, cells: cellsForThisNewCage, sum: 0 };
                         cages.push(newCage);
-                        if (DEBUG_PARTITION) console.log(`Formed new cage ${newCage.id} from remainder: ${newCage.cells.join(',')}`);
-                        newCageCells.forEach(c => unassignedCells.delete(c) );
+                        if (DEBUG_PARTITION) console.log(`[AGGR] Formed new cage ${newCage.id} from remainder: ${newCage.cells.join(',')}`);
+                        cellsForThisNewCage.forEach(c => unassignedCells.delete(c));
                     } else {
-                        if (DEBUG_PARTITION) console.log(`Could not form valid cage from: ${currentNewCageCells.join(',')}. These cells [${currentNewCageCells.join(',')}] will be processed as 1-cell cages if they remain.`);
-                        break; 
+                        if (DEBUG_PARTITION) console.log(`[AGGR] Could not form valid cage from: ${cellsForThisNewCage.join(',')}. These cells will be re-processed or become 1-cell cages.`);
+                         break; 
                     }
-                    remainingToProcess = Array.from(unassignedCells);
+                    remainingToProcessAggressive = Array.from(unassignedCells);
                 }
                  if (unassignedCells.size === 0) break;
                  startCell = _getRandomElementFromSet(unassignedCells);
@@ -430,19 +435,19 @@
             if (currentCageCells.length >= minCageSize) {
                 const finalCage = {id: currentCageIdCounter++, cells: currentCageCells, sum: 0};
                 cages.push(finalCage);
-                if (DEBUG_PARTITION) console.log(`Formed main cage ${finalCage.id}: ${finalCage.cells.join(',')}`);
+                if (DEBUG_PARTITION) console.log(`Formed main loop cage ${finalCage.id}: ${finalCage.cells.join(',')}`);
             } else {
                 currentCageCells.forEach(cell => unassignedCells.add(cell));
-                if (DEBUG_PARTITION) console.log(`Rolled back cage started with ${startCell}, size ${currentCageCells.length}`);
+                if (DEBUG_PARTITION) console.log(`Rolled back main loop cage started with ${startCell}, size ${currentCageCells.length}. Cells returned: ${currentCageCells.join(',')}`);
             }
         }
 
         if (unassignedCells.size > 0) {
-            if (DEBUG_PARTITION) console.warn(`Partition: ${unassignedCells.size} cells remained. Forcing 1-cell cages.`);
+            if (DEBUG_PARTITION) console.warn(`Partition FINAL: ${unassignedCells.size} cells remained. Forcing 1-cell cages.`);
             Array.from(unassignedCells).forEach(rc => {
                 const nCage = { id: currentCageIdCounter++, cells: [rc], sum: solvedGridMap[rc] };
                 cages.push(nCage);
-                 if (DEBUG_PARTITION) console.log(`Formed 1-cell cage ${nCage.id}: ${rc}`);
+                 if (DEBUG_PARTITION) console.log(`Formed final 1-cell cage ${nCage.id}: ${rc}`);
             });
             unassignedCells.clear();
         }
@@ -451,10 +456,13 @@
         const cageIds = new Set(); let duplicateIdFound = false; let missingIdFound = false;
         cages.forEach(c => {
             if(c.id === undefined) {console.error("CRITICAL: Cage created without ID!", c); missingIdFound = true;}
-            if(!missingIdFound && cageIds.has(c.id)) { console.error("CRITICAL: Duplicate Cage ID found!", c.id); duplicateIdFound = true; }
+            if(!missingIdFound && cageIds.has(c.id)) { console.error("CRITICAL: Duplicate Cage ID found!", c.id, c); duplicateIdFound = true; }
             if(!missingIdFound) cageIds.add(c.id);
         });
-        if(duplicateIdFound || missingIdFound) return false;
+        if(duplicateIdFound || missingIdFound) {
+            console.error("Partition resulted in cages with duplicate or missing IDs. Failing.");
+            return false;
+        }
 
         return cages;
     }
@@ -493,6 +501,7 @@
         if (!params) { params = {maxCage:5,minCage:2, classicGridInitialAssign: 10}; }
 
         for (let att = 1; att <= maxAttempts; ++att) {
+            if (DEBUG_PARTITION) console.log(`\n--- GENERATION ATTEMPT ${att} ---`);
             var solvedMap = _generateClassicSolutionGrid();
             if (!solvedMap) { if (DEBUG_PARTITION) console.warn(`Attempt ${att}: Failed to generate classic solution grid.`); continue; }
 
@@ -504,7 +513,7 @@
             
             const validCages = cagesFromPartition.filter(cage => cage.cells && cage.cells.length > 0 && cage.id !== undefined);
             if(validCages.length !== cagesFromPartition.length){
-                console.warn(`Attempt ${att}: Some cages were filtered out due to missing cells or ID after partition/sum calculation.`);
+                console.warn(`Attempt ${att}: Some cages were filtered out due to missing cells or ID after partition/sum calculation. Original: ${cagesFromPartition.length}, Valid: ${validCages.length}`);
             }
             if(validCages.length === 0) { if (DEBUG_PARTITION) console.warn(`Attempt ${att}: No valid cages remained after filtering.`); continue;}
 
@@ -521,17 +530,20 @@
             const finalCageIds = new Set(); let hasDuplicateId = false;
             for(const cage of puzzleData.cages){
                 if(cage.id === undefined) { console.error("CRITICAL ERROR: puzzleData cage missing ID!", cage); hasDuplicateId = true; break; }
-                if(finalCageIds.has(cage.id)){ console.error("Duplicate cage ID found in final puzzleData!", cage.id, "Attempt:", att); hasDuplicateId = true; break; }
+                if(finalCageIds.has(cage.id)){ console.error("Duplicate cage ID found in final puzzleData!", cage.id, "Attempt:", att, cage); hasDuplicateId = true; break; }
                 finalCageIds.add(cage.id);
             }
             if(hasDuplicateId) { console.warn(`Attempt ${att}: Retrying generation due to duplicate/missing cage ID issue in final data.`); continue; }
 
 
-            if (SKIP_SOLVER_VERIFICATION) { return puzzleData; }
-            else {
+            if (SKIP_SOLVER_VERIFICATION) {
+                if (DEBUG_PARTITION) console.log(`Attempt ${att}: Generation OK (Verification SKIPPED).`);
+                return puzzleData;
+            } else {
                 var solveRes = killerSudoku.solve(deepCopy(puzzleData.cages));
                 if (solveRes && typeof solveRes === 'string' && solveRes.length === killerSudoku.NR_SQUARES) {
                     if (solveRes !== puzzleData.solution) console.warn("Solver's result MISMATCHES generator's base solution grid!");
+                    if (DEBUG_PARTITION) console.log(`Attempt ${att}: Generation OK (Verified by solver).`);
                     return puzzleData;
                 } else { if (DEBUG_PARTITION) console.warn(`Attempt ${att}: Verification failed (Solver result: ${solveRes})`); }
             }
