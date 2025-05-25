@@ -90,11 +90,11 @@ const killerSolverLogic = (() => {
             for (const [r,c] of unitCoords) { const cId=getCellId(r,c); if (userGrid[r]?.[c]?.value===0 && candidatesMap[cId]?.size===2) cellsW2C.push({r,c,cands:candidatesMap[cId],cellId:cId});}
             if (cellsW2C.length >= 2) { for (let j=0; j<cellsW2C.length; j++) { for (let k=j+1; k<cellsW2C.length; k++) {
                 const c1=cellsW2C[j], c2=cellsW2C[k];
-                if (c1.cands.size===2 && Array.from(c1.cands).every(d=>c2.cands.has(d)) && Array.from(c2.cands).every(d=>c1.cands.has(d))) { // Полная проверка идентичности сетов
+                if (c1.cands.size===2 && Array.from(c1.cands).every(d=>c2.cands.has(d)) && Array.from(c2.cands).every(d=>c1.cands.has(d))) {
                     const pD=Array.from(c1.cands), pC=[c1.cellId,c2.cellId], elims=[], pS=new Set(pC);
                     for(const [r_u,c_u] of unitCoords){ const uCId=getCellId(r_u,c_u);
                         if(uCId && !pS.has(uCId) && userGrid[r_u]?.[c_u]?.value===0){ const oC=candidatesMap[uCId];
-                            if(oC){ if(pD[0] !== pD[1]) { // Убедимся что это действительно пара разных цифр
+                            if(oC){ if(pD[0] !== pD[1]) {
                                 if(oC.has(pD[0]))elims.push({cellId:uCId,digit:pD[0]}); if(oC.has(pD[1]))elims.push({cellId:uCId,digit:pD[1]});}
                             }}}
                     if(elims.length>0){ const uN=`${getUnitType(i)} ${getUnitIndexForDisplay(i)}`; const desc = `Явная Пара: цифры <b>${pD.join(',')}</b> в ячейках <b>${pC.join(',')}</b> в ${uN}. Можно исключить из других ячеек этого юнита.`;
@@ -230,10 +230,10 @@ const killerSolverLogic = (() => {
                 if(cellV!==0){if(digitsPlaced.has(cellV)){cageValid=false;break;}digitsPlaced.add(cellV);currentSumPlaced+=cellV;}
                 else{const cands=candidatesMap[cellId];if(!cands||cands.size===0){cageValid=false;break;}emptyCellsData.push({id:cellId,cands:new Set(cands)});}}
             if(!cageValid)continue; const targetRemSum=cage.sum-currentSumPlaced,cntEmpty=emptyCellsData.length;
-            if(cntEmpty===0){if(targetRemSum!==0) logCallback(`<i>Клетка ${cage.id} заполнена, но сумма ${currentSumPlaced} != ${cage.sum} (ожидалось ${targetRemSum}=0)</i>`, true); continue;}
-            if(targetRemSum<=0&&cntEmpty>0){logCallback(`<i>Клетка ${cage.id}: остаток суммы ${targetRemSum} не положителен для ${cntEmpty} пустых ячеек.</i>`,true);continue;}
+            if(cntEmpty===0){if(targetRemSum!==0) logCallback(`<i>Клетка ${cage.id||'(без ID)'} заполнена, но сумма ${currentSumPlaced} != ${cage.sum} (ожидалось ${targetRemSum}=0)</i>`, true); continue;}
+            if(targetRemSum<=0&&cntEmpty>0){logCallback(`<i>Клетка ${cage.id||'(без ID)'}: остаток суммы ${targetRemSum} не положителен для ${cntEmpty} пустых ячеек.</i>`,true);continue;}
             const validCombos=[]; findSumCombinationsRecursive(emptyCellsData,0,targetRemSum,[],digitsPlaced,validCombos);
-            if(validCombos.length===0&&cntEmpty>0){logCallback(`<i>Клетка ${cage.id}: нет валидных комбинаций для суммы ${targetRemSum} в ${cntEmpty} ячейках. Кандидаты: ${emptyCellsData.map(ecd => `${ecd.id}:[${Array.from(ecd.cands).join('')}]`).join('; ')}</i>`,true);continue;}
+            if(validCombos.length===0&&cntEmpty>0){logCallback(`<i>Клетка ${cage.id||'(без ID)'}: нет валидных комбинаций для суммы ${targetRemSum} в ${cntEmpty} ячейках. Кандидаты: ${emptyCellsData.map(ecd => `${ecd.id}:[${Array.from(ecd.cands).join('')}]`).join('; ')}</i>`,true);continue;}
             const candsUsed=new Map(); emptyCellsData.forEach(cell=>candsUsed.set(cell.id,new Set()));
             validCombos.forEach(combo=>combo.forEach((digit,idx)=>{const cId=emptyCellsData[idx].id;candsUsed.get(cId)?.add(digit);}));
             emptyCellsData.forEach(cellD=>{const origCands=candidatesMap[cellD.id],usedCands=candsUsed.get(cellD.id);
@@ -263,7 +263,7 @@ const killerSolverLogic = (() => {
         logCallback(`<b>Применение исключений</b> для "${foundInfo.technique || 'Неизвестная техника'}" (Найдено ${elims.length} кандидатов на исключение):`);
         let actualElimsMade = 0; let details = "";
         for (const elim of elims) { const {cellId,digit}=elim; const crds=getCellCoords(cellId);
-            if (crds && userGrid[crds.r][crds.c].value===0 && currentCandidatesMap[cellId]?.has(digit)) {
+            if (crds && userGrid[crds.r][crds.c].value===0 && candidatesMap[cellId]?.has(digit)) {
                 currentCandidatesMap[cellId].delete(digit); appliedAny=true; actualElimsMade++;
                 details += `<li>Исключена <b>${digit}</b> из <b>${cellId}</b> (осталось: ${Array.from(currentCandidatesMap[cellId]).join(',')||'<i>пусто</i>'})</li>`;
                 renderCellCallback(crds.r,crds.c,null,currentCandidatesMap[cellId]); } }
@@ -281,14 +281,14 @@ const killerSolverLogic = (() => {
             for (const cage of solverData.cageDataArray) { if (cage.cells.length === 1) {
                 const cId = cage.cells[0], crds = getCellCoords(cId);
                 if (crds && userGrid[crds.r][crds.c].value === 0) { const expD = cage.sum;
-                    if (expD >= 1 && expD <= 9 && (currentCandidatesMap[cId]?.has(expD) || currentCandidatesMap[cId] === undefined )) {
+                    if (expD >= 1 && expD <= 9 && (currentCandidatesMap[cId]?.has(expD) || currentCandidatesMap[cId] === undefined )) { // Позволяем, если кандидаты еще не посчитаны
                         const desc = `Правило одной клетки: сумма ${cage.sum} для клетки ${cage.id||'(без ID)'} (ячейка ${cId}) означает цифру <b>${expD}</b>.`;
                         logCallback(desc); let fnd={r:crds.r,c:crds.c,cellId:cId,digit:expD,technique:"Single Cage Rule",description:desc};
                         if(applyFoundSingle(fnd,userGrid,currentCandidatesMap,renderCellCallback,logCallback)){
                             updateCandidatesCallback(); return {...fnd, applied:true, appliedTechnique:"Single Cage Rule"}; }
-                        sCRApplied = true; } } } }
+                        sCRApplied = true; } } } } // Закрытие if (expD...) и if (crds...)
             if(!sCRApplied) logCallback("Правило одной клетки не найдено/не применимо.");
-        }
+        } // Закрытие if (solverData...)
 
         const techniques = [
             { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle },
@@ -304,15 +304,21 @@ const killerSolverLogic = (() => {
 
         for (const tech of techniques) {
             let foundInfo = tech.findFunc(userGrid, currentCandidatesMap, solverData, logCallback);
-            if (foundInfo) { // findFunc уже вызвала logCallback с описанием находки
+            if (foundInfo) {
                 if (tech.applyFunc(foundInfo, userGrid, currentCandidatesMap, renderCellCallback, logCallback)) {
-                    updateCandidatesCallback(); return { ...foundInfo, applied: true, appliedTechnique: tech.name };
-                } else { logCallback(`Техника ${tech.name} найдена, но не привела к изменениям.`); }
-            }
+                    updateCandidatesCallback(); return { ...foundInfo, applied: true, appliedTechnique: tech.name }; } }
         }
         logCallback("<b>Не найдено техник для применения на этом шаге.</b>", false);
         return { applied: false };
-    }
+    } // Закрытие doKillerLogicStep
 
-    return { calculateAllKillerCandidates, doKillerLogicStep, resetPeersCache, getCellCoords, getCellId };
-};
+    return {
+        calculateKillerCandidates,
+        calculateAllKillerCandidates,
+        doKillerLogicStep,
+        resetPeersCache,
+        getCellCoords, 
+        getCellId,
+    };
+
+})(); // Закрытие IIFE
