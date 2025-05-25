@@ -25,12 +25,12 @@
 
     // --- Configuration ---
     var SKIP_SOLVER_VERIFICATION = true;
-    var DEBUG_PARTITION = false; // Флаг для отладки разбиения
+    var DEBUG_PARTITION = true; // УСТАНОВЛЕН ДЛЯ ОТЛАДКИ
 
     // --- Bitset Constants and Helpers ---
     var ALL_CANDIDATES = 511; killerSudoku.ALL_CANDIDATES_MASK = ALL_CANDIDATES;
     var DIGIT_MASKS = [0, 1, 2, 4, 8, 16, 32, 64, 128, 256]; killerSudoku.DIGIT_MASKS = DIGIT_MASKS;
-    function getDigitMask(d){return DIGIT_MASKS[d]||0;}
+    // function getDigitMask(d){return DIGIT_MASKS[d]||0;} // Не используется напрямую в этом файле в текущей версии
     function hasCandidate(b,d){return(b&DIGIT_MASKS[d])!==0;}
     function countCandidates(b){var c=0;while(b>0){b&=b-1;c++;}return c;}
     function getCandidatesArray(b){var a=[];for(let d=1;d<=9;++d)if(hasCandidate(b,d))a.push(d);return a;}
@@ -144,9 +144,9 @@
             if (placesForDigitInUnit.length === 1) { const targetCell = placesForDigitInUnit[0];
                 if (candidatesMap[targetCell] !== digitMask) { if (!assignValue(candidatesMap, solverData, targetCell, digitToEliminate, indent + "  ")) return false; } }
         }
-        const cageIdFromMap = solverData.cellToCageMap[cellId]; // Используем cageId из карты
+        const cageIdFromMap = solverData.cellToCageMap[cellId];
         if (cageIdFromMap !== undefined) {
-            const cage = solverData.cageDataArray.find(c => c.id === cageIdFromMap); // Ищем по ID
+            const cage = solverData.cageDataArray.find(c => c.id === cageIdFromMap);
             if (cage) { let placesForDigitInCage = [];
                 for (const cellInCage of cage.cells) { if (countCandidates(candidatesMap[cellInCage]) > 1 && (candidatesMap[cellInCage] & digitMask) !== 0) placesForDigitInCage.push(cellInCage); }
                 if (placesForDigitInCage.length === 1) { const targetCellInCage = placesForDigitInCage[0];
@@ -163,32 +163,11 @@
         const cage = solverData.cageDataArray.find(c => c.id === cageId);
         if (!cage) { console.error("Cage not found in updateCageStateOnAssign for ID:", cageId); return false;}
         const digitMask = DIGIT_MASKS[assignedDigit];
-        if ((cage.currentValueMask & digitMask) === 0) { // Только если цифра еще не была учтена в currentValueMask
+        if ((cage.currentValueMask & digitMask) === 0) {
             cage.remainingSum -= assignedDigit;
-            // Уменьшаем remainingCellsCount только если ячейка действительно была "пустой" для клетки
-            // (это сложно отследить здесь без доп. состояния, currentValueMask должен быть главным)
-            // Если эта функция вызывается только после того, как ячейка стала синглом, то это корректно.
-            // Если она вызывается и для уже установленных значений (например, при инициализации),
-            // то remainingCellsCount может быть уменьшен неправильно.
-            // Предполагаем, что assignValue и eliminateCandidate правильно управляют этим.
-            let cellWasEffectivelyEmptyForCage = true; // Упрощенное предположение
-            // Более точная проверка потребовала бы знать состояние до вызова assignValue.
-            // Но если currentValueMask не содержал этот бит, значит цифра новая для клетки.
-
-            if(cellWasEffectivelyEmptyForCage) { // Эту логику нужно тщательно проверить
-                 // Если мы строго следуем правилу, что currentValueMask обновляется *только* при первом
-                 // "решении" цифры в клетке, то и remainingCellsCount уменьшается только тогда.
-                 // Проблема может быть, если assignValue вызывается на уже "решенной" для клетки ячейке,
-                 // но с другими кандидатами.
-                 // Для простоты: если мы добавляем в currentValueMask, мы уменьшаем счетчик.
-                 // Это может привести к ошибке, если assignValue вызван для ячейки, которая уже "решена"
-                 // в рамках клетки, но ее кандидаты были шире (например, при поиске с возвратом).
-                 // Глубокое копирование solverData в _search должно это частично решать.
-                 cage.remainingCellsCount -= 1;
-            }
+            cage.remainingCellsCount -= 1;
             cage.currentValueMask |= digitMask;
         }
-
         if (cage.remainingCellsCount < 0 || cage.remainingSum < 0) return false;
         if (cage.remainingCellsCount === 0) { if (cage.remainingSum !== 0) return false;
         } else { const combinationInfo = killerSudoku.getSumCombinationInfo(cage.remainingSum, cage.remainingCellsCount);
@@ -205,17 +184,17 @@
                         const eliminatedInThisCellMask = originalCellCands & ~newCellCands;
                         for (let d = 1; d <= 9; d++) { if ((eliminatedInThisCellMask & DIGIT_MASKS[d]) !== 0) {
                             if (!eliminateCandidate(candidatesMap, solverData, cellIdInCage, d, indent + "    ")) return false; } } }
-                     if (candidatesMap[cellIdInCage] === 0 && originalCellCands !== 0) return false; // После элиминации
+                     if (candidatesMap[cellIdInCage] === 0 && originalCellCands !== 0) return false;
                 } } }
         return true;
     }
 
     function checkInnies(candidatesMap, solverData, unit, indent="") {
         for (let d = 1; d <= 9; d++) { const digitMask = DIGIT_MASKS[d]; let placesInUnitForDigit = [];
-            let uniqueCageId = undefined; let multipleCages = false; // Используем undefined как начальное значение
+            let uniqueCageId = undefined; let multipleCages = false;
             for (const cellId of unit) { if (hasCandidate(candidatesMap[cellId], d)) {
                 placesInUnitForDigit.push(cellId); const currentCellCageId = solverData.cellToCageMap[cellId];
-                if (currentCellCageId === undefined) { multipleCages = true; break; } // Ячейка в юните не принадлежит клетке
+                if (currentCellCageId === undefined) { multipleCages = true; break; }
                 if (uniqueCageId === undefined) uniqueCageId = currentCellCageId;
                 else if (uniqueCageId !== currentCellCageId) { multipleCages = true; break; } } }
             if (!multipleCages && uniqueCageId !== undefined && placesInUnitForDigit.length > 0) {
@@ -233,7 +212,6 @@
         if (placesInCageForDigit.length === 0) return true;
         for (let unitType = 0; unitType < 3; unitType++) { let uniqueUnitIndex = -1; let multipleUnits = false; let unitCellsForOutie = null;
             for (const cellId of placesInCageForDigit) {
-                // killerSolverLogic не экспортируется по умолчанию, используем локальные копии или прямые вычисления
                 const r_coord = "ABCDEFGHI".indexOf(cellId[0]);
                 const c_coord = "123456789".indexOf(cellId[1]);
                 if (r_coord === -1 || c_coord === -1) { multipleUnits = true; break;}
