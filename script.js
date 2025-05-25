@@ -1,10 +1,11 @@
 // Убедитесь, что sudoku.js, killerSudoku.js, И killerSolverLogic.js подключены ДО script.js
 document.addEventListener('DOMContentLoaded', () => {
-    const DEBUG_HIGHLIGHT = true; // Флаг для отладки подсветки
+    const DEBUG_HIGHLIGHT = true; 
 
     // --- Элементы DOM ---
     const initialScreen = document.getElementById('initial-screen');
     const newGameOptionsScreen = document.getElementById('new-game-options');
+    const gameAndLogWrapper = document.getElementById('game-and-log-wrapper');
     const gameContainer = document.getElementById('game-container');
     const startNewGameButton = document.getElementById('start-new-game-button');
     const continueGameButton = document.getElementById('continue-game-button');
@@ -24,53 +25,44 @@ document.addEventListener('DOMContentLoaded', () => {
     const timerElement = document.getElementById('timer');
     const logicNextStepButton = document.getElementById('logic-step-button');
     const logicSolveButton = document.getElementById('logic-solve-button');
+    const solverLogOutput = document.getElementById('solver-log-output');
+    const clearLogButton = document.getElementById('clear-log-button');
 
     // --- Состояние игры ---
-    let userGrid = [];
-    let solutionGrid = [];
-    let currentMode = 'classic';
-    let currentDifficulty = 'medium';
-    let selectedCell = null;
-    let selectedRow = -1;
-    let selectedCol = -1;
-    let isNoteMode = false;
-    let timerInterval;
-    let timeElapsed = 0;
-    let history = [];
-    let hintsRemaining = 3;
-
-    let killerSolverData = null;
-    let currentCandidatesMap = {};
+    let userGrid = []; let solutionGrid = []; let currentMode = 'classic'; let currentDifficulty = 'medium';
+    let selectedCell = null; let selectedRow = -1; let selectedCol = -1; let isNoteMode = false;
+    let timerInterval; let timeElapsed = 0; let history = []; let hintsRemaining = 3;
+    let killerSolverData = null; let currentCandidatesMap = {}; let logStepCounter = 1;
 
     function getCellId(r, c) { return "ABCDEFGHI"[r] + (c + 1); }
+
+    function addSolverLog(message, isError = false) {
+        if (!solverLogOutput) return;
+        const logEntry = document.createElement('p');
+        logEntry.innerHTML = `<b>${logStepCounter}.</b> ${message}`;
+        if (isError) logEntry.style.color = 'var(--text-danger)';
+        solverLogOutput.appendChild(logEntry);
+        solverLogOutput.scrollTop = solverLogOutput.scrollHeight;
+        logStepCounter++;
+    }
+    function clearSolverLog() {
+        if (solverLogOutput) solverLogOutput.innerHTML = '';
+        logStepCounter = 1;
+    }
 
     function saveGameState() {
         try {
             const gameState = {
                 userGrid: userGrid.map(row => row.map(cell => ({
-                    value: cell.value,
-                    isGiven: cell.isGiven,
-                    notes: Array.from(cell.notes),
-                    isError: cell.isError,
-                    isSolved: cell.isSolved
-                }))),
-                solutionGrid: solutionGrid,
-                currentMode: currentMode,
-                currentDifficulty: currentDifficulty,
-                timeElapsed: timeElapsed,
-                history: history.map(h => ({
-                    ...h,
-                    newNotes: Array.from(h.newNotes),
-                    oldCandidates: h.oldCandidates ? Array.from(h.oldCandidates) : []
-                })),
-                hintsRemaining: hintsRemaining,
-                killerSolverData: killerSolverData,
-            };
+                    value: cell.value, isGiven: cell.isGiven, notes: Array.from(cell.notes),
+                    isError: cell.isError, isSolved: cell.isSolved }))),
+                solutionGrid: solutionGrid, currentMode: currentMode, currentDifficulty: currentDifficulty,
+                timeElapsed: timeElapsed, history: history.map(h => ({ ...h, newNotes: Array.from(h.newNotes),
+                    oldCandidates: h.oldCandidates ? Array.from(h.oldCandidates) : [] })),
+                hintsRemaining: hintsRemaining, killerSolverData: killerSolverData, };
             localStorage.setItem('sudokuGameState', JSON.stringify(gameState));
             checkContinueButtonState();
-        } catch (e) {
-            console.error("Error saving game state:", e);
-        }
+        } catch (e) { console.error("Error saving game state:", e); }
     }
 
     function loadGameState() {
@@ -78,52 +70,27 @@ document.addEventListener('DOMContentLoaded', () => {
             const savedState = localStorage.getItem('sudokuGameState');
             if (savedState) {
                 const gameState = JSON.parse(savedState);
-                userGrid = gameState.userGrid.map(row => row.map(cell => ({
-                    ...cell,
-                    notes: new Set(cell.notes)
-                })));
-                solutionGrid = gameState.solutionGrid;
-                currentMode = gameState.currentMode;
-                currentDifficulty = gameState.currentDifficulty;
+                userGrid = gameState.userGrid.map(row => row.map(cell => ({ ...cell, notes: new Set(cell.notes) })));
+                solutionGrid = gameState.solutionGrid; currentMode = gameState.currentMode; currentDifficulty = gameState.currentDifficulty;
                 timeElapsed = gameState.timeElapsed;
-                history = gameState.history.map(h => ({
-                    ...h,
-                    newNotes: new Set(h.newNotes),
-                    oldCandidates: h.oldCandidates ? new Set(h.oldCandidates) : new Set()
-                }));
-                hintsRemaining = gameState.hintsRemaining;
-                killerSolverData = gameState.killerSolverData;
-
-                createEmptyBoardCells();
-
+                history = gameState.history.map(h => ({ ...h, newNotes: new Set(h.newNotes), oldCandidates: h.oldCandidates ? new Set(h.oldCandidates) : new Set() }));
+                hintsRemaining = gameState.hintsRemaining; killerSolverData = gameState.killerSolverData;
+                createEmptyBoardCells(); clearSolverLog();
                 if (currentMode === 'killer' && killerSolverData && killerSolverData.cageDataArray) {
-                    renderKillerCages(killerSolverData.cageDataArray);
-                    updateAllCandidates();
-                } else {
-                     updateAllCandidates();
-                }
-                startTimer();
-                updateHintsDisplay();
-                updateLogicSolverButtonsState();
-                undoButton.disabled = history.length === 0;
+                    renderKillerCages(killerSolverData.cageDataArray); updateAllCandidates();
+                } else { updateAllCandidates(); }
+                startTimer(); updateHintsDisplay(); updateLogicSolverButtonsState(); undoButton.disabled = history.length === 0;
                 return true;
             }
-        } catch (e) {
-            console.error("Error loading game state:", e);
-            clearGameState();
-            return false;
-        }
+        } catch (e) { console.error("Error loading game state:", e); clearGameState(); return false; }
         return false;
     }
 
     function clearGameState() {
-        localStorage.removeItem('sudokuGameState');
-        userGrid = []; solutionGrid = []; selectedCell = null; selectedRow = -1; selectedCol = -1;
-        isNoteMode = false; clearInterval(timerInterval); timeElapsed = 0;
-        timerElement.textContent = "00:00"; history = []; hintsRemaining = 3;
+        localStorage.removeItem('sudokuGameState'); userGrid = []; solutionGrid = []; selectedCell = null; selectedRow = -1; selectedCol = -1;
+        isNoteMode = false; clearInterval(timerInterval); timeElapsed = 0; timerElement.textContent = "00:00"; history = []; hintsRemaining = 3;
         killerSolverData = null; currentCandidatesMap = {}; boardElement.innerHTML = '';
-        updateHintsDisplay(); updateLogicSolverButtonsState(); checkContinueButtonState();
-        statusMessageElement.textContent = "";
+        clearSolverLog(); updateHintsDisplay(); updateLogicSolverButtonsState(); checkContinueButtonState(); statusMessageElement.textContent = "";
     }
 
     function startTimer() { clearInterval(timerInterval); timerElement.textContent = formatTime(timeElapsed);
@@ -278,7 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if(!cell.isError){const sr=Math.floor(rIdx/3)*3,sc=Math.floor(cIdx/3)*3;
                         for(let br=0;br<3;br++){for(let bc=0;bc<3;bc++){const R=sr+br,C=sc+bc;
                             if((R!==rIdx||C!==cIdx)&&userGrid[R]?.[C]?.value===cell.value){cell.isError=true;break;}}if(cell.isError)break;}}
-                    if(!cell.isError&& currentMode==='killer'&&killerSolverData?.cellToCageMap&&killerSolverData?.cageDataArray){
+                    if(!cell.isError&¤tMode==='killer'&&killerSolverData?.cellToCageMap&&killerSolverData?.cageDataArray){
                         const cId=getCellId(rIdx,cIdx),cageId=killerSolverData.cellToCageMap[cId];
                         const cage=killerSolverData.cageDataArray.find(cd=>cd.id===cageId);
                         if(cage){for(const cCId of cage.cells){if(cCId!==cId){const crds=killerSolverLogic.getCellCoords(cCId);
@@ -296,7 +263,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else currentCandidatesMap = {};
         for (let r=0;r<9;r++) { if(!userGrid[r])continue; for (let c=0;c<9;c++) { if(!userGrid[r][c])continue;
             const cellData = userGrid[r][c];
-            const notesToDraw = (cellData.value===0)?((currentMode==='killer'&& currentCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:cellData.notes):null;
+            const notesToDraw = (cellData.value===0)?((currentMode==='killer'&¤tCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:cellData.notes):null;
             renderCell(r,c,cellData.value,notesToDraw); } }
     }
 
@@ -337,7 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!userGrid?.[r]?.[c]) return; userGrid[r][c].value = oldValue; userGrid[r][c].notes = new Set(newNotes);
         userGrid[r][c].isError = false; userGrid[r][c].isSolved = (oldValue !== 0);
         if (currentMode === 'killer') currentCandidatesMap[getCellId(r,c)] = new Set(oldCandidates);
-        const notesToDraw = (userGrid[r][c].value===0)?((currentMode==='killer'&& currentCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:userGrid[r][c].notes):null;
+        const notesToDraw = (userGrid[r][c].value===0)?((currentMode==='killer'&¤tCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:userGrid[r][c].notes):null;
         renderCell(r,c,userGrid[r][c].value, notesToDraw);
         undoButton.disabled = history.length===0; updateBoardState(); saveGameState(); checkGameCompletion(); enableInput(); }
 
@@ -351,51 +318,32 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!puzzleGenData?.puzzle || !puzzleGenData?.solution) {
                 alert("Ошибка генерации судоку."); showScreen('initial-screen'); return; }
             puzzleGenData.cages = [];
-        } else { // Killer Sudoku
+        } else {
             try { puzzleGenData = killerSudoku.generate(difficulty);
                 if (!puzzleGenData?.cages || !puzzleGenData?.grid || !puzzleGenData?.solution) throw new Error("gen invalid data");
-                
                 killerSolverData = { cageDataArray: [], cellToCageMap: {} };
                 let tempCageArray = []; let tempMap = {}; let nextTempId = 0;
-
                 puzzleGenData.cages.forEach(cg => {
                     let currentCageId = cg.id;
-                    if (currentCageId === undefined) {
-                        console.warn(`Cage from generator is missing ID. Assigning temporary ID: temp_${nextTempId}`, JSON.parse(JSON.stringify(cg)));
-                        currentCageId = `temp_${nextTempId++}`;
-                    }
-                    if (tempCageArray.find(existingCg => existingCg.id === currentCageId)) {
-                        console.error(`Duplicate cage ID ${currentCageId} encountered. Skipping this cage.`); return;
-                    }
+                    if (currentCageId === undefined) { currentCageId = `temp_${nextTempId++}`; }
+                    if (tempCageArray.find(existingCg => existingCg.id === currentCageId)) { return; }
                     tempCageArray.push({ sum: cg.sum, cells: [...cg.cells], id: currentCageId });
-                    cg.cells.forEach(cid => { tempMap[cid] = currentCageId; });
-                });
-                killerSolverData.cageDataArray = tempCageArray;
-                killerSolverData.cellToCageMap = tempMap;
-
-                if (DEBUG_HIGHLIGHT) { console.log("Processed killerSolverData:", JSON.parse(JSON.stringify(killerSolverData)));}
-
-            } catch (e) { console.error("Error Killer Gen:", e); alert("Ошибка генерации Killer Sudoku."); showScreen('initial-screen'); return; }
+                    cg.cells.forEach(cid => { tempMap[cid] = currentCageId; }); });
+                killerSolverData.cageDataArray = tempCageArray; killerSolverData.cellToCageMap = tempMap;
+                if (DEBUG_HIGHLIGHT) { console.log("Processed KSD:", JSON.parse(JSON.stringify(killerSolverData)));}
+            } catch (e) { console.error("Err Killer Gen:", e); alert("Ошибка Killer Sudoku."); showScreen('initial-screen'); return; }
         }
-
         userGrid = Array(9).fill(null).map(() => Array(9).fill(null).map(() => ({})));
         solutionGrid = Array(9).fill(null).map(() => Array(9).fill(null).map(() => ({})));
-        let charIdx = 0; const blank = currentMode==='classic'?(sudoku.BLANK_CHAR||'.'):(killerSudoku.BLANK_CHAR||'.');
-        for (let r=0;r<9;r++) { for (let c=0;c<9;c++) {
-            const puzChar=puzzleGenData.grid[charIdx], solChar=puzzleGenData.solution[charIdx];
-            const val=(puzChar===blank)?0:parseInt(puzChar), isGiv=(val!==0);
-            userGrid[r][c]={value:val,isGiven:isGiv,isError:false,notes:new Set(),isSolved:isGiv};
-            solutionGrid[r][c]={value:parseInt(solChar)}; charIdx++; } }
-
+        let charIdx = 0; const blank=currentMode==='classic'?(sudoku.BLANK_CHAR||'.'):(killerSudoku.BLANK_CHAR||'.');
+        for(let r=0;r<9;r++)for(let c=0;c<9;c++){ const pC=puzzleGenData.grid[charIdx],sC=puzzleGenData.solution[charIdx];
+            const v=(pC===blank)?0:parseInt(pC),iG=(v!==0); userGrid[r][c]={value:v,isGiven:iG,isError:false,notes:new Set(),isSolved:iG};
+            solutionGrid[r][c]={value:parseInt(sC)};charIdx++;}
         createEmptyBoardCells();
-        if (currentMode === 'killer' && killerSolverData && killerSolverData.cageDataArray) {
-            renderKillerCages(killerSolverData.cageDataArray);
-        }
+        if(currentMode==='killer'&&killerSolverData&&killerSolverData.cageDataArray)renderKillerCages(killerSolverData.cageDataArray);
         updateAllCandidates();
-
-        timeElapsed=0; startTimer(); updateHintsDisplay(); enableInput();
-        history=[]; undoButton.disabled=true; statusMessageElement.textContent="";
-        showScreen('game-container'); saveGameState();
+        timeElapsed=0;startTimer();updateHintsDisplay();enableInput();history=[];undoButton.disabled=true;statusMessageElement.textContent="";
+        showScreen('game-and-log-wrapper'); saveGameState();
     }
 
     function renderKillerCages(cages) {
@@ -420,38 +368,56 @@ document.addEventListener('DOMContentLoaded', () => {
                 const rN=(c<8)?getCellId(r,c+1):null; if(!rN||killerSolverData.cellToCageMap[rN]!==cageIdent) curEl.classList.add('cage-border-right'); }); });
     }
 
-    function showScreen(id) { document.querySelectorAll('.screen').forEach(s=>s.classList.remove('visible'));
-        const t = typeof id === 'string' ? document.getElementById(id) : id; if (t) t.classList.add('visible'); }
+    function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(s=>s.classList.remove('visible'));
+        const t = typeof id === 'string' ? document.getElementById(id) : id;
+        if (t) { if (t.id === 'game-container' && gameAndLogWrapper) gameAndLogWrapper.classList.add('visible');
+                 else t.classList.add('visible'); }
+    }
+
     function updateLogicSolverButtonsState() { const iK=currentMode==='killer',slv=isGameEffectivelySolved();
         logicNextStepButton.style.display=iK?'inline-block':'none'; logicSolveButton.style.display=iK?'inline-block':'none';
         if(iK){logicNextStepButton.disabled=slv;logicSolveButton.disabled=slv;} }
 
     if(logicNextStepButton){ logicNextStepButton.addEventListener('click',()=>{ if(currentMode!=='killer'||isGameEffectivelySolved())return;
-        updateAllCandidates(); const s=killerSolverLogic.doKillerLogicStep(userGrid,currentCandidatesMap,killerSolverData,updateAllCandidates,renderCell);
-        if(s){statusMessageElement.textContent=`Техника: ${s.appliedTechnique||s.technique}!`; statusMessageElement.classList.remove('incorrect-msg');statusMessageElement.classList.add('success-msg');
+        addSolverLog("<i>Поиск следующего шага...</i>"); updateAllCandidates();
+        const stepResult = killerSolverLogic.doKillerLogicStep(userGrid,currentCandidatesMap,killerSolverData,updateAllCandidates,renderCell,addSolverLog);
+        if(stepResult && stepResult.applied){
+            statusMessageElement.textContent = `Применена техника: ${stepResult.appliedTechnique || stepResult.technique}!`;
+            statusMessageElement.classList.remove('incorrect-msg');statusMessageElement.classList.add('success-msg');
             updateBoardState();saveGameState();checkGameCompletion();
-        }else{statusMessageElement.textContent="Нет новых шагов.";statusMessageElement.classList.remove('success-msg');statusMessageElement.classList.add('incorrect-msg');}
-        updateLogicSolverButtonsState(); });}
+        }else{ addSolverLog("Не найдено новых логических шагов для применения.", true);
+            statusMessageElement.textContent="Не найдено новых логических шагов."; statusMessageElement.classList.remove('success-msg');statusMessageElement.classList.add('incorrect-msg');
+        } updateLogicSolverButtonsState(); });}
     if(logicSolveButton){ logicSolveButton.addEventListener('click',()=>{ if(currentMode!=='killer'||isGameEffectivelySolved())return;
-        let st=0,maxIt=200,apl; do{apl=false;updateAllCandidates(); const s=killerSolverLogic.doKillerLogicStep(userGrid,currentCandidatesMap,killerSolverData,updateAllCandidates,renderCell);
-            if(s){st++;apl=true;updateBoardState();if(isGameEffectivelySolved())break;} maxIt--;}while(apl&&maxIt>0);
-        if(isGameEffectivelySolved()){statusMessageElement.textContent=`Решено за ${st} шагов!`;statusMessageElement.classList.remove('incorrect-msg');statusMessageElement.classList.add('success-msg');
-        }else if(st>0){statusMessageElement.textContent=`Применено ${st} шагов.`;statusMessageElement.classList.remove('success-msg');statusMessageElement.classList.add('incorrect-msg');
-        }else{statusMessageElement.textContent="Нет шагов.";statusMessageElement.classList.remove('success-msg');statusMessageElement.classList.add('incorrect-msg');}
+        addSolverLog("--- <b>Запуск полного решения (Solve)</b> ---"); let st=0,maxIt=200,apl;
+        do{apl=false; updateAllCandidates();
+            const stepResult = killerSolverLogic.doKillerLogicStep(userGrid,currentCandidatesMap,killerSolverData,updateAllCandidates,renderCell,addSolverLog);
+            if(stepResult && stepResult.applied){st++;apl=true;updateBoardState();if(isGameEffectivelySolved())break;}
+            maxIt--;
+        }while(apl&&maxIt>0);
+        if(isGameEffectivelySolved()){ const endMsg = `Головоломка решена за ${st} логических шагов!`; addSolverLog(endMsg); statusMessageElement.textContent=endMsg;
+            statusMessageElement.classList.remove('incorrect-msg');statusMessageElement.classList.add('success-msg');
+        }else if(st>0){ const endMsg = `Применено ${st} логических шагов. Дальнейшие шаги не найдены или требуют более сложной логики.`; addSolverLog(endMsg, true); statusMessageElement.textContent=endMsg;
+            statusMessageElement.classList.remove('success-msg');statusMessageElement.classList.add('incorrect-msg');
+        }else{ const endMsg = "Не найдено логических шагов для применения."; addSolverLog(endMsg, true); statusMessageElement.textContent=endMsg;
+            statusMessageElement.classList.remove('success-msg');statusMessageElement.classList.add('incorrect-msg');}
         saveGameState();checkGameCompletion();updateLogicSolverButtonsState(); });}
+    
+    if(clearLogButton) { clearLogButton.addEventListener('click', clearSolverLog); }
 
     function addEventListeners() {
-        startNewGameButton.addEventListener('click',()=>showScreen('new-game-options'));
-        continueGameButton.addEventListener('click',()=>{if(loadGameState())showScreen('game-container');else{alert("Нет сохраненной игры.");showScreen('new-game-options');}});
+        startNewGameButton.addEventListener('click',()=> { clearSolverLog(); showScreen('new-game-options'); });
+        continueGameButton.addEventListener('click',()=>{if(loadGameState()){ showScreen('game-and-log-wrapper'); }else{alert("Нет сохраненной игры."); clearSolverLog(); showScreen('new-game-options');}});
         document.querySelectorAll('#game-mode-selection .mode-button').forEach(b=>{b.addEventListener('click',e=>{document.querySelectorAll('#game-mode-selection .mode-button').forEach(btn=>btn.classList.remove('selected'));e.target.classList.add('selected');});});
         if(difficultyButtonsContainer){difficultyButtonsContainer.querySelectorAll('button.difficulty-button').forEach(b=>{b.addEventListener('click',e=>{difficultyButtonsContainer.querySelectorAll('button.difficulty-button').forEach(btn=>btn.classList.remove('selected'));e.target.classList.add('selected');});});}
-        if(startSelectedGameButton){startSelectedGameButton.addEventListener('click',()=>{const mE=document.querySelector('#game-mode-selection .mode-button.selected'),dE=document.querySelector('.difficulty-selection button.difficulty-button.selected');if(mE&&dE)generateNewGame(mE.dataset.mode,dE.dataset.difficulty);else alert('Выберите режим/сложность.');});}
-        if(backToInitialButton)backToInitialButton.addEventListener('click',()=>showScreen('initial-screen'));
-        if(exitGameButton){exitGameButton.addEventListener('click',()=>{if(confirm("Выйти? Прогресс сохранен.")){saveGameState();stopTimer();clearSelectionHighlights();selectedCell=null;selectedRow=-1;selectedCol=-1;showScreen('initial-screen');}});}
+        if(startSelectedGameButton){startSelectedGameButton.addEventListener('click',()=>{const mE=document.querySelector('#game-mode-selection .mode-button.selected'),dE=document.querySelector('.difficulty-selection button.difficulty-button.selected');if(mE&&dE){ clearSolverLog(); generateNewGame(mE.dataset.mode,dE.dataset.difficulty); }else alert('Выберите режим/сложность.');});}
+        if(backToInitialButton)backToInitialButton.addEventListener('click',()=> { clearSolverLog(); showScreen('initial-screen'); });
+        if(exitGameButton){exitGameButton.addEventListener('click',()=>{if(confirm("Выйти? Прогресс сохранен.")){saveGameState();stopTimer();clearSelectionHighlights();selectedCell=null;selectedRow=-1;selectedCol=-1; clearSolverLog(); showScreen('initial-screen');}});}
         if(numpad){numpad.querySelectorAll('button[data-num]').forEach(b=>b.addEventListener('click',e=>handleInput(parseInt(e.target.dataset.num))));}
         if(eraseButton)eraseButton.addEventListener('click',eraseCell); if(noteToggleButton)noteToggleButton.addEventListener('click',toggleNoteMode);
         if(checkButton)checkButton.addEventListener('click',updateBoardState); if(hintButton)hintButton.addEventListener('click',applyHint); if(undoButton)undoButton.addEventListener('click',undoLastMove);
-        document.addEventListener('keydown',e=>{if(!gameContainer.classList.contains('visible'))return;
+        document.addEventListener('keydown',e=>{if(!gameAndLogWrapper.classList.contains('visible'))return;
             if(selectedCell&&selectedRow!==-1&&selectedCol!==-1){const d=parseInt(e.key);
                 if(d>=1&&d<=9){handleInput(d);e.preventDefault();return;}
                 if(e.key==='Backspace'||e.key==='Delete'){eraseCell();e.preventDefault();return;}
@@ -463,7 +429,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){if(!hintButton.disabled)applyHint();e.preventDefault();}
             if(currentMode==='killer'){if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='n'){if(!logicNextStepButton.disabled)logicNextStepButton.click();e.preventDefault();}
                 if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();if(!logicSolveButton.disabled)logicSolveButton.click();}}});}
-    function initializeApp(){loadThemePreference();checkContinueButtonState();addEventListeners();showScreen('initial-screen');try{if(window.Telegram?.WebApp)window.Telegram.WebApp.ready();}catch(e){console.error("TG SDK err:",e);}}
+
+    function initializeApp(){loadThemePreference();checkContinueButtonState();addEventListeners();logStepCounter=1;showScreen('initial-screen');try{if(window.Telegram?.WebApp)window.Telegram.WebApp.ready();}catch(e){console.error("TG SDK err:",e);}}
     function checkContinueButtonState(){if(!continueGameButton)return;try{continueGameButton.disabled=!localStorage.getItem('sudokuGameState');}catch(e){console.error("Err check cont state:",e);continueGameButton.disabled=true;}}
     const THEME_KEY='sudokuTheme';function loadThemePreference(){const t=localStorage.getItem(THEME_KEY);document.body.classList.toggle('dark-theme',t==='dark');if(themeToggleCheckbox)themeToggleCheckbox.checked=(t==='dark');}
     if(themeToggleCheckbox){themeToggleCheckbox.addEventListener('change',()=>{document.body.classList.toggle('dark-theme',themeToggleCheckbox.checked);localStorage.setItem(THEME_KEY,themeToggleCheckbox.checked?'dark':'light');});}
