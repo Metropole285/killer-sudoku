@@ -321,3 +321,113 @@ input:checked + .slider .moon { opacity: 1; }
     border-color: var(--button-note-active-border);
     box-shadow: inset 0 2px 4px var(--button-note-active-shadow);
 }
+#game-and-log-wrapper {
+    display: none; /* Управляется .visible из JS */
+    flex-direction: row; /* Располагаем игру и лог в строку */
+    align-items: flex-start; /* Выравниваем по верху */
+    justify-content: center; /* Центрируем, если есть место */
+    gap: 20px; /* Пространство между игрой и логом */
+    width: 100%;
+    max-width: 1200px; /* Увеличиваем максимальную ширину для размещения лога */
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+#game-and-log-wrapper.visible {
+    display: flex;
+}
+
+
+/* #game-container внутри #game-and-log-wrapper уже имеет свои стили */
+/* Он будет занимать левую часть */
+#game-container {
+   /* Можно задать flex-grow, flex-shrink, flex-basis, если нужно точное управление размерами */
+   /* Например, чтобы он не сжимался слишком сильно: */
+   flex-shrink: 0;
+}
+
+
+#solver-log-container {
+    width: 300px; /* Ширина лога, можно настроить */
+    max-width: 40%; /* Не более % от родителя */
+    min-width: 250px; /* Минимальная ширина */
+    height: clamp(300px, 80vh, 600px); /* Высота, адаптирующаяся к высоте доски */
+    display: flex;
+    flex-direction: column;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    border-radius: 8px;
+    padding: 10px;
+    box-sizing: border-box;
+    overflow: hidden; /* Чтобы scrollbar был внутри .log-output */
+    margin-left: 15px; /* Отступ от доски */
+}
+
+#solver-log-container h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 1.1em;
+    color: var(--text-primary);
+    text-align: center;
+    border-bottom: 1px solid var(--border-primary);
+    padding-bottom: 5px;
+}
+
+.log-output {
+    flex-grow: 1; /* Занимает все доступное пространство по высоте */
+    overflow-y: auto; /* Включает вертикальный скроллбар при необходимости */
+    font-size: 0.85em;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    padding-right: 5px; /* Небольшой отступ для скроллбара */
+    margin-bottom: 10px;
+}
+
+.log-output p {
+    margin: 0 0 8px 0;
+    padding-bottom: 5px;
+    border-bottom: 1px dotted var(--border-primary);
+}
+.log-output p:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+#clear-log-button {
+    padding: 8px 12px;
+    font-size: 0.9em;
+    cursor: pointer;
+    border: none;
+    border-radius: 5px;
+    background-color: var(--button-back-bg); /* Используем цвет кнопки "Назад" */
+    color: var(--text-inverted);
+    transition: background-color var(--transition-duration);
+    align-self: center; /* Центрируем кнопку */
+}
+#clear-log-button:hover {
+    background-color: var(--button-back-hover);
+}
+
+/* Адаптация для маленьких экранов: лог под игрой */
+@media (max-width: 800px) { /* Пороговое значение можно настроить */
+    #game-and-log-wrapper {
+        flex-direction: column; /* Лог под игрой */
+        align-items: center; /* Центрируем все по горизонтали */
+    }
+    #solver-log-container {
+        width: 90%; /* Лог занимает почти всю ширину */
+        max-width: 500px; /* Но не шире игрового контейнера */
+        height: 200px; /* Фиксированная высота для мобильных, или auto */
+        margin-left: 0;
+        margin-top: 20px; /* Отступ сверху */
+    }
+}
+
+/* Переопределяем display для #game-container, чтобы он не наследовал flex от body */
+/* если он внутри #game-and-log-wrapper */
+#game-and-log-wrapper > #game-container {
+    display: flex; /* Остается flex для внутреннего расположения */
+    flex-direction: column;
+    align-items: center;
+    /* width и max-width для #game-container остаются как были или можно убрать, если flex-basis задан */
+}
