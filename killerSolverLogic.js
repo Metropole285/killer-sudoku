@@ -277,41 +277,41 @@ const killerSolverLogic = (() => {
     function doKillerLogicStep(userGrid, currentCandidatesMap, solverData, updateCandidatesCallback, renderCellCallback, logCallback) {
         logCallback("--- <b>Новый шаг решателя</b> ---");
         if (solverData?.cageDataArray) {
-            logCallback("Поиск правила одной клетки (Single Cage Rule)..."); let sCRApplied = false;
-            for (const cage of solverData.cageDataArray) { if (cage.cells.length === 1) {
-                const cId = cage.cells[0], crds = getCellCoords(cId);
-                if (crds && userGrid[crds.r][crds.c].value === 0) { const expD = cage.sum;
-                    if (expD >= 1 && expD <= 9 && (currentCandidatesMap[cId]?.has(expD) || currentCandidatesMap[cId] === undefined )) { // Позволяем, если кандидаты еще не посчитаны
-                        const desc = `Правило одной клетки: сумма ${cage.sum} для клетки ${cage.id||'(без ID)'} (ячейка ${cId}) означает цифру <b>${expD}</b>.`;
-                        logCallback(desc); let fnd={r:crds.r,c:crds.c,cellId:cId,digit:expD,technique:"Single Cage Rule",description:desc};
-                        if(applyFoundSingle(fnd,userGrid,currentCandidatesMap,renderCellCallback,logCallback)){
-                            updateCandidatesCallback(); return {...fnd, applied:true, appliedTechnique:"Single Cage Rule"}; }
-                        sCRApplied = true; } } } } // Закрытие if (expD...) и if (crds...)
-            if(!sCRApplied) logCallback("Правило одной клетки не найдено/не применимо.");
-        } // Закрытие for (const cage...)
-    } // Закрытие if (solverData...)
+            logCallback("Поиск правила одной клетки (Single Cage Rule)...");
+            let sCRAppliedThisCycle = false; // Флаг, что правило было найдено в этом цикле, не обязательно применено
+            let sCRFoundAndApplied = false; // Флаг, что правило было найдено И УСПЕШНО ПРИМЕНЕНО
 
-        const techniques = [
-            { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle },
-            { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle },
-            { name: "Cage Combination Check", findFunc: findCageCombinationCheck, applyFunc: applyElimination },
-            { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination },
-            { name: "Hidden Pair", findFunc: findHiddenPair, applyFunc: applyHiddenGroupElimination },
-            { name: "Innie", findFunc: findInnieStep, applyFunc: applyElimination },
-            { name: "Outie", findFunc: findOutieStep, applyFunc: applyElimination },
-            { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination },
-            { name: "Hidden Triple", findFunc: findHiddenTriple, applyFunc: applyHiddenGroupElimination },
-        ];
+            for (const cage of solverData.cageDataArray) {
+                if (cage.cells.length === 1) {
+                    const cId = cage.cells[0];
+                    const crds = getCellCoords(cId);
+                    if (crds && userGrid[crds.r][crds.c].value === 0) {
+                        const expD = cage.sum;
+                        if (expD >= 1 && expD <= 9 && (currentCandidatesMap[cId]?.has(expD) || currentCandidatesMap[cId] === undefined )) {
+                            sCRAppliedThisCycle = true; // Правило найдено
+                            const desc = `Правило одной клетки: сумма ${cage.sum} для клетки ${cage.id||'(без ID)'} (ячейка ${cId}) означает цифру <b>${expD}</b>.`;
+                            logCallback(desc);
+                            let fnd = {r:crds.r, c:crds.c, cellId:cId, digit:expD, technique:"Single Cage Rule", description:desc};
+                            if(applyFoundSingle(fnd, userGrid, currentCandidatesMap, renderCellCallback, logCallback)){
+                                updateCandidatesCallback();
+                                sCRFoundAndApplied = true; // Найдено и применено
+                                return {...fnd, applied:true, appliedTechnique:"Single Cage Rule"}; // Немедленный выход, т.к. шаг сделан
+                            }
+                            // Если applyFoundSingle вернул false, значит применение не удалось (например, ячейка уже была заполнена другой логикой)
+                        }
+                    } // Закрытие if (crds && userGrid...)
+                } // Закрытие if (cage.cells.length === 1)
+            } // Закрытие for (const cage...)
 
-        for (const tech of techniques) {
-            let foundInfo = tech.findFunc(userGrid, currentCandidatesMap, solverData, logCallback);
-            if (foundInfo) {
-                if (tech.applyFunc(foundInfo, userGrid, currentCandidatesMap, renderCellCallback, logCallback)) {
-                    updateCandidatesCallback(); return { ...foundInfo, applied: true, appliedTechnique: tech.name }; } }
-        }
-        logCallback("<b>Не найдено техник для применения на этом шаге.</b>", false);
-        return { applied: false };
-    } // Закрытие doKillerLogicStep
+            // Логируем результат поиска Single Cage Rule только ОДИН РАЗ после цикла
+            if (!sCRFoundAndApplied && !sCRAppliedThisCycle) { // Если не было найдено И не было применено, И даже не было найдено подходящих случаев
+                 logCallback("Правило одной клетки: подходящих случаев не найдено.");
+            } else if (!sCRFoundAndApplied && sCRAppliedThisCycle) { // Если было найдено, но не применено
+                 logCallback("Правило одной клетки: найдено, но не применено (возможно, ячейка уже заполнена).");
+            }
+            // Если sCRFoundAndApplied === true, то мы уже вышли из функции
+
+        } // Закрытие if (solverData?.cageDataArray)
 
     return {
         calculateKillerCandidates,
