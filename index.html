@@ -7,9 +7,9 @@
     <!-- Подключение CSS стилей -->
     <link rel="stylesheet" href="style.css">
     <!-- Подключение библиотек -->
-    <script src="sudoku.js"></script>
+    <script src="sudoku.js"></script> <!-- Предполагается, что этот файл существует и предоставляет sudoku.generate и sudoku.BLANK_CHAR -->
     <script src="killerSudoku.js"></script>
-    <script src="killerSolverLogic.js"></script> 
+    <script src="killerSolverLogic.js"></script>
     <!-- Подключение Telegram Web App SDK (если используется) -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -59,17 +59,15 @@
 
     <!-- == Игровой Экран == -->
     <div id="game-container" class="screen">
-        <!-- === НОВЫЙ БЛОК: Таймер и Логические Кнопки === -->
         <div id="top-controls">
             <div id="timer-container">
                 <div id="timer">Время: 00:00</div>
             </div>
             <div id="solver-buttons">
-                <button id="logic-step-button" title="Найти следующий логический шаг (Hidden Single)">Next Step</button>
-                <button id="logic-solve-button" title="Применить все простые шаги (Hidden Singles)">Solve</button>
+                <button id="logic-step-button" title="Найти следующий логический шаг">Next Step</button>
+                <button id="logic-solve-button" title="Применить все логические шаги">Solve</button>
             </div>
         </div>
-        <!-- ========================================= -->
 
         <div id="sudoku-board">
             <!-- Ячейки генерируются JavaScript -->
@@ -96,7 +94,6 @@
         </div>
     </div>
 
-    <!-- Подключение основного скрипта игры ПОСЛЕ библиотек -->
     <script src="script.js"></script>
 </body>
 </html>
