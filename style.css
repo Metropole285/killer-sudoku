@@ -28,7 +28,7 @@
     --text-disabled: #777;
 
     --border-primary: #ccc;
-    --border-secondary: black; /* Граница доски, толстые линии блоков */
+    --border-secondary: black; /* Граница доски, толстые линии */
     --border-difficulty-button: #b8d6f3;
     --border-difficulty-button-hover: #a1c3e6;
     --cage-border-color: rgba(100, 100, 100, 0.7); /* Цвет пунктирной границы клетки */
@@ -39,8 +39,6 @@
     --highlight-error-bg: #ffdddd; /* Фон ошибочной ячейки */
     --highlight-error-text: var(--text-danger);
     --highlight-hint-flash: #fffacd; /* Вспышка подсказки */
-    --highlight-value-bg: #d4edda; /* Фон для ячеек с таким же значением (светло-зеленый) */
-
 
     --button-primary-bg: #007bff;
     --button-primary-hover: #0056b3;
@@ -107,7 +105,6 @@ body.dark-theme {
     --highlight-error-bg: #6e3333; /* Темно-красный фон */
     --highlight-error-text: var(--text-danger);
     --highlight-hint-flash: #6a6836; /* Темно-желтый */
-    --highlight-value-bg: #2a4831; /* Фон для ячеек с таким же значением (темно-зеленый) */
 
     --button-primary-bg: #2386fd;
     --button-primary-hover: #58a6ff;
@@ -146,8 +143,8 @@ body {
 
 /* ===== Стили Экранов ===== */
 .screen { width: 100%; max-width: 600px; display: none; flex-direction: column; align-items: center; padding: 15px; box-sizing: border-box; }
-.screen.visible { display: flex; } /* ИСПРАВЛЕНО: с .active на .visible */
-body:has(#game-container.visible) { justify-content: flex-start; } /* ИСПРАВЛЕНО: с .active на .visible */
+.screen.visible { display: flex; } /* ИСПРАВЛЕНО: было .screen.active */
+body:has(#game-container.visible) { justify-content: flex-start; } /* ИСПРАВЛЕНО: было .active */
 
 /* ===== Начальный Экран & Экран Настроек ===== */
 #initial-screen h1 { margin-top: 0; margin-bottom: 30px; font-size: 2.5em; color: var(--text-primary); }
@@ -159,7 +156,6 @@ body:has(#game-container.visible) { justify-content: flex-start; } /* ИСПРА
 #new-game-options h2 { margin-top: 0; margin-bottom: 20px; color: var(--text-primary); }
 .options-container { display: flex; flex-direction: column; gap: 20px; padding: 20px; background-color: var(--bg-options-container); border-radius: 8px; margin-bottom: 20px; width: 100%; max-width: 400px; align-items: center; }
 
-/* --- Выбор Режима --- */
 #game-mode-selection { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
 #game-mode-selection h3,
 .difficulty-selection h3,
@@ -169,14 +165,12 @@ body:has(#game-container.visible) { justify-content: flex-start; } /* ИСПРА
 #game-mode-selection .mode-button.selected { background-color: var(--button-primary-bg); color: var(--text-inverted); border-color: var(--button-primary-bg); box-shadow: inset 0 1px 3px rgba(0,0,0,0.2); font-weight: bold; }
 #game-mode-selection .mode-button.selected:hover { background-color: var(--button-primary-hover); border-color: var(--button-primary-hover); }
 
-/* --- Выбор Сложности --- */
 .difficulty-selection { width: 100%; display: flex; flex-direction: column; align-items: center; }
 .difficulty-selection button.difficulty-button { padding: 10px 15px; font-size: 1em; cursor: pointer; border: 1px solid var(--border-difficulty-button); border-radius: 5px; background-color: var(--bg-difficulty-button); color: var(--text-primary); transition: background-color var(--transition-duration), border-color var(--transition-duration); width: 80%; margin-bottom: 8px; }
 .difficulty-selection button.difficulty-button:hover { background-color: var(--bg-difficulty-button-hover); border-color: var(--border-difficulty-button-hover); }
 .difficulty-selection button.difficulty-button.selected { background-color: var(--button-primary-bg); color: var(--text-inverted); border-color: var(--button-primary-bg); box-shadow: inset 0 1px 3px rgba(0,0,0,0.2); font-weight: bold; }
 .difficulty-selection button.difficulty-button.selected:hover { background-color: var(--button-primary-hover); border-color: var(--button-primary-hover); }
 
-/* --- Выбор Темы --- */
 .theme-selection { width: 100%; display: flex; flex-direction: column; align-items: center; }
 .theme-switch { position: relative; display: inline-block; width: 70px; height: 34px; }
 .theme-switch input { opacity: 0; width: 0; height: 0; }
@@ -190,74 +184,161 @@ input:checked + .slider:before { transform: translateX(36px); }
 input:checked + .slider .sun { opacity: 0; }
 input:checked + .slider .moon { opacity: 1; }
 
-/* --- Кнопка Назад --- */
 #back-to-initial-button { padding: 10px 20px; font-size: 1em; cursor: pointer; border: none; border-radius: 5px; background-color: var(--button-back-bg); color: var(--text-inverted); transition: background-color var(--transition-duration); margin-top: 10px; }
 #back-to-initial-button:hover { background-color: var(--button-back-hover); }
 
 
 /* ===== Игровой Экран ===== */
-#top-controls { display: flex; justify-content: space-between; align-items: center; width: clamp(270px, 90vw, 500px); max-width: 100%; margin-bottom: 8px; }
 #game-container h1 { margin-top: 5px; margin-bottom: 8px; color: var(--text-primary); font-size: 1.6em; flex-shrink: 0; }
-#timer-container { text-align: left; flex-shrink: 0; } /* Изменено на left */
+#top-controls { display: flex; justify-content: space-between; align-items: center; width: clamp(270px, 90vw, 500px); max-width: 100%; margin-bottom: 8px; flex-shrink: 0; }
+#timer-container { text-align: left; } /* Изменено для выравнивания */
 #timer { font-size: 1em; font-weight: bold; color: var(--text-secondary); padding: 5px 10px; background-color: var(--bg-tertiary); border-radius: 4px; display: inline-block; }
-#solver-buttons { display: flex; gap: 8px; flex-shrink: 0; }
+#solver-buttons { display: flex; gap: 8px; }
 #solver-buttons button { padding: 5px 10px; font-size: 0.85em; cursor: pointer; border: none; border-radius: 5px; background-color: var(--button-warning-bg); color: var(--text-warning-fg); transition: background-color 0.2s, opacity 0.2s; white-space: nowrap; }
 #solver-buttons button:hover:not(:disabled) { background-color: var(--button-warning-hover); }
 #solver-buttons button:disabled { background-color: var(--button-disabled-bg); opacity: var(--button-disabled-opacity); cursor: not-allowed; color: var(--text-disabled); }
 
-#sudoku-board { display: grid; grid-template-columns: repeat(9, minmax(28px, 1fr)); grid-template-rows: repeat(9, minmax(28px, 1fr)); width: clamp(260px, 85vmin, 480px); height: clamp(260px, 85vmin, 480px); max-width: 95vw; max-height: 65vh; border: 3px solid var(--border-secondary); margin-bottom: 10px; background-color: var(--bg-secondary); overflow: hidden; transition: filter var(--transition-duration) ease-in-out, background-color var(--transition-duration) ease, border-color var(--transition-duration) ease; flex-shrink: 0; position: relative; }
+#sudoku-board {
+    display: grid;
+    grid-template-columns: repeat(9, minmax(28px, 1fr));
+    grid-template-rows: repeat(9, minmax(28px, 1fr));
+    width: clamp(260px, 85vmin, 480px);
+    height: clamp(260px, 85vmin, 480px);
+    max-width: 95vw;
+    max-height: 65vh; /* Ограничение по высоте, чтобы умещались контролы */
+    border: 3px solid var(--border-secondary); /* Внешняя толстая граница */
+    margin-bottom: 10px;
+    background-color: var(--bg-secondary);
+    overflow: hidden;
+    transition: filter var(--transition-duration) ease-in-out, background-color var(--transition-duration) ease, border-color var(--transition-duration) ease;
+    flex-shrink: 0;
+    position: relative;
+}
 
 /* --- Стили ячеек и их состояний --- */
-.cell { display: flex; justify-content: center; align-items: center; border: 1px solid var(--border-primary); cursor: pointer; box-sizing: border-box; user-select: none; -webkit-user-select: none; position: relative; transition: background-color 0.1s ease-in-out, border-color var(--transition-duration) ease; }
-.cell.border-top { border-top-width: 3px; border-top-color: var(--border-secondary); } /* Толстая граница блока */
-.cell.border-left { border-left-width: 3px; border-left-color: var(--border-secondary); } /* Толстая граница блока */
-
-.cell-value { /* Для основной цифры в ячейке */
-    font-size: clamp(1.1em, 4vmin, 1.6em); /* Немного увеличил */
+.cell {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 1px solid var(--border-primary); /* Тонкие внутренние линии по умолчанию */
+    cursor: pointer;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+    position: relative; /* Для псевдоэлементов и суммы */
+    transition: background-color 0.1s ease-in-out, border-color var(--transition-duration) ease;
+    font-size: clamp(1em, 4vmin, 1.5em); /* Размер шрифта для цифр */
     line-height: 1;
     font-weight: bold;
-    color: var(--text-accent);
-    pointer-events: none; /* Чтобы клик проходил на .cell */
-    z-index: 5;
 }
-.cell.given .cell-value { color: var(--text-given); }
-.cell.error .cell-value { color: var(--highlight-error-text) !important; }
-.cell.error { background-color: var(--highlight-error-bg) !important; } /* Важно для переопределения highlight */
 
-.notes-container { /* ИСПРАВЛЕНО: Имя класса совпадает с JS */
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
-    gap: 0px; padding: 1px; box-sizing: border-box;
-    z-index: 4; pointer-events: none;
+/* Толстые линии для блоков 3x3 (добавляются JS) */
+.cell.border-top {
+    border-top-width: 3px;
+    border-top-color: var(--border-secondary);
 }
-.note { /* ИСПРАВЛЕНО: Имя класса совпадает с JS */
-    display: flex; justify-content: center; align-items: center;
-    font-size: clamp(0.55em, 1.8vmin, 0.75em); /* Немного увеличил */
-    line-height: 1; color: var(--text-note);
+.cell.border-left {
+    border-left-width: 3px;
+    border-left-color: var(--border-secondary);
+}
+
+/* Стили для отображения значения и заметок внутри ячейки */
+.cell-value { /* Контейнер для значения, если используется отдельный span */
+    color: var(--text-accent);
+}
+.cell.given .cell-value, /* Если значение в .cell-value */
+.cell.given { /* Если значение прямо в .cell */
+    color: var(--text-given);
+    background-color: var(--bg-secondary); /* Убедиться, что фон не меняется */
+    cursor: default;
+}
+
+.notes-container { /* ИСПРАВЛЕНО: имя класса */
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 0px; padding: 1px; box-sizing: border-box;
+    z-index: 4;
+    pointer-events: none;
+}
+.note { /* ИСПРАВЛЕНО: имя класса */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: clamp(0.6em, 2vmin, 0.8em); /* Меньший размер для заметок */
+    line-height: 1;
+    color: var(--text-note);
     text-align: center;
 }
 
-.cell.given { background-color: var(--bg-secondary); cursor: default; }
-.cell.highlight { background-color: var(--highlight-weak); } /* Подсветка связанных */
-.cell.highlight-value { background-color: var(--highlight-value-bg); } /* Подсветка ячеек с таким же значением */
-.cell.selected { background-color: var(--highlight-strong) !important; } /* Важно для переопределения highlight */
 
-
-/* === KILLER SUDOKU CAGE STYLES === */
-/* ИСПРАВЛЕНО: Стили для пунктирных границ клеток */
-.cell.cage-border-top { border-top: 1px dashed var(--cage-border-color) !important; }
-.cell.cage-border-bottom { border-bottom: 1px dashed var(--cage-border-color) !important; }
-.cell.cage-border-left { border-left: 1px dashed var(--cage-border-color) !important; }
-.cell.cage-border-right { border-right: 1px dashed var(--cage-border-color) !important; }
-/* Важно: `!important` может понадобиться, чтобы переопределить толстые границы блоков, если клетка пересекает их.
-   Или можно использовать псевдоэлементы, как было у вас, но тогда в JS надо добавлять `cage-inner-border-*` */
-
-.cage-sum {
-    position: absolute; top: 2px; left: 3px; /* Немного скорректировал позицию */
-    font-size: clamp(0.5em, 1.8vmin, 0.7em); font-weight: bold;
-    color: var(--cage-sum-color); line-height: 1;
-    z-index: 2; pointer-events: none; user-select: none; -webkit-user-select: none;
+.cell.highlight { /* ИСПРАВЛЕНО: было .highlighted */
+    background-color: var(--highlight-weak);
 }
+.cell.error .cell-value, /* Если значение в .cell-value */
+.cell.error { /* Если значение прямо в .cell */
+    color: var(--highlight-error-text) !important;
+    background-color: var(--highlight-error-bg);
+}
+.cell.selected {
+    background-color: var(--highlight-strong);
+}
+.cell.highlight-value { /* Для ячеек с таким же значением, как у выделенной */
+    /* Можно добавить дополнительный стиль, например, более яркий фон или рамку */
+    /* background-color: var(--highlight-stronger, var(--highlight-strong)); */
+}
+
+
+/* === KILLER SUDOKU CAGE STYLES (ИСПРАВЛЕНО) === */
+.cage-sum {
+    position: absolute;
+    top: 2px; /* Немного отступ от верхнего и левого края */
+    left: 3px;
+    font-size: clamp(0.5em, 1.8vmin, 0.7em);
+    font-weight: bold;
+    color: var(--cage-sum-color);
+    line-height: 1;
+    z-index: 2; /* Над линиями, под цифрами */
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Общие стили для псевдоэлементов, создающих пунктирные линии */
+.cell.cage-border-top::before,
+.cell.cage-border-bottom::before,
+.cell.cage-border-left::before,
+.cell.cage-border-right::before {
+    content: '';
+    position: absolute;
+    pointer-events: none;
+    z-index: 1; /* Ниже .cage-sum и цифр в ячейке */
+    border-color: var(--cage-border-color);
+    border-style: dashed;
+    /* Изначально ширина 0, конкретные стороны ее установят */
+    border-width: 0;
+}
+
+/* Конкретные стороны для пунктирных линий */
+.cell.cage-border-top::before {
+    top: 0; left: 0; right: 0;
+    border-top-width: 1px;
+}
+.cell.cage-border-bottom::before {
+    bottom: 0; left: 0; right: 0;
+    border-bottom-width: 1px;
+}
+.cell.cage-border-left::before {
+    top: 0; left: 0; bottom: 0;
+    border-left-width: 1px;
+}
+.cell.cage-border-right::before {
+    top: 0; right: 0; bottom: 0;
+    border-right-width: 1px;
+}
+
 
 /* --- Элементы управления в игре --- */
 #controls { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; justify-content: center; flex-shrink: 0; }
@@ -267,7 +348,7 @@ input:checked + .slider .moon { opacity: 1; }
 #hint-button { background-color: var(--button-success-bg); }
 #hint-button:hover:not(:disabled) { background-color: var(--button-success-hover); }
 #hint-button:active:not(:disabled) { background-color: var(--button-success-active); }
-#hint-button:disabled, #undo-button:disabled { background-color: var(--button-disabled-bg); opacity: var(--button-disabled-opacity); cursor: not-allowed; color: var(--text-disabled); }
+#hint-button:disabled, #undo-button:disabled, #controls button:disabled { background-color: var(--button-disabled-bg); opacity: var(--button-disabled-opacity); cursor: not-allowed; }
 #undo-button { background-color: var(--button-warning-bg); color: var(--text-warning-fg); }
 #undo-button:hover:not(:disabled) { background-color: var(--button-warning-hover); }
 #undo-button:active:not(:disabled) { background-color: var(--button-warning-active); }
@@ -287,5 +368,11 @@ input:checked + .slider .moon { opacity: 1; }
 #note-toggle-button { grid-column: 1 / 2; grid-row: 4 / 5; font-size: 1.3em; }
 #erase-button { grid-column: 2 / 4; grid-row: 4 / 5; background-color: var(--button-warning-bg); color: var(--text-warning-fg); }
 #erase-button:hover { background-color: var(--button-warning-hover); }
-#note-toggle-button.active { background-color: var(--button-note-active-bg); color: var(--text-inverted); border-color: var(--button-note-active-border); box-shadow: inset 0 2px 4px var(--button-note-active-shadow); }
-#note-toggle-button.active:hover { background-color: var(--button-note-active-bg); color: var(--text-inverted); border-color: var(--button-note-active-border); box-shadow: inset 0 2px 4px var(--button-note-active-shadow); }
+
+#numpad.note-mode-active #note-toggle-button { /* Стиль для активной кнопки заметок */
+    background-color: var(--button-note-active-bg);
+    color: var(--text-inverted);
+    border-color: var(--button-note-active-border);
+    box-shadow: inset 0 2px 4px var(--button-note-active-shadow);
+}
+/* Убрал дублирующийся .active на #note-toggle-button, так как используется класс на #numpad */
