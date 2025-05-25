@@ -17,9 +17,22 @@ const killerSolverLogic = (() => {
 
     function getRowIndices(r) { const i = []; for (let c = 0; c < 9; c++) i.push([r, c]); return i; }
     function getColIndices(c) { const i = []; for (let r = 0; r < 9; r++) i.push([r, c]); return i; }
-    function getBlockIndices(bI) { const sr = Math.floor(bI / 3) * 3, sc = (bI % 3) * 3, i = [];
-        for (let ro = 0; ro < 3; ro++) for (let co = 0; co < 3; co++) i.push([sr + ro, sc + co]); return i; }
-    function getAllUnitsIndices() { const aU = []; for (let i = 0; i < 9; i++) { aU.push(getRowIndices(i)); aU.push(getColIndices(i)); aU.push(getBlockIndices(i)); } return aU; }
+    function getBlockIndices(bI) { 
+    const sr = Math.floor(bI / 3) * 3, sc = (bI % 3) * 3, i = [];
+    for (let ro = 0; ro < 3; ro++) 
+        for (let co = 0; co < 3; co++) 
+            i.push([sr + ro, sc + co]); 
+    return i; 
+}
+    function getAllUnitsIndices() { 
+    const aU = []; 
+    for (let i = 0; i < 9; i++) { 
+        aU.push(getRowIndices(i)); 
+        aU.push(getColIndices(i)); 
+        aU.push(getBlockIndices(i)); 
+    } 
+    return aU; 
+}
     function getUnitType(gUI) { if (gUI < 9) return 'Строка'; if (gUI < 18) return 'Колонка'; return 'Блок'; }
     function getUnitIndexForDisplay(gUI) { return (gUI % 9) + 1; }
 
@@ -34,7 +47,14 @@ const killerSolverLogic = (() => {
                     for (let ci = 0; ci < 9; ci++) { if (ci !== c_cache) { const pid = getCellId(r_cache, ci); if (pid) p.add(pid); } }
                     for (let ri = 0; ri < 9; ri++) { if (ri !== r_cache) { const pid = getCellId(ri, c_cache); if (pid) p.add(pid); } }
                     const sr = Math.floor(r_cache/3)*3, sc = Math.floor(c_cache/3)*3;
-                    for(let i=0;i<3;i++) for(let j=0;j<3;j++){ const pr=sr+i, pc=sc+j; if(pr!==r_cache||pc!==c_cache){const pid=getCellId(pr,pc);if(pid)p.add(pid);}}
+                    for(let i=0;i<3;i++) 
+    for(let j=0;j<3;j++){ 
+        const pr=sr+i, pc=sc+j; 
+        if(pr!==r_cache||pc!==c_cache){
+            const pid=getCellId(pr,pc);
+            if(pid) p.add(pid);
+        }
+    }
                     classicPeersMapCache[id_c] = p; } } }
         } return classicPeersMapCache[cellId] || new Set();
     }
