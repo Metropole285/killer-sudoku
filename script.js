@@ -1,6 +1,7 @@
 // Убедитесь, что sudoku.js, killerSudoku.js, И killerSolverLogic.js подключены ДО script.js
 document.addEventListener('DOMContentLoaded', () => {
     const DEBUG_HIGHLIGHT = true; 
+    const DEBUG_GENERATION = true; 
 
     // --- Элементы DOM ---
     const initialScreen = document.getElementById('initial-screen');
@@ -101,6 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function createEmptyBoardCells() {
         boardElement.innerHTML = '';
+        if (DEBUG_GENERATION) console.log("createEmptyBoardCells: Board cleared.");
         for (let rIdx = 0; rIdx < 9; rIdx++) { for (let cIdx = 0; cIdx < 9; cIdx++) {
                 const cellElement = document.createElement('div'); cellElement.classList.add('cell');
                 cellElement.dataset.row = rIdx; cellElement.dataset.col = cIdx; cellElement.id = getCellId(rIdx, cIdx);
@@ -108,11 +110,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (cIdx % 3 === 0 && cIdx !== 0) cellElement.classList.add('border-left');
                 cellElement.addEventListener('click', () => selectCell(rIdx, cIdx));
                 boardElement.appendChild(cellElement); } }
+        if (DEBUG_GENERATION) console.log("createEmptyBoardCells: Empty cells created.");
     }
 
     function renderCell(r, c, valueToSet = null, candidatesToSet = null) {
+        if (DEBUG_GENERATION && (r < 1 && c < 1) ) { // Логируем только для первой ячейки A1
+             // console.log(`renderCell(${r},${c}) called. Value: ${valueToSet}, Cands: ${candidatesToSet ? Array.from(candidatesToSet) : 'null'}`);
+        }
         const cellElement = document.getElementById(getCellId(r,c));
-        if (!cellElement || !userGrid || !userGrid[r] || !userGrid[r][c]) return;
+        if (!cellElement || !userGrid || !userGrid[r] || !userGrid[r][c]) {
+            if (DEBUG_GENERATION) console.error(`renderCell(${r},${c}): Cell element or userGrid data missing for ID ${getCellId(r,c)}.`);
+            return;
+        }
         const cellData = userGrid[r][c]; const cellId = getCellId(r, c);
         let cageSumElement = cellElement.querySelector('.cage-sum');
         const notesContainerElement = cellElement.querySelector('.notes-container');
@@ -258,13 +267,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateAllCandidates() {
-        if (!userGrid || userGrid.length === 0) return;
+        if (!userGrid || userGrid.length === 0) { if (DEBUG_GENERATION) console.log("updateAllCandidates: userGrid not ready."); return;}
+        if (DEBUG_GENERATION) console.log("updateAllCandidates: Starting.");
         if (currentMode === 'killer' && killerSolverData) currentCandidatesMap = killerSolverLogic.calculateAllKillerCandidates(userGrid, killerSolverData);
         else currentCandidatesMap = {};
         for (let r=0;r<9;r++) { if(!userGrid[r])continue; for (let c=0;c<9;c++) { if(!userGrid[r][c])continue;
             const cellData = userGrid[r][c];
             const notesToDraw = (cellData.value===0)?((currentMode==='killer'&¤tCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:cellData.notes):null;
             renderCell(r,c,cellData.value,notesToDraw); } }
+        if (DEBUG_GENERATION) console.log("updateAllCandidates: Finished.");
     }
 
     function checkGameCompletion() { const solved = isGameEffectivelySolved();
@@ -309,6 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
         undoButton.disabled = history.length===0; updateBoardState(); saveGameState(); checkGameCompletion(); enableInput(); }
 
     function generateNewGame(mode, difficulty) {
+        if (DEBUG_GENERATION) console.log(`generateNewGame called. Mode: ${mode}, Difficulty: ${difficulty}`);
         stopTimer(); clearGameState(); currentMode = mode; currentDifficulty = difficulty;
         let puzzleGenData;
         if (currentMode === 'classic') {
@@ -318,63 +330,88 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!puzzleGenData?.puzzle || !puzzleGenData?.solution) {
                 alert("Ошибка генерации судоку."); showScreen('initial-screen'); return; }
             puzzleGenData.cages = [];
+            if (DEBUG_GENERATION) console.log("Classic puzzle generated.");
         } else {
-            try { puzzleGenData = killerSudoku.generate(difficulty);
-                if (!puzzleGenData?.cages || !puzzleGenData?.grid || !puzzleGenData?.solution) throw new Error("gen invalid data");
+            try {
+                if (DEBUG_GENERATION) console.log("Attempting to generate Killer Sudoku puzzle...");
+                puzzleGenData = killerSudoku.generate(difficulty);
+                if (!puzzleGenData || !puzzleGenData.cages || !puzzleGenData.grid || !puzzleGenData.solution) {
+                    throw new Error("KillerSudoku.generate returned invalid data or false.");
+                }
+                if (DEBUG_GENERATION) console.log("Killer puzzle data received from generator. Cages (first 3):", JSON.parse(JSON.stringify(puzzleGenData.cages.slice(0,3))));
                 killerSolverData = { cageDataArray: [], cellToCageMap: {} };
                 let tempCageArray = []; let tempMap = {}; let nextTempId = 0;
                 puzzleGenData.cages.forEach(cg => {
                     let currentCageId = cg.id;
-                    if (currentCageId === undefined) { currentCageId = `temp_${nextTempId++}`; }
-                    if (tempCageArray.find(existingCg => existingCg.id === currentCageId)) { return; }
+                    if (currentCageId === undefined) {
+                        console.warn(`Cage from generator is missing ID. Assigning temporary ID: temp_${nextTempId}`, JSON.parse(JSON.stringify(cg)));
+                        currentCageId = `temp_${nextTempId++}`;
+                    }
+                    if (tempCageArray.find(existingCg => existingCg.id === currentCageId)) {
+                        console.error(`Duplicate cage ID ${currentCageId} encountered. Skipping this cage.`); return;
+                    }
                     tempCageArray.push({ sum: cg.sum, cells: [...cg.cells], id: currentCageId });
-                    cg.cells.forEach(cid => { tempMap[cid] = currentCageId; }); });
+                    cg.cells.forEach(cid => { tempMap[cid] = currentCageId; });
+                });
                 killerSolverData.cageDataArray = tempCageArray; killerSolverData.cellToCageMap = tempMap;
-                if (DEBUG_HIGHLIGHT) { console.log("Processed KSD:", JSON.parse(JSON.stringify(killerSolverData)));}
-            } catch (e) { console.error("Err Killer Gen:", e); alert("Ошибка Killer Sudoku."); showScreen('initial-screen'); return; }
+                if (DEBUG_GENERATION || DEBUG_HIGHLIGHT) { console.log("Processed killerSolverData:", JSON.parse(JSON.stringify(killerSolverData)));}
+            } catch (e) { console.error("Error Killer Gen:", e); alert("Ошибка Killer Sudoku."); showScreen('initial-screen'); return; }
         }
+        if (DEBUG_GENERATION) console.log("Initializing userGrid and solutionGrid...");
         userGrid = Array(9).fill(null).map(() => Array(9).fill(null).map(() => ({})));
         solutionGrid = Array(9).fill(null).map(() => Array(9).fill(null).map(() => ({})));
         let charIdx = 0; const blank=currentMode==='classic'?(sudoku.BLANK_CHAR||'.'):(killerSudoku.BLANK_CHAR||'.');
-        for(let r=0;r<9;r++)for(let c=0;c<9;c++){ const pC=puzzleGenData.grid[charIdx],sC=puzzleGenData.solution[charIdx];
-            const v=(pC===blank)?0:parseInt(pC),iG=(v!==0); userGrid[r][c]={value:v,isGiven:iG,isError:false,notes:new Set(),isSolved:iG};
-            solutionGrid[r][c]={value:parseInt(sC)};charIdx++;}
+        for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+            const puzChar=puzzleGenData.grid[charIdx], solChar=puzzleGenData.solution[charIdx];
+            const val=(puzChar===blank)?0:parseInt(puzChar), isGiv=(val!==0);
+            userGrid[r][c]={value:val,isGiven:isGiv,isError:false,notes:new Set(),isSolved:isGiv};
+            solutionGrid[r][c]={value:parseInt(solChar)};charIdx++;}
+        if (DEBUG_GENERATION) console.log("userGrid initialized. First cell data:", userGrid[0][0]);
+        if (DEBUG_GENERATION) console.log("Calling createEmptyBoardCells()...");
         createEmptyBoardCells();
-        if(currentMode==='killer'&&killerSolverData&&killerSolverData.cageDataArray)renderKillerCages(killerSolverData.cageDataArray);
+        if(currentMode==='killer'&&killerSolverData&&killerSolverData.cageDataArray){
+            if(DEBUG_GENERATION)console.log("Calling renderKillerCages()...");renderKillerCages(killerSolverData.cageDataArray);
+        }
+        if(DEBUG_GENERATION)console.log("Calling updateAllCandidates() to fill cells with data/notes...");
         updateAllCandidates();
         timeElapsed=0;startTimer();updateHintsDisplay();enableInput();history=[];undoButton.disabled=true;statusMessageElement.textContent="";
+        if (DEBUG_GENERATION) console.log("Switching to game screen.");
         showScreen('game-and-log-wrapper'); saveGameState();
     }
 
     function renderKillerCages(cages) {
+        if (DEBUG_GENERATION) console.log(`renderKillerCages called with ${cages ? cages.length : 0} cages.`);
         boardElement.querySelectorAll('.cell').forEach(cellEl => {
             cellEl.classList.remove('cage-border-top','cage-border-bottom','cage-border-left','cage-border-right');
             const sumDiv = cellEl.querySelector('.cage-sum'); if (sumDiv) cellEl.removeChild(sumDiv); });
-        if (!cages || !killerSolverData?.cellToCageMap) return;
-        cages.forEach(cage => { if (!cage.cells?.length) return;
+        if (!cages || !killerSolverData?.cellToCageMap) { if (DEBUG_GENERATION) console.log("renderKillerCages: No cages or cellToCageMap, exiting."); return; }
+        cages.forEach((cage, cageIndex) => { if (!cage.cells?.length) { if (DEBUG_GENERATION) console.warn(`Cage at index ${cageIndex} (ID: ${cage.id}) has no cells.`); return; }
+            if (DEBUG_GENERATION && cageIndex < 2) console.log(`Processing cage ID ${cage.id} with sum ${cage.sum} and cells ${cage.cells.join(', ')}`);
             let topLeftId = cage.cells[0], minR=10, minC=10;
             cage.cells.forEach(cId => { const crds = killerSolverLogic.getCellCoords(cId);
                 if(crds) { if(crds.r<minR){minR=crds.r;minC=crds.c;topLeftId=cId;}
                            else if(crds.r===minR && crds.c<minC){minC=crds.c;topLeftId=cId;}}});
             const tlCellEl = document.getElementById(topLeftId);
-            if (tlCellEl && cage.sum > 0) { const sumDiv = document.createElement('div'); sumDiv.classList.add('cage-sum');
-                sumDiv.textContent = cage.sum; tlCellEl.prepend(sumDiv); }
+            if (tlCellEl && cage.sum > 0) { let existingSum = tlCellEl.querySelector('.cage-sum'); if(existingSum) tlCellEl.removeChild(existingSum);
+                const sumDiv = document.createElement('div'); sumDiv.classList.add('cage-sum'); sumDiv.textContent = cage.sum; tlCellEl.prepend(sumDiv);
+                if (DEBUG_GENERATION && cageIndex < 2) console.log(`Added sum ${cage.sum} to ${topLeftId}`);
+            } else if (DEBUG_GENERATION && cageIndex < 2) { if (!tlCellEl) console.warn(`Top-left cell ${topLeftId} for cage ID ${cage.id} not found.`);
+                if (cage.sum <= 0) console.log(`Sum for cage ID ${cage.id} is ${cage.sum}, not adding to DOM.`); }
             const cageIdent = killerSolverData.cellToCageMap[cage.cells[0]];
+            if (cageIdent === undefined && DEBUG_GENERATION) console.warn(`Cage ID for first cell of cage ${cage.id} is undefined in cellToCageMap.`);
             cage.cells.forEach(cellId => { const crds = killerSolverLogic.getCellCoords(cellId); if (!crds) return;
                 const {r,c} = crds; const curEl = document.getElementById(cellId); if (!curEl) return;
                 const tN=(r>0)?getCellId(r-1,c):null; if(!tN||killerSolverData.cellToCageMap[tN]!==cageIdent) curEl.classList.add('cage-border-top');
                 const bN=(r<8)?getCellId(r+1,c):null; if(!bN||killerSolverData.cellToCageMap[bN]!==cageIdent) curEl.classList.add('cage-border-bottom');
                 const lN=(c>0)?getCellId(r,c-1):null; if(!lN||killerSolverData.cellToCageMap[lN]!==cageIdent) curEl.classList.add('cage-border-left');
                 const rN=(c<8)?getCellId(r,c+1):null; if(!rN||killerSolverData.cellToCageMap[rN]!==cageIdent) curEl.classList.add('cage-border-right'); }); });
+        if (DEBUG_GENERATION) console.log("renderKillerCages: Finished processing cages.");
     }
 
-    function showScreen(id) {
-        document.querySelectorAll('.screen').forEach(s=>s.classList.remove('visible'));
+    function showScreen(id) { document.querySelectorAll('.screen').forEach(s=>s.classList.remove('visible'));
         const t = typeof id === 'string' ? document.getElementById(id) : id;
         if (t) { if (t.id === 'game-container' && gameAndLogWrapper) gameAndLogWrapper.classList.add('visible');
-                 else t.classList.add('visible'); }
-    }
-
+                 else t.classList.add('visible'); } }
     function updateLogicSolverButtonsState() { const iK=currentMode==='killer',slv=isGameEffectivelySolved();
         logicNextStepButton.style.display=iK?'inline-block':'none'; logicSolveButton.style.display=iK?'inline-block':'none';
         if(iK){logicNextStepButton.disabled=slv;logicSolveButton.disabled=slv;} }
