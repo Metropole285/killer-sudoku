@@ -197,7 +197,7 @@ const killerSolverLogic = (() => {
                 for(let i=1;i<possLocsInCage.length;i++){const curBlock=Math.floor(possLocsInCage[i].r/3)*3+Math.floor(possLocsInCage[i].c/3);if(curBlock!==targetBlockIdx){confinedToBlock=false;break;}}
                 if(confinedToBlock){const elims=[],blockUnitCoords=getBlockIndices(targetBlockIdx);
                     for(const[r,c] of blockUnitCoords){const uCId=getCellId(r,c);if(uCId&&!cageCellIdsSet.has(uCId)&&userGrid[r][c].value===0&&candidatesMap[uCId]?.has(d))elims.push({cellId:uCId,digit:d});}
-                    if(elims.length>0){const desc=`Outie (Блок): цифра <b>${d}</b> в клетке <b>${cage.id}</b> ограничена блоком ${targetBlockIdx+1}. Исключаем из ${elims.map(e=>e.cellId).join(',')}.`;
+                    if(elims.length>0){const desc=`Outie (Блок): цифра <b>${d}</b> в клетке <b>${cage.id}</b> ограничена блоком ${targetBlockIdx+1}. Исключаем из ${elims.map(e=>e.cellId).join(',')}.`; // Исправлено на targetBlockIdx+1 для отображения
                         logCallback(desc);return{technique:"Outie (Block)",digit:d,cageId:cage.id,unitType:'Block',unitIndex:targetBlockIdx,eliminations:elims,description:desc};}}}
         } logCallback("Outie не найдены."); return null;
     }
@@ -208,14 +208,13 @@ const killerSolverLogic = (() => {
         for (const digit of candidatesForCurrentCell) {
             if (!currentCombo.includes(digit) && !placedDigitsInCageSoFar.has(digit)) {
                 if (targetSum - digit >= 0) {
-                    if (emptyCells.length-(cellIndex+1)===0){if(targetSum-digit!==0)continue;}
-                    else{const remCellsCnt=emptyCells.length-(cellIndex+1);const tempPlacedAndCombo=new Set([...currentCombo,digit,...placedDigitsInCageSoFar]);
-                        let minSumNext=0,tempDigits=[]; for(let x=1;x<=9&&tempDigits.length<remCellsCnt;++x)if(!tempPlacedAndCombo.has(x))tempDigits.push(x);
-                        if(tempDigits.length<remCellsCnt&&remCellsCnt>0)continue; for(let i=0;i<remCellsCnt;++i)minSumNext+=tempDigits[i];
-                        if(targetSum-digit<minSumNext&&remCellsCnt>0)continue;}
+                    // Упрощенная проверка, основная логика отсечения находится в findCageCombinationCheck
                     currentCombo.push(digit);
                     findSumCombinationsRecursive(emptyCells,cellIndex+1,targetSum-digit,currentCombo,placedDigitsInCageSoFar,results);
-                    currentCombo.pop(); } } }
+                    currentCombo.pop(); 
+                } 
+            } 
+        }
     }
 
     function findCageCombinationCheck(userGrid, candidatesMap, solverData, logCallback) {
@@ -278,8 +277,8 @@ const killerSolverLogic = (() => {
         logCallback("--- <b>Новый шаг решателя</b> ---");
         if (solverData?.cageDataArray) {
             logCallback("Поиск правила одной клетки (Single Cage Rule)...");
-            let sCRAppliedThisCycle = false; // Флаг, что правило было найдено в этом цикле, не обязательно применено
-            let sCRFoundAndApplied = false; // Флаг, что правило было найдено И УСПЕШНО ПРИМЕНЕНО
+            let sCRAppliedThisCycle = false; 
+            let sCRFoundAndApplied = false; 
 
             for (const cage of solverData.cageDataArray) {
                 if (cage.cells.length === 1) {
@@ -288,30 +287,47 @@ const killerSolverLogic = (() => {
                     if (crds && userGrid[crds.r][crds.c].value === 0) {
                         const expD = cage.sum;
                         if (expD >= 1 && expD <= 9 && (currentCandidatesMap[cId]?.has(expD) || currentCandidatesMap[cId] === undefined )) {
-                            sCRAppliedThisCycle = true; // Правило найдено
+                            sCRAppliedThisCycle = true; 
                             const desc = `Правило одной клетки: сумма ${cage.sum} для клетки ${cage.id||'(без ID)'} (ячейка ${cId}) означает цифру <b>${expD}</b>.`;
                             logCallback(desc);
                             let fnd = {r:crds.r, c:crds.c, cellId:cId, digit:expD, technique:"Single Cage Rule", description:desc};
                             if(applyFoundSingle(fnd, userGrid, currentCandidatesMap, renderCellCallback, logCallback)){
                                 updateCandidatesCallback();
-                                sCRFoundAndApplied = true; // Найдено и применено
-                                return {...fnd, applied:true, appliedTechnique:"Single Cage Rule"}; // Немедленный выход, т.к. шаг сделан
+                                sCRFoundAndApplied = true; 
+                                return {...fnd, applied:true, appliedTechnique:"Single Cage Rule"}; 
                             }
-                            // Если applyFoundSingle вернул false, значит применение не удалось (например, ячейка уже была заполнена другой логикой)
                         }
-                    } // Закрытие if (crds && userGrid...)
-                } // Закрытие if (cage.cells.length === 1)
-            } // Закрытие for (const cage...)
-
-            // Логируем результат поиска Single Cage Rule только ОДИН РАЗ после цикла
-            if (!sCRFoundAndApplied && !sCRAppliedThisCycle) { // Если не было найдено И не было применено, И даже не было найдено подходящих случаев
+                    } 
+                } 
+            } 
+            if (!sCRFoundAndApplied && !sCRAppliedThisCycle) {
                  logCallback("Правило одной клетки: подходящих случаев не найдено.");
-            } else if (!sCRFoundAndApplied && sCRAppliedThisCycle) { // Если было найдено, но не применено
+            } else if (!sCRFoundAndApplied && sCRAppliedThisCycle) {
                  logCallback("Правило одной клетки: найдено, но не применено (возможно, ячейка уже заполнена).");
             }
-            // Если sCRFoundAndApplied === true, то мы уже вышли из функции
+        } 
 
-        } // Закрытие if (solverData?.cageDataArray)
+        const techniques = [
+            { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle },
+            { name: "Hidden Single", findFunc: findHiddenSingle, applyFunc: applyFoundSingle },
+            { name: "Cage Combination Check", findFunc: findCageCombinationCheck, applyFunc: applyElimination },
+            { name: "Naked Pair", findFunc: findNakedPair, applyFunc: applyNakedGroupElimination },
+            { name: "Hidden Pair", findFunc: findHiddenPair, applyFunc: applyHiddenGroupElimination },
+            { name: "Innie", findFunc: findInnieStep, applyFunc: applyElimination },
+            { name: "Outie", findFunc: findOutieStep, applyFunc: applyElimination },
+            { name: "Naked Triple", findFunc: findNakedTriple, applyFunc: applyNakedGroupElimination },
+            { name: "Hidden Triple", findFunc: findHiddenTriple, applyFunc: applyHiddenGroupElimination },
+        ];
+
+        for (const tech of techniques) {
+            let foundInfo = tech.findFunc(userGrid, currentCandidatesMap, solverData, logCallback);
+            if (foundInfo) {
+                if (tech.applyFunc(foundInfo, userGrid, currentCandidatesMap, renderCellCallback, logCallback)) {
+                    updateCandidatesCallback(); return { ...foundInfo, applied: true, appliedTechnique: tech.name }; } }
+        }
+        logCallback("<b>Не найдено техник для применения на этом шаге.</b>", false);
+        return { applied: false };
+    } 
 
     return {
         calculateKillerCandidates,
@@ -322,4 +338,4 @@ const killerSolverLogic = (() => {
         getCellId,
     };
 
-})(); // Закрытие IIFE
+})(); 
