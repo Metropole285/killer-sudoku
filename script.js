@@ -114,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderCell(r, c, valueToSet = null, candidatesToSet = null) {
-        if (DEBUG_GENERATION && (r < 1 && c < 1) ) { // Логируем только для первой ячейки A1
+        if (DEBUG_GENERATION && (r < 1 && c < 1) ) {
              // console.log(`renderCell(${r},${c}) called. Value: ${valueToSet}, Cands: ${candidatesToSet ? Array.from(candidatesToSet) : 'null'}`);
         }
         const cellElement = document.getElementById(getCellId(r,c));
@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const notesContainerElement = cellElement.querySelector('.notes-container');
         if (notesContainerElement) cellElement.removeChild(notesContainerElement);
         Array.from(cellElement.childNodes).forEach(node => {
-            if (node.nodeType === Node.TEXT_NODE || (node.classList && node.classList.contains('cell-value'))) {
+            if (node.nodeType === Node.TEXT_NODE || (node.classList && node.classList.contains('cell-value'))) { // cell-value не используется, но на всякий случай
                 cellElement.removeChild(node); } });
         if (cageSumElement && !cellElement.contains(cageSumElement)) cellElement.prepend(cageSumElement);
         cellElement.classList.remove('user-input', 'error', 'given');
@@ -254,7 +254,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if(!cell.isError){const sr=Math.floor(rIdx/3)*3,sc=Math.floor(cIdx/3)*3;
                         for(let br=0;br<3;br++){for(let bc=0;bc<3;bc++){const R=sr+br,C=sc+bc;
                             if((R!==rIdx||C!==cIdx)&&userGrid[R]?.[C]?.value===cell.value){cell.isError=true;break;}}if(cell.isError)break;}}
-                    if(!cell.isError&& currentMode==='killer'&&killerSolverData?.cellToCageMap&&killerSolverData?.cageDataArray){
+                    // ИСПРАВЛЕНА ОПЕЧАТКА ЗДЕСЬ (удален символ ¤)
+                    if(!cell.isError && currentMode==='killer' && killerSolverData?.cellToCageMap && killerSolverData?.cageDataArray){
                         const cId=getCellId(rIdx,cIdx),cageId=killerSolverData.cellToCageMap[cId];
                         const cage=killerSolverData.cageDataArray.find(cd=>cd.id===cageId);
                         if(cage){for(const cCId of cage.cells){if(cCId!==cId){const crds=killerSolverLogic.getCellCoords(cCId);
@@ -273,7 +274,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else currentCandidatesMap = {};
         for (let r=0;r<9;r++) { if(!userGrid[r])continue; for (let c=0;c<9;c++) { if(!userGrid[r][c])continue;
             const cellData = userGrid[r][c];
-            const notesToDraw = (cellData.value===0)?((currentMode==='killer'&& currentCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:cellData.notes):null;
+            const notesToDraw = (cellData.value===0)?((currentMode==='killer'&¤tCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:cellData.notes):null;
             renderCell(r,c,cellData.value,notesToDraw); } }
         if (DEBUG_GENERATION) console.log("updateAllCandidates: Finished.");
     }
@@ -315,7 +316,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!userGrid?.[r]?.[c]) return; userGrid[r][c].value = oldValue; userGrid[r][c].notes = new Set(newNotes);
         userGrid[r][c].isError = false; userGrid[r][c].isSolved = (oldValue !== 0);
         if (currentMode === 'killer') currentCandidatesMap[getCellId(r,c)] = new Set(oldCandidates);
-        const notesToDraw = (userGrid[r][c].value===0)?((currentMode==='killer'&& currentCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:userGrid[r][c].notes):null;
+        const notesToDraw = (userGrid[r][c].value===0)?((currentMode==='killer'&¤tCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:userGrid[r][c].notes):null;
         renderCell(r,c,userGrid[r][c].value, notesToDraw);
         undoButton.disabled = history.length===0; updateBoardState(); saveGameState(); checkGameCompletion(); enableInput(); }
 
@@ -348,7 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         currentCageId = `temp_${nextTempId++}`;
                     }
                     if (tempCageArray.find(existingCg => existingCg.id === currentCageId)) {
-                        console.error(`Duplicate cage ID ${currentCageId} encountered. Skipping this cage.`); return;
+                        console.error(`Duplicate cage ID ${currentCageId} encountered when processing generator data. Skipping this cage.`); return;
                     }
                     tempCageArray.push({ sum: cg.sum, cells: [...cg.cells], id: currentCageId });
                     cg.cells.forEach(cid => { tempMap[cid] = currentCageId; });
