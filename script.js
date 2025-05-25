@@ -1093,4 +1093,3 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initializeApp();
 });
-```
