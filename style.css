@@ -144,9 +144,14 @@ body {
 }
 
 /* ===== Стили Экранов ===== */
-.screen { width: 100%; max-width: 600px; display: none; flex-direction: column; align-items: center; padding: 15px; box-sizing: border-box; }
+.screen { width: 100%; max-width: 1200px; /* Увеличено для #game-and-log-wrapper */ display: none; flex-direction: column; align-items: center; padding: 15px; box-sizing: border-box; }
+/* #initial-screen и #new-game-options могут нуждаться в своем max-width, если не должны быть такими широкими */
+#initial-screen, #new-game-options {
+    max-width: 600px; /* Возвращаем стандартную ширину для неигровых экранов */
+}
+
 .screen.visible { display: flex; }
-body:has(#game-container.visible) { justify-content: flex-start; }
+body:has(#game-and-log-wrapper.visible) { justify-content: flex-start; } /* Изменено на #game-and-log-wrapper */
 
 /* ===== Начальный Экран & Экран Настроек ===== */
 #initial-screen h1 { margin-top: 0; margin-bottom: 30px; font-size: 2.5em; color: var(--text-primary); }
@@ -190,8 +195,32 @@ input:checked + .slider .moon { opacity: 1; }
 #back-to-initial-button:hover { background-color: var(--button-back-hover); }
 
 
-/* ===== Игровой Экран ===== */
-#game-container h1 { margin-top: 5px; margin-bottom: 8px; color: var(--text-primary); font-size: 1.6em; flex-shrink: 0; }
+/* ===== Игровой Экран с Логгером ===== */
+#game-and-log-wrapper {
+    display: none; /* Управляется .visible из JS */
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 20px;
+    width: 100%;
+    /* max-width для .screen уже установлен в 1200px */
+    padding: 10px;
+    box-sizing: border-box;
+}
+#game-and-log-wrapper.visible {
+    display: flex;
+}
+
+#game-container { /* Это контейнер для доски, кнопок и т.д. */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* width: auto; /* Позволяет ему занимать нужное место */
+    flex-shrink: 0; /* Не сжиматься при нехватке места */
+    /* max-width: 500px; /* Ограничение ширины самой игровой части */
+}
+
+
 #top-controls { display: flex; justify-content: space-between; align-items: center; width: clamp(270px, 90vw, 500px); max-width: 100%; margin-bottom: 8px; flex-shrink: 0; }
 #timer-container { text-align: left; }
 #timer { font-size: 1em; font-weight: bold; color: var(--text-secondary); padding: 5px 10px; background-color: var(--bg-tertiary); border-radius: 4px; display: inline-block; }
@@ -204,10 +233,10 @@ input:checked + .slider .moon { opacity: 1; }
     display: grid;
     grid-template-columns: repeat(9, minmax(28px, 1fr));
     grid-template-rows: repeat(9, minmax(28px, 1fr));
-    width: clamp(260px, 85vmin, 480px);
-    height: clamp(260px, 85vmin, 480px);
-    max-width: 95vw;
-    max-height: 65vh;
+    width: clamp(260px, 85vmin, 480px); /* Адаптивная ширина */
+    height: clamp(260px, 85vmin, 480px); /* Адаптивная высота */
+    max-width: 95vw; /* Не шире экрана на мобильных */
+    max-height: calc(80vh - 150px); /* Высота экрана минус примерная высота контролов, чтобы влезло */
     border: 3px solid var(--border-secondary);
     margin-bottom: 10px;
     background-color: var(--bg-secondary);
@@ -229,62 +258,30 @@ input:checked + .slider .moon { opacity: 1; }
     -webkit-user-select: none;
     position: relative;
     transition: background-color 0.1s ease-in-out, border-color var(--transition-duration) ease;
-    font-size: clamp(1.2em, 4vmin, 1.8em); /* Основной размер для цифр */
+    font-size: clamp(1.2em, 4vmin, 1.8em);
     line-height: 1;
     font-weight: bold;
 }
-
 .cell.border-top { border-top-width: 3px; border-top-color: var(--border-secondary); }
 .cell.border-left { border-left-width: 3px; border-left-color: var(--border-secondary); }
-
 .cell.given { color: var(--text-given); background-color: var(--bg-secondary); cursor: default; }
 .cell.user-input { color: var(--text-accent); }
-
-.notes-container {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
-    gap: 0px; padding: 1px; box-sizing: border-box;
-    z-index: 1; pointer-events: none;
-}
-.note { /* ИЗМЕНЕНО: Уменьшен размер шрифта для заметок */
-    display: flex; justify-content: center; align-items: center;
-    font-size: clamp(0.45em, 1.5vmin, 0.65em); /* Значительно меньше */
-    line-height: 1; color: var(--text-note);
-    text-align: center; font-weight: normal;
-}
-
+.notes-container { position: absolute; top:0;left:0;width:100%;height:100%;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:0px;padding:1px;box-sizing:border-box;z-index:1;pointer-events:none;}
+.note { display:flex;justify-content:center;align-items:center;font-size:clamp(0.45em,1.5vmin,0.65em);line-height:1;color:var(--text-note);text-align:center;font-weight:normal;}
 .cell.highlight { background-color: var(--highlight-weak); }
-.cell.highlight-cage { background-color: var(--highlight-cage); } /* Новый стиль для подсветки клетки */
+.cell.highlight-cage { background-color: var(--highlight-cage); }
 .cell.error { color: var(--highlight-error-text) !important; background-color: var(--highlight-error-bg) !important; }
 .cell.selected { background-color: var(--highlight-strong) !important; }
-.cell.highlight-value { /* Дополнительный стиль, если цифра в ячейке совпадает с выбранной */ }
-
+.cell.highlight-value { /* Дополнительный стиль для ячеек с таким же значением */ }
 
 /* === KILLER SUDOKU CAGE STYLES === */
-.cage-sum { /* ИЗМЕНЕНО: Уменьшен размер шрифта суммы */
-    position: absolute;
-    top: 1px; /* Чуть меньше отступ */
-    left: 2px;
-    font-size: clamp(0.4em, 1.2vmin, 0.55em); /* Очень маленький шрифт для суммы */
-    font-weight: bold;
-    color: var(--cage-sum-color);
-    line-height: 1;
-    z-index: 2;
-    pointer-events: none; user-select: none; -webkit-user-select: none;
-}
-
+.cage-sum { position:absolute;top:1px;left:2px;font-size:clamp(0.4em,1.2vmin,0.55em);font-weight:bold;color:var(--cage-sum-color);line-height:1;z-index:2;pointer-events:none;user-select:none;-webkit-user-select:none;}
 .cell.cage-border-top::before, .cell.cage-border-bottom::before,
-.cell.cage-border-left::before, .cell.cage-border-right::before {
-    content: ''; position: absolute; pointer-events: none; z-index: 0; /* Под стандартной границей */
-    border-color: var(--cage-border-color) !important;
-    border-style: dashed !important;
-    border-width: 0;
-}
-.cell.cage-border-top::before    { top: 0; left: 0; right: 0; border-top-width: 1.5px;} /* Толщина пунктира */
-.cell.cage-border-bottom::before { bottom: 0; left: 0; right: 0; border-bottom-width: 1.5px;}
-.cell.cage-border-left::before   { left: 0; top: 0; bottom: 0; border-left-width: 1.5px;}
-.cell.cage-border-right::before  { right: 0; top: 0; bottom: 0; border-right-width: 1.5px;}
-
+.cell.cage-border-left::before, .cell.cage-border-right::before { content:'';position:absolute;pointer-events:none;z-index:0;border-color:var(--cage-border-color)!important;border-style:dashed!important;border-width:0;}
+.cell.cage-border-top::before    { top:0; left:0; right:0; border-top-width:1.5px;}
+.cell.cage-border-bottom::before { bottom:0; left:0; right:0; border-bottom-width:1.5px;}
+.cell.cage-border-left::before   { left:0; top:0; bottom:0; border-left-width:1.5px;}
+.cell.cage-border-right::before  { right:0; top:0; bottom:0; border-right-width:1.5px;}
 
 /* --- Элементы управления в игре --- */
 #controls { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; justify-content: center; flex-shrink: 0; }
@@ -314,120 +311,26 @@ input:checked + .slider .moon { opacity: 1; }
 #note-toggle-button { grid-column: 1 / 2; grid-row: 4 / 5; font-size: 1.3em; }
 #erase-button { grid-column: 2 / 4; grid-row: 4 / 5; background-color: var(--button-warning-bg); color: var(--text-warning-fg); }
 #erase-button:hover { background-color: var(--button-warning-hover); }
+#numpad.note-mode-active #note-toggle-button { background-color:var(--button-note-active-bg);color:var(--text-inverted);border-color:var(--button-note-active-border);box-shadow:inset 0 2px 4px var(--button-note-active-shadow);}
 
-#numpad.note-mode-active #note-toggle-button {
-    background-color: var(--button-note-active-bg);
-    color: var(--text-inverted);
-    border-color: var(--button-note-active-border);
-    box-shadow: inset 0 2px 4px var(--button-note-active-shadow);
-}
-#game-and-log-wrapper {
-    display: none; /* Управляется .visible из JS */
-    flex-direction: row; /* Располагаем игру и лог в строку */
-    align-items: flex-start; /* Выравниваем по верху */
-    justify-content: center; /* Центрируем, если есть место */
-    gap: 20px; /* Пространство между игрой и логом */
-    width: 100%;
-    max-width: 1200px; /* Увеличиваем максимальную ширину для размещения лога */
-    padding: 10px;
-    box-sizing: border-box;
-}
-
-#game-and-log-wrapper.visible {
-    display: flex;
-}
-
-
-/* #game-container внутри #game-and-log-wrapper уже имеет свои стили */
-/* Он будет занимать левую часть */
-#game-container {
-   /* Можно задать flex-grow, flex-shrink, flex-basis, если нужно точное управление размерами */
-   /* Например, чтобы он не сжимался слишком сильно: */
-   flex-shrink: 0;
-}
-
-
+/* ===== Стили для Лога Решателя ===== */
 #solver-log-container {
-    width: 300px; /* Ширина лога, можно настроить */
-    max-width: 40%; /* Не более % от родителя */
-    min-width: 250px; /* Минимальная ширина */
-    height: clamp(300px, 80vh, 600px); /* Высота, адаптирующаяся к высоте доски */
-    display: flex;
-    flex-direction: column;
-    background-color: var(--bg-secondary);
-    border: 1px solid var(--border-primary);
-    border-radius: 8px;
-    padding: 10px;
-    box-sizing: border-box;
-    overflow: hidden; /* Чтобы scrollbar был внутри .log-output */
-    margin-left: 15px; /* Отступ от доски */
+    width: 300px; max-width: 35%; min-width: 250px;
+    height: clamp(400px, calc(85vmin - 40px), 500px); /* Примерная высота доски минус отступы */
+    max-height: calc(80vh - 100px); /* Не выше чем доступная высота окна */
+    display: flex; flex-direction: column;
+    background-color: var(--bg-secondary); border: 1px solid var(--border-primary);
+    border-radius: 8px; padding: 10px; box-sizing: border-box;
+    overflow: hidden; margin-left: 15px;
 }
+#solver-log-container h3 { margin-top:0;margin-bottom:10px;font-size:1.1em;color:var(--text-primary);text-align:center;border-bottom:1px solid var(--border-primary);padding-bottom:5px;}
+.log-output { flex-grow:1;overflow-y:auto;font-size:0.85em;line-height:1.5;color:var(--text-secondary);padding-right:5px;margin-bottom:10px;}
+.log-output p { margin:0 0 8px 0;padding-bottom:5px;border-bottom:1px dotted var(--border-primary); word-wrap: break-word; }
+.log-output p:last-child { border-bottom:none;margin-bottom:0;}
+#clear-log-button { padding:8px 12px;font-size:0.9em;cursor:pointer;border:none;border-radius:5px;background-color:var(--button-back-bg);color:var(--text-inverted);transition:background-color var(--transition-duration);align-self:center;}
+#clear-log-button:hover { background-color:var(--button-back-hover); }
 
-#solver-log-container h3 {
-    margin-top: 0;
-    margin-bottom: 10px;
-    font-size: 1.1em;
-    color: var(--text-primary);
-    text-align: center;
-    border-bottom: 1px solid var(--border-primary);
-    padding-bottom: 5px;
-}
-
-.log-output {
-    flex-grow: 1; /* Занимает все доступное пространство по высоте */
-    overflow-y: auto; /* Включает вертикальный скроллбар при необходимости */
-    font-size: 0.85em;
-    line-height: 1.5;
-    color: var(--text-secondary);
-    padding-right: 5px; /* Небольшой отступ для скроллбара */
-    margin-bottom: 10px;
-}
-
-.log-output p {
-    margin: 0 0 8px 0;
-    padding-bottom: 5px;
-    border-bottom: 1px dotted var(--border-primary);
-}
-.log-output p:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
-}
-
-#clear-log-button {
-    padding: 8px 12px;
-    font-size: 0.9em;
-    cursor: pointer;
-    border: none;
-    border-radius: 5px;
-    background-color: var(--button-back-bg); /* Используем цвет кнопки "Назад" */
-    color: var(--text-inverted);
-    transition: background-color var(--transition-duration);
-    align-self: center; /* Центрируем кнопку */
-}
-#clear-log-button:hover {
-    background-color: var(--button-back-hover);
-}
-
-/* Адаптация для маленьких экранов: лог под игрой */
-@media (max-width: 800px) { /* Пороговое значение можно настроить */
-    #game-and-log-wrapper {
-        flex-direction: column; /* Лог под игрой */
-        align-items: center; /* Центрируем все по горизонтали */
-    }
-    #solver-log-container {
-        width: 90%; /* Лог занимает почти всю ширину */
-        max-width: 500px; /* Но не шире игрового контейнера */
-        height: 200px; /* Фиксированная высота для мобильных, или auto */
-        margin-left: 0;
-        margin-top: 20px; /* Отступ сверху */
-    }
-}
-
-/* Переопределяем display для #game-container, чтобы он не наследовал flex от body */
-/* если он внутри #game-and-log-wrapper */
-#game-and-log-wrapper > #game-container {
-    display: flex; /* Остается flex для внутреннего расположения */
-    flex-direction: column;
-    align-items: center;
-    /* width и max-width для #game-container остаются как были или можно убрать, если flex-basis задан */
+@media (max-width: 850px) { /* Порог для изменения макета */
+    #game-and-log-wrapper { flex-direction: column; align-items: center; }
+    #solver-log-container { width: 90%; max-width: 500px; height: 200px; margin-left: 0; margin-top: 20px; }
 }
