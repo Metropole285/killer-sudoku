@@ -259,7 +259,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if(!cell.isError){const sr=Math.floor(rIdx/3)*3,sc=Math.floor(cIdx/3)*3;
                         for(let br=0;br<3;br++){for(let bc=0;bc<3;bc++){const R=sr+br,C=sc+bc;
                             if((R!==rIdx||C!==cIdx)&&userGrid[R]?.[C]?.value===cell.value){cell.isError=true;break;}}if(cell.isError)break;}}
-                    // ИСПРАВЛЕНА ОПЕЧАТКА, как в предыдущем ответе (удален символ ¤) + проверка killerSolverLogic
+                    // ИСПРАВЛЕНА ОПЕЧАТКА, как в предыдущем ответе (удален символ & curren) + проверка killerSolverLogic
                     if(!cell.isError && currentMode==='killer' && typeof killerSolverLogic !== 'undefined' && killerSolverData?.cellToCageMap && killerSolverData?.cageDataArray){
                         const cId=getCellId(rIdx,cIdx),cageId=killerSolverData.cellToCageMap[cId];
                         const cage=killerSolverData.cageDataArray.find(cd=>cd.id===cageId);
@@ -283,7 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         for (let r=0;r<9;r++) { if(!userGrid[r])continue; for (let c=0;c<9;c++) { if(!userGrid[r][c])continue;
             const cellData = userGrid[r][c];
-            const notesToDraw = (cellData.value===0)?((currentMode==='killer'&¤tCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:cellData.notes):null;
+            const notesToDraw = (cellData.value===0)?((currentMode==='killer'&& currentCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:cellData.notes):null;
             renderCell(r,c,cellData.value,notesToDraw); } }
         if (DEBUG_GENERATION) console.log("updateAllCandidates: Finished.");
     }
@@ -325,7 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!userGrid?.[r]?.[c]) return; userGrid[r][c].value = oldValue; userGrid[r][c].notes = new Set(newNotes);
         userGrid[r][c].isError = false; userGrid[r][c].isSolved = (oldValue !== 0);
         if (currentMode === 'killer' && typeof killerSolverLogic !== 'undefined') currentCandidatesMap[getCellId(r,c)] = new Set(oldCandidates);
-        const notesToDraw = (userGrid[r][c].value===0)?((currentMode==='killer'&¤tCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:userGrid[r][c].notes):null;
+        const notesToDraw = (userGrid[r][c].value===0)?((currentMode==='killer'&& currentCandidatesMap[getCellId(r,c)]?.size>0)?currentCandidatesMap[getCellId(r,c)]:userGrid[r][c].notes):null;
         renderCell(r,c,userGrid[r][c].value, notesToDraw);
         undoButton.disabled = history.length===0; updateBoardState(); saveGameState(); checkGameCompletion(); enableInput(); }
 
