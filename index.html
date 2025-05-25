@@ -4,13 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Судоку</title>
-    <!-- Подключение CSS стилей -->
     <link rel="stylesheet" href="style.css">
-    <!-- Подключение библиотек -->
-    <script src="sudoku.js"></script> <!-- Предполагается, что этот файл существует и предоставляет sudoku.generate и sudoku.BLANK_CHAR -->
+    <script src="sudoku.js"></script>
     <script src="killerSudoku.js"></script>
     <script src="killerSolverLogic.js"></script>
-    <!-- Подключение Telegram Web App SDK (если используется) -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
@@ -57,40 +54,41 @@
          <button id="back-to-initial-button">Назад</button>
     </div>
 
-    <!-- == Игровой Экран == -->
-    <div id="game-container" class="screen">
-        <div id="top-controls">
-            <div id="timer-container">
-                <div id="timer">Время: 00:00</div>
+    <!-- == Игровой Экран с Логгером == -->
+    <div id="game-and-log-wrapper" class="screen"> <!-- Общий контейнер -->
+        <div id="game-container">
+            <div id="top-controls">
+                <div id="timer-container">
+                    <div id="timer">Время: 00:00</div>
+                </div>
+                <div id="solver-buttons">
+                    <button id="logic-step-button" title="Найти следующий логический шаг">Next Step</button>
+                    <button id="logic-solve-button" title="Применить все логические шаги">Solve</button>
+                </div>
             </div>
-            <div id="solver-buttons">
-                <button id="logic-step-button" title="Найти следующий логический шаг">Next Step</button>
-                <button id="logic-solve-button" title="Применить все логические шаги">Solve</button>
+            <div id="sudoku-board"></div>
+            <div id="controls">
+                <button id="undo-button" title="Отменить ход (Ctrl+Z)" disabled>↩️ Отмена</button>
+                <button id="check-button">Проверить</button>
+                <button id="hint-button" title="Использовать подсказку">💡 3/3</button>
+                <button id="exit-game-button" title="Выйти в меню">Меню</button>
+            </div>
+            <div id="status-message"></div>
+            <div id="numpad">
+                <button data-num="1">1</button> <button data-num="2">2</button> <button data-num="3">3</button>
+                <button data-num="4">4</button> <button data-num="5">5</button> <button data-num="6">6</button>
+                <button data-num="7">7</button> <button data-num="8">8</button> <button data-num="9">9</button>
+                <button id="note-toggle-button" title="Режим заметок (ВЫКЛ)">📝</button>
+                <button id="erase-button">Стереть</button>
             </div>
         </div>
 
-        <div id="sudoku-board">
-            <!-- Ячейки генерируются JavaScript -->
-        </div>
-        <div id="controls">
-            <button id="undo-button" title="Отменить ход (Ctrl+Z)" disabled>↩️ Отмена</button>
-            <button id="check-button">Проверить</button>
-            <button id="hint-button" title="Использовать подсказку">💡 3/3</button>
-            <button id="exit-game-button" title="Выйти в меню">Меню</button>
-        </div>
-        <div id="status-message"></div>
-        <div id="numpad">
-            <button data-num="1">1</button>
-            <button data-num="2">2</button>
-            <button data-num="3">3</button>
-            <button data-num="4">4</button>
-            <button data-num="5">5</button>
-            <button data-num="6">6</button>
-            <button data-num="7">7</button>
-            <button data-num="8">8</button>
-            <button data-num="9">9</button>
-            <button id="note-toggle-button" title="Режим заметок (ВЫКЛ)">📝</button>
-            <button id="erase-button">Стереть</button>
+        <div id="solver-log-container"> <!-- Контейнер для лога -->
+            <h3>Лог Решателя:</h3>
+            <div id="solver-log-output" class="log-output">
+                <!-- Сюда будут добавляться записи лога -->
+            </div>
+            <button id="clear-log-button">Очистить лог</button>
         </div>
     </div>
 
