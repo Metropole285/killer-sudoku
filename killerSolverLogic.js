@@ -263,7 +263,7 @@ const killerSolverLogic = (() => {
         logCallback(`<b>Применение исключений</b> для "${foundInfo.technique || 'Неизвестная техника'}" (Найдено ${elims.length} кандидатов на исключение):`);
         let actualElimsMade = 0; let details = "";
         for (const elim of elims) { const {cellId,digit}=elim; const crds=getCellCoords(cellId);
-            if (crds && userGrid[crds.r][crds.c].value===0 && candidatesMap[cellId]?.has(digit)) {
+            if (crds && userGrid[crds.r][crds.c].value===0 && currentCandidatesMap[cellId]?.has(digit)) {
                 currentCandidatesMap[cellId].delete(digit); appliedAny=true; actualElimsMade++;
                 details += `<li>Исключена <b>${digit}</b> из <b>${cellId}</b> (осталось: ${Array.from(currentCandidatesMap[cellId]).join(',')||'<i>пусто</i>'})</li>`;
                 renderCellCallback(crds.r,crds.c,null,currentCandidatesMap[cellId]); } }
@@ -288,7 +288,8 @@ const killerSolverLogic = (() => {
                             updateCandidatesCallback(); return {...fnd, applied:true, appliedTechnique:"Single Cage Rule"}; }
                         sCRApplied = true; } } } } // Закрытие if (expD...) и if (crds...)
             if(!sCRApplied) logCallback("Правило одной клетки не найдено/не применимо.");
-        } // Закрытие if (solverData...)
+        } // Закрытие for (const cage...)
+    } // Закрытие if (solverData...)
 
         const techniques = [
             { name: "Naked Single", findFunc: findNakedSingle, applyFunc: applyFoundSingle },
